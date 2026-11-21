@@ -17,7 +17,7 @@ import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } fro
 type Option = { id: string; label: string };
 const PAIRING_SECONDS = 180;
 
-function PairingForm({ onStarted }: { onStarted: (s: WhatsAppStatus) => void }) {
+function PairingForm({ onStarted, retry }: { onStarted: (s: WhatsAppStatus) => void; retry: boolean }) {
   const form = useAppForm(PairingRequest, { phone: "" });
   const { isSubmitting, errors, submitCount } = form.formState;
   async function onSubmit(v: PairingRequest) {
@@ -29,7 +29,7 @@ function PairingForm({ onStarted }: { onStarted: (s: WhatsAppStatus) => void }) 
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="mt-4 space-y-4">
       <ErrorSummary errors={errors} submitCount={submitCount} labels={{ phone: "Phone number" }} />
       <TextField control={form.control} name="phone" label="Phone number" type="tel" autoComplete="tel" required help="Digits with country code, e.g. 94771234567" />
-      <SaveButton pending={isSubmitting}>Get pairing code</SaveButton>
+      <SaveButton pending={isSubmitting}>{retry ? "Try again" : "Get pairing code"}</SaveButton>
     </form>
   );
 }
@@ -142,7 +142,7 @@ export function WhatsAppSection({ initial, courses, semester }: { initial: Whats
       {(state.status === "unlinked" || state.status === "logged_out" || state.status === "error") && (
         <>
           <p className="mt-2 text-sm text-muted-foreground">Link your WhatsApp so announcements in your class groups become changes here. Only groups you link are read; the app never sends anything.</p>
-          <PairingForm onStarted={(s) => (setPairingSince(Date.now()), setState(s))} />
+          <PairingForm retry={!!state.lastError} onStarted={(s) => (setPairingSince(Date.now()), setState(s))} />
         </>
       )}
 

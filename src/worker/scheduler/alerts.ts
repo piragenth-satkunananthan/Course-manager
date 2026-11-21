@@ -15,6 +15,10 @@ const CAUSES = {
     title: "another copy of the app connected to WhatsApp",
     whatToDo: "This copy stopped reading WhatsApp so the two don't fight. If you didn't start another one, unlink and link again from Settings.",
   },
+  whatsapp_not_started: {
+    title: "WhatsApp reading couldn't start",
+    whatToDo: "The worker couldn't start reading WhatsApp (for example, the encryption key is missing). It retries every 5 minutes; check the server's .env.",
+  },
   whatsapp_mismatch: {
     title: "WhatsApp refused the connection",
     whatToDo: "WhatsApp reported a multi-device mismatch. Unlink from Settings, then link again with a pairing code.",
@@ -25,6 +29,7 @@ const CAUSES = {
   },
 } as const;
 export type AlertCause = keyof typeof CAUSES;
+const RETRIED_BY_TICK = new Set<AlertCause>(["final_reminder_undeliverable"]);
 
 /** Returns true when the alert was raised, false when the same cause was already raised in the last 12 hours. */
 export async function raiseAlert(studentId: string, cause: AlertCause, detail: Record<string, unknown>, now: Date) {
@@ -43,7 +48,8 @@ export async function raiseAlert(studentId: string, cause: AlertCause, detail: R
   const [s] = await db.select({ email: user.email }).from(user).where(eq(user.id, studentId));
   const { title, whatToDo } = CAUSES[cause];
   const res = s ? await sendEmail(studentId, "alert", { to: s.email, ...alertEmail(title, whatToDo, process.env.APP_ORIGIN ?? "") }) : null;
-  // If the email didn't go out, forget this alert so the next tick tries again, instead of waiting 12 hours.
-  if (res && !res.ok) await db.delete(activityEvent).where(eq(activityEvent.id, raised));
+  // If the email didn't go out and a later tick will raise this cause again, forget it so that tick retries;
+  // one-off causes (a logout) stay recorded in the Activity Log either way.
+  if (res && !res.ok && RETRIED_BY_TICK.has(cause)) await db.delete(activityEvent).where(eq(activityEvent.id, raised));
   return true;
 }

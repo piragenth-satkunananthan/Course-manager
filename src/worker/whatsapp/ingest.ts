@@ -56,7 +56,7 @@ export class Ingest {
           .onConflictDoNothing();
       } else if (r.type === "revoke") {
         const original = await this.find(group.groupId, r.id);
-        if (original) await db.update(inboxMessage).set({ revokedAt: new Date() }).where(eq(inboxMessage.id, original.id));
+        if (original) await db.update(inboxMessage).set({ revokedAt: new Date() }).where(and(eq(inboxMessage.studentId, this.studentId), eq(inboxMessage.id, original.id)));
         await db.insert(inboxMessage).values({ ...base, waMessageId: `${r.id}:revoke`, kind: "revoke", editOf: original?.id ?? null, sentAt }).onConflictDoNothing();
       }
     }

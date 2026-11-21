@@ -3,7 +3,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { course, semester, waGroup, waSession } from "@/server/db/schema";
-import { notFound } from "@/server/http/errors";
+import { invalid, notFound } from "@/server/http/errors";
 import type { GroupLink, WaGroup, WhatsAppStatus } from "@/shared/schemas/whatsapp";
 import { iso } from "./util";
 
@@ -39,12 +39,14 @@ export async function linkGroup(studentId: string, groupId: string, link: GroupL
   const [g] = await db.select({ id: waGroup.id }).from(waGroup).where(and(eq(waGroup.studentId, studentId), eq(waGroup.id, groupId)));
   if (!g) throw notFound("Group");
   if (link && "courseId" in link) {
-    const [c] = await db.select({ id: course.id }).from(course).where(and(eq(course.studentId, studentId), eq(course.id, link.courseId)));
+    const [c] = await db.select({ archivedAt: course.archivedAt }).from(course).where(and(eq(course.studentId, studentId), eq(course.id, link.courseId)));
     if (!c) throw notFound("Course");
+    if (c.archivedAt) throw invalid("courseId", "Archived Courses can't have a linked group");
   }
   if (link && "semesterId" in link) {
-    const [s] = await db.select({ id: semester.id }).from(semester).where(and(eq(semester.studentId, studentId), eq(semester.id, link.semesterId)));
+    const [s] = await db.select({ archivedAt: semester.archivedAt }).from(semester).where(and(eq(semester.studentId, studentId), eq(semester.id, link.semesterId)));
     if (!s) throw notFound("Semester");
+    if (s.archivedAt) throw invalid("semesterId", "Archived Semesters can't have a linked group");
   }
   const [row] = await db
     .update(waGroup)

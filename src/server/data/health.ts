@@ -14,6 +14,6 @@ export async function readSignals(): Promise<Signals> {
 export async function getBanners(studentId: string, now = new Date()) {
   const [s] = await db.select({ status: waSession.status, disconnectedAt: waSession.disconnectedAt }).from(waSession).where(eq(waSession.studentId, studentId));
   const whatsapp =
-    s && (s.status === "logged_out" || s.status === "error") ? [{ kind: "whatsapp_disconnected" as const, since: s.disconnectedAt?.toISOString() ?? null }] : [];
+    s && (s.status === "logged_out" || (s.status === "error" && s.disconnectedAt)) ? [{ kind: "whatsapp_disconnected" as const, since: s.disconnectedAt?.toISOString() ?? null }] : [];
   return [...whatsapp, ...evaluateHealth(await readSignals(), now).banners];
 }

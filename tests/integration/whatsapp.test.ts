@@ -1,5 +1,6 @@
 // Seam: the /api/v1/whatsapp endpoints, the banner and Semester archiving against a real Postgres (#11).
 import { beforeEach, describe, expect, it } from "vitest";
+import * as courseArchive from "@/app/api/v1/courses/[id]/archive/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as dashboard from "@/app/api/v1/dashboard/route";
 import * as semesterArchive from "@/app/api/v1/semesters/[id]/archive/route";
@@ -83,9 +84,25 @@ describe("the WhatsApp banner and archiving", () => {
     expect(banners).toContainEqual({ kind: "whatsapp_disconnected", since: expect.stringMatching(/Z$/) });
   });
 
-  it("erases stored message text when its Semester is archived (D1)", async () => {
+  it("shows no banner when a first pairing failed (nothing was ever linked)", async () => {
+    await a(whatsapp.GET, "GET", "/whatsapp");
+    await pool.query("update wa_session set status = 'error', last_error = 'Pairing timed out; try again.' where student_id = $1", [me.id]);
+    expect((await a(dashboard.GET, "GET", "/dashboard")).json.banners.map((b: { kind: string }) => b.kind)).not.toContain("whatsapp_disconnected");
+  });
+
+  it("erases stored message text when its Semester is archived (D1), and stops reading its groups", async () => {
+    await a(groupLink.PUT, "PUT", `/whatsapp/groups/${groupId}/link`, { params: { id: groupId }, body: { courseId } });
+    await pool.query("update wa_session set groups_reload_requested_at = null where student_id = $1", [me.id]);
     await pool.query("insert into inbox_message (student_id, wa_group_id, semester_id, wa_message_id, kind, sent_at, text_enc) values ($1, $2, $3, 'M1', 'text', now(), '\\x01'::bytea)", [me.id, groupId, semesterId]);
     await a(semesterArchive.POST, "POST", `/semesters/${semesterId}/archive`, { params: { id: semesterId } });
     expect((await pool.query("select text_enc from inbox_message")).rows).toEqual([{ text_enc: null }]);
+    expect((await pool.query("select linked_course_id from wa_group where id = $1", [groupId])).rows).toEqual([{ linked_course_id: null }]);
+    expect((await session()).groups_reload_requested_at).toBeInstanceOf(Date);
+  });
+
+  it("refuses to link a group to an archived Course", async () => {
+    await a(courseArchive.POST, "POST", `/courses/${courseId}/archive`, { params: { id: courseId } });
+    const res = await a(groupLink.PUT, "PUT", `/whatsapp/groups/${groupId}/link`, { params: { id: groupId }, body: { courseId } });
+    expect(res.json.error.fieldErrors.courseId).toBeTruthy();
   });
 });

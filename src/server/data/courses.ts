@@ -1,7 +1,7 @@
 // Courses and their Nicknames, scoped to the Student (design file 39). The AI never writes here.
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { course, courseNickname, semester } from "@/server/db/schema";
+import { course, courseNickname, semester, waSession } from "@/server/db/schema";
 import { invalid, notFound } from "@/server/http/errors";
 import type { Course, CourseCreate, CourseUpdate, Nickname } from "@/shared/schemas/course";
 import { isUniqueViolation, iso } from "./util";
@@ -86,8 +86,9 @@ export async function deleteCourse(studentId: string, id: string, confirmCode: s
   const [row] = await db.select({ code: course.code }).from(course).where(mine(studentId, id));
   if (!row) throw notFound("Course");
   if (confirmCode.trim().toLowerCase() !== row.code.toLowerCase()) throw invalid("confirmCode", `Type ${row.code} to confirm`);
-  // Its WhatsApp group is unlinked by the foreign key (on delete set null).
+  // Its WhatsApp group is unlinked by the foreign key (on delete set null); the worker reloads its groups.
   await db.delete(course).where(mine(studentId, id));
+  await db.update(waSession).set({ groupsReloadRequestedAt: new Date() }).where(eq(waSession.studentId, studentId));
   return null;
 }
 

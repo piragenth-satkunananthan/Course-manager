@@ -1,7 +1,7 @@
 // Semesters, scoped to the Student (design file 38). Every query filters on studentId.
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { inboxMessage, semester } from "@/server/db/schema";
+import { course, inboxMessage, semester, waGroup, waSession } from "@/server/db/schema";
 import { AppError, notFound } from "@/server/http/errors";
 import type { Semester, SemesterCreate } from "@/shared/schemas/semester";
 import { iso } from "./util";
@@ -58,7 +58,14 @@ export async function archiveSemester(studentId: string, id: string) {
     .where(mine(studentId, id))
     .returning();
   if (!row) throw notFound("Semester");
-  // D1: message text is kept only until its Semester is archived; the decision rows stay.
+  // D1: message text is kept only until its Semester is archived; the decision rows stay. Its groups (the Class
+  // Group and its Courses' groups) stop being read, so no new text arrives, and the worker reloads its list.
   await db.update(inboxMessage).set({ textEnc: null }).where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.semesterId, id)));
+  const courseIds = db.select({ id: course.id }).from(course).where(and(eq(course.studentId, studentId), eq(course.semesterId, id)));
+  await db
+    .update(waGroup)
+    .set({ linkedCourseId: null, linkedSemesterId: null, linkedAt: null })
+    .where(and(eq(waGroup.studentId, studentId), sql`(${waGroup.linkedSemesterId} = ${id} or ${waGroup.linkedCourseId} in ${courseIds})`));
+  await db.update(waSession).set({ groupsReloadRequestedAt: new Date() }).where(eq(waSession.studentId, studentId));
   return toDto(row);
 }

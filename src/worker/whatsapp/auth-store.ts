@@ -41,11 +41,10 @@ export async function loadAuthState(studentId: string, key: Buffer) {
     },
   };
 
-  return {
-    creds,
-    keys,
-    saveCreds: () => db.update(waSession).set({ credsEnc: seal(creds, key) }).where(eq(waSession.studentId, studentId)),
-  };
+  // Saves run one after another, each writing the latest creds, so an older snapshot never lands last.
+  let saving: Promise<unknown> = Promise.resolve();
+  const saveCreds = () => (saving = saving.then(() => db.update(waSession).set({ credsEnc: seal(creds, key) }).where(eq(waSession.studentId, studentId))).catch(() => undefined));
+  return { creds, keys, saveCreds, flush: () => saving };
 }
 
 /** Forget the link: credentials and every key. */

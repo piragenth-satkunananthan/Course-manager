@@ -13,8 +13,10 @@ const t = (d: Date | null) => (d ? +d : 0);
 export async function startPoller(studentId: string, link: WhatsAppLink, ingest: Ingest, intervalMs = 2_000) {
   const read = async () => (await db.select().from(waSession).where(eq(waSession.studentId, studentId)))[0];
   const first = await read();
-  // Requests made before this start were handled by an earlier worker, except a pairing it never finished.
-  const handled: Handled = { pairing: t(first?.pairingRequestedAt ?? null), unlink: t(first?.unlinkRequestedAt ?? null), groups: t(first?.groupsReloadRequestedAt ?? null) };
+  // Requests made before this start were handled by an earlier worker, except: a pairing it never finished (below),
+  // and an unlink asked for while the worker was down, which still has a link to remove (account deletion relies on it).
+  const unlinkPending = !!first && first.status !== "unlinked" && t(first.unlinkRequestedAt) > t(first.lastConnectedAt);
+  const handled: Handled = { pairing: t(first?.pairingRequestedAt ?? null), unlink: unlinkPending ? 0 : t(first?.unlinkRequestedAt ?? null), groups: t(first?.groupsReloadRequestedAt ?? null) };
   if (first?.status === "pairing") {
     await db.update(waSession).set({ status: "error", pairingCode: null, lastError: "Pairing was interrupted; try again." }).where(eq(waSession.studentId, studentId));
   }

@@ -9,6 +9,8 @@ import { healthSignal, waGroup, waSession } from "@/server/db/schema";
 import { log } from "@/server/log";
 import { raiseAlert } from "../scheduler/alerts";
 import { loadAuthState, wipeAuth } from "./auth-store";
+
+type Auth = Awaited<ReturnType<typeof loadAuthState>>;
 import { disconnectAction } from "./disconnect";
 import type { Ingest } from "./ingest";
 
@@ -25,6 +27,7 @@ export class WhatsAppLink {
   private pairingTimer: NodeJS.Timeout | null = null;
   private groupTimer: NodeJS.Timeout | null = null;
   private generation = 0; // ignores events from a socket that has been replaced
+  private auth: Auth | null = null; // kept across reconnects: after pairing, restartRequired reconnects with these creds
 
   constructor(
     private readonly studentId: string,
@@ -40,8 +43,11 @@ export class WhatsAppLink {
 
   /** Pairing (file 61): fresh credentials, then a code for the phone number once the socket is connecting. */
   async startPairing(phone: string) {
+    const previous = this.sock;
     this.close();
+    await previous?.logout().catch(() => undefined); // re-pairing while linked removes the old device too
     await wipeAuth(this.studentId);
+    this.auth = null;
     this.pairingPhone = phone;
     await this.setStatus("pairing", { pairingCode: null, lastError: null });
     this.pairingTimer = setTimeout(() => void this.failPairing("Pairing timed out; try again."), PAIRING_TIMEOUT_MS);
@@ -54,6 +60,7 @@ export class WhatsAppLink {
     this.close();
     await sock?.logout().catch(() => undefined);
     await wipeAuth(this.studentId);
+    this.auth = null;
     await this.setStatus("unlinked", { pairingCode: null, lastError: null, disconnectedAt: null });
     await this.health(true, "unlinked"); // deliberately unlinked counts as healthy (§10)
   }
@@ -73,8 +80,9 @@ export class WhatsAppLink {
 
   private async connect() {
     const gen = ++this.generation;
-    const auth = await loadAuthState(this.studentId, this.key);
-    const logger = pino({ level: "warn" });
+    const auth = (this.auth ??= await loadAuthState(this.studentId, this.key));
+    await auth.flush();
+    const logger = pino({ level: "error" }); // Baileys' own logs: errors only, to keep message content out of them
     const sock = makeWASocket({
       auth: { creds: auth.creds, keys: makeCacheableSignalKeyStore(auth.keys, logger) },
       logger,
@@ -119,6 +127,7 @@ export class WhatsAppLink {
     await this.setStatus("connected", { pairingCode: null, lastError: null, lastConnectedAt: new Date(), disconnectedAt: null });
     await this.health(true);
     await this.syncGroups(sock);
+    if (this.groupTimer) clearInterval(this.groupTimer);
     this.groupTimer = setInterval(() => void this.syncGroups(sock), GROUP_SYNC_MS);
   }
 
@@ -133,8 +142,11 @@ export class WhatsAppLink {
       return this.failPairing(/limit|device/i.test(message ?? "") ? DEVICE_LIMIT : "Linking didn't finish. Check the code and try again.");
     }
     this.sock = null;
+    if (this.groupTimer) clearInterval(this.groupTimer);
+    this.groupTimer = null;
     if (action.action === "logged_out") {
       await wipeAuth(this.studentId);
+      this.auth = null;
       await this.setStatus("logged_out", { disconnectedAt: new Date(), lastError: "WhatsApp logged this device out. Link it again from Settings." });
       await this.health(false, "logged out");
       await raiseAlert(this.studentId, "whatsapp_logged_out", { code }, new Date());
@@ -156,7 +168,9 @@ export class WhatsAppLink {
     this.close();
     this.pairingPhone = null;
     await wipeAuth(this.studentId);
-    await this.setStatus("error", { pairingCode: null, lastError });
+    this.auth = null;
+    // Never linked, so no "disconnected" banner: disconnectedAt stays empty.
+    await this.setStatus("error", { pairingCode: null, lastError, disconnectedAt: null });
   }
 
   /** Group names (file 62): after pairing and every 6 hours. Links belong to the Student and aren't touched. */

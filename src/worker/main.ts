@@ -5,6 +5,7 @@ import { loadKey } from "@/server/crypto";
 import { db } from "@/server/db/client";
 import { healthSignal, user, waSession } from "@/server/db/schema";
 import { startPoller } from "./poller";
+import { raiseAlert } from "./scheduler/alerts";
 import { recordSchedulerHealth, tick } from "./scheduler/tick";
 import { Ingest } from "./whatsapp/ingest";
 import { WhatsAppLink } from "./whatsapp/link";
@@ -73,6 +74,8 @@ async function startWhatsApp() {
     log("error", "whatsapp loop not started; checking again in 5 minutes", { error: detail });
     const now = new Date();
     await db.insert(healthSignal).values({ component: "wa_socket", lastErrorAt: now, detail }).onConflictDoUpdate({ target: healthSignal.component, set: { lastErrorAt: now, detail } }).catch(() => {});
+    const students = await db.select({ id: user.id }).from(user).catch(() => []);
+    if (students.length === 1) await raiseAlert(students[0]!.id, "whatsapp_not_started", { error: detail }, now).catch(() => {});
     setTimeout(startWhatsApp, 5 * 60_000);
   }
 }
