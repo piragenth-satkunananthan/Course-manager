@@ -1,0 +1,19 @@
+# Local development and tests: Postgres only, with a dev and a test database (design file 76).
+name: course-manager-dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: course_manager
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+      - ./ops/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app", "-d", "course_manager"]
+      interval: 2s
+      retries: 30
+volumes:
+  pgdata-dev:

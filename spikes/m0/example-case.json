@@ -1,0 +1,25 @@
+{
+  "id": "example-time-4-30-afternoon",
+  "category": "times like 4.30",
+  "now": "2026-11-21T10:00:00+05:30",
+  "fixture": {
+    "semester": { "id": "sem-1", "start": "2026-08-03", "end": "2026-12-18" },
+    "linkedTo": { "courseId": "c-ds" },
+    "courses": [{ "id": "c-ds", "code": "CS2010", "name": "Data Structures", "nicknames": ["DS"] }],
+    "occurrences": [{ "classSessionId": "s-ds-lab", "date": "2026-11-24", "start": "14:00", "end": "16:00", "kind": "lab" }],
+    "sessionChanges": [],
+    "assignments": [],
+    "exams": [],
+    "suppressions": []
+  },
+  "thread": [
+    { "id": "m1", "senderName": "Classmate A", "sentAt": "2026-11-21T09:00:00+05:30", "kind": "original", "text": "DS lab report due friday 4.30" },
+    { "id": "m2", "senderName": "Classmate B", "sentAt": "2026-11-21T09:01:00+05:30", "kind": "original", "text": "who has the slides?" }
+  ],
+  "expected": {
+    "operations": [
+      { "op": "create_assignment", "courseId": "c-ds", "title": "Lab report", "dueDate": "2026-11-27", "dueTime": "16:30", "sourceMessageIds": ["m1"] }
+    ],
+    "decisions": { "m1": "applied", "m2": "question" }
+  }
+}

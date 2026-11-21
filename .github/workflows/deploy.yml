@@ -1,0 +1,48 @@
+# The manual production deploy (design file 81; CLAUDE.md: production actions are deliberate).
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA on main whose images CI has built
+        required: true
+
+concurrency: { group: deploy-production, cancel-in-progress: false }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions: { contents: read, packages: read }
+    env:
+      SHA: ${{ inputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: Check the SHA is a commit on main
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character commit SHA"; exit 1; }
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
+          git checkout --quiet "$SHA"
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Copy Compose and ops files
+        env: { TARGET: "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" }
+        run: |
+          ssh "$TARGET" 'rm -rf ~/deploy && mkdir -p ~/deploy'
+          scp -r compose.yaml Caddyfile ops "$TARGET:deploy/"
+          ssh "$TARGET" 'sudo install -m 644 ~/deploy/compose.yaml ~/deploy/Caddyfile /opt/course-manager/ && sudo rm -rf /opt/course-manager/ops && sudo cp -r ~/deploy/ops /opt/course-manager/ops && sudo chmod 755 /opt/course-manager/ops/*.sh'
+      - name: Deploy
+        env:
+          TARGET: "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$TOKEN" | ssh "$TARGET" "sudo docker login ghcr.io -u $ACTOR --password-stdin"
+          ssh "$TARGET" "sudo /opt/course-manager/ops/deploy.sh $SHA"

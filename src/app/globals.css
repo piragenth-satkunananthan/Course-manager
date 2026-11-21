@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+/* Semantic tokens from docs/design-system.md §2.1 and §9. Components use these only, never raw hex or palette classes. */
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+  --primary: #0f766e;
+  --primary-hover: #115e59;
+  --primary-foreground: #ffffff;
+  --primary-subtle: #f0fdfa;
+  --border: #e2e8f0;
+  --input: #8291a6;
+  --ring: #0f766e;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --destructive-subtle: #fef2f2;
+  --warning: #b45309;
+  --warning-subtle: #fffbeb;
+  --success: #15803d;
+  --success-subtle: #f0fdf4;
+  --radius: 10px;
+  /* Course identification colours (§2.1): only as a bar, a dot or a chip border, always next to the code. */
+  --course-blue: #1d4ed8;
+  --course-violet: #6d28d9;
+  --course-pink: #be185d;
+  --course-orange: #c2410c;
+  --course-cyan: #0e7490;
+  --course-olive: #4d7c0f;
+  --course-slate: #475569;
+  /* Names shadcn/ui components use, mapped onto the palette above. */
+  --popover: var(--card);
+  --popover-foreground: var(--card-foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--muted);
+  --accent-foreground: var(--foreground);
+}
+
+/* Dark values (§2.1), reserved for M2: defined now so components never assume a light background; nothing sets data-theme yet. */
+[data-theme="dark"] {
+  --background: #0b1120;
+  --card: #111827;
+  --card-foreground: #e2e8f0;
+  --foreground: #e2e8f0;
+  --muted-foreground: #94a3b8;
+  --primary: #2dd4bf;
+  --ring: #2dd4bf;
+  --primary-foreground: #042f2e;
+  --input: #64748b;
+  --destructive: #f87171;
+  --warning: #fbbf24;
+  --success: #4ade80;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-course-blue: var(--course-blue);
+  --color-course-violet: var(--course-violet);
+  --color-course-pink: var(--course-pink);
+  --color-course-orange: var(--course-orange);
+  --color-course-cyan: var(--course-cyan);
+  --color-course-olive: var(--course-olive);
+  --color-course-slate: var(--course-slate);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --radius-sm: 6px;
+  --radius-md: var(--radius);
+  --radius-lg: 14px;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --text-display: 30px;
+  --text-display--line-height: 36px;
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+  --text-heading: 18px;
+  --text-heading--line-height: 26px;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-base antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+  }
+}

@@ -1,0 +1,108 @@
+# Production (design file 75). Lives in /opt/course-manager next to .env; deploys run ops/deploy.sh.
+name: course-manager
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+x-image: &worker-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-worker:${IMAGE_TAG:?set IMAGE_TAG}
+x-web-image: &web-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-web:${IMAGE_TAG:?set IMAGE_TAG}
+x-db-url: &db-url postgres://app:${POSTGRES_PASSWORD:?}@postgres:5432/course_manager
+x-auth-env: &auth-env
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?} # web shows source messages; the worker stores them
+  APP_ORIGIN: ${APP_ORIGIN:?}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_HOST: ${APP_HOST:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+    mem_limit: 48m
+    oom_score_adj: 0
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    image: *web-image
+    environment:
+      <<: *auth-env
+      DATABASE_URL: *db-url
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+    # Killed first under memory pressure (§1): it restarts in seconds and holds no state.
+    mem_limit: 256m
+    oom_score_adj: 500
+    restart: unless-stopped
+    logging: *logging
+
+  worker:
+    image: *worker-image
+    environment:
+      <<: *auth-env # create-student runs in this service and loads the auth config
+      DATABASE_URL: *db-url
+      # Optional until set: without a key the scheduler waits and re-checks every 5 minutes.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Course-manager <onboarding@resend.dev>}
+      HEALTHCHECK_REMINDERS_URL: ${HEALTHCHECK_REMINDERS_URL:-}
+      HEALTHCHECK_CAPTURE_URL: ${HEALTHCHECK_CAPTURE_URL:-}
+      NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NIM_API_KEY: ${NIM_API_KEY:-}
+      NIM_MODEL: ${NIM_MODEL:-}
+    # No container healthcheck: health_signal(scheduler), the banner and the healthchecks.io ping cover it (§10).
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 320m
+    oom_score_adj: 200
+    restart: unless-stopped
+    logging: *logging
+
+  migrate:
+    image: *worker-image
+    command: ["node", "dist/migrate.js"]
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    logging: *logging
+
+  postgres:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "shared_buffers=48MB", "-c", "max_connections=20", "-c", "work_mem=2MB"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: course_manager
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app", "-d", "course_manager"]
+      interval: 5s
+      retries: 20
+    # Killed last: it holds the data.
+    mem_limit: 192m
+    oom_score_adj: -500
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
