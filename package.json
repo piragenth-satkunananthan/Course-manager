@@ -25,11 +25,13 @@
     "spike:eval": "tsx spikes/m0/nim-eval.ts"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
     "@hookform/resolvers": "7.0.8",
     "baileys": "7.0.0-rc14",
     "better-auth": "1.7.27",
     "class-variance-authority": "0.7.1",
     "cn": "0.5.2",
+    "date-fns": "4.4.0",
     "drizzle-orm": "0.45.4",
     "lucide-react": "1.77.0",
     "next": "16.4.6",

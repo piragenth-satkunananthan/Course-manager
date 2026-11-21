@@ -23,3 +23,24 @@ export const ErrorBody = z.object({
   }),
 });
 export type ErrorBody = z.infer<typeof ErrorBody>;
+
+/** A local wall-clock time, "HH:mm" (Asia/Colombo). */
+export const LocalTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use the format HH:mm, for example 16:30");
+
+/** For PATCH bodies and DELETE queries on items the AI can change (optimistic locking, §7). */
+export const Version = z.coerce.number().int().min(1);
+
+/** Optional text from a form: trimmed, and empty becomes null. */
+export const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Use at most ${max} characters`)
+    .nullish()
+    .transform((v) => v || null);
+
+/** An optional local time from a form: empty becomes null. */
+export const optionalTime = z
+  .union([LocalTime, z.literal("")])
+  .nullish()
+  .transform((v) => v || null);

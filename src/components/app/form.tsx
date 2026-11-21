@@ -7,7 +7,11 @@ import { Controller, type Control, type DefaultValues, type FieldErrors, type Fi
 import type * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { COLOUR_BG } from "@/lib/course-colours";
 import type { ApiError } from "@/lib/api-fetch";
 
 /** Every form: the shared zod schema, errors checked when a field is left, and focus to the error summary on submit. */
@@ -107,6 +111,69 @@ export function TextField<T extends FieldValues>({ control, name, label, require
             aria-describedby={fieldState.error ? `${name}-error` : help ? `${name}-help` : undefined}
           />
           {help && !fieldState.error && <FieldDescription id={`${name}-help`}>{help}</FieldDescription>}
+          {fieldState.error && <FieldError id={`${name}-error`} errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}
+
+export function TextAreaField<T extends FieldValues>({ control, name, label, help }: Omit<TextFieldProps<T>, "type" | "required" | "autoComplete">) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <FieldLabel htmlFor={name}>{label}</FieldLabel>
+          <Textarea {...field} value={field.value ?? ""} id={name} rows={3} aria-invalid={fieldState.invalid} aria-describedby={fieldState.error ? `${name}-error` : help ? `${name}-help` : undefined} />
+          {help && !fieldState.error && <FieldDescription id={`${name}-help`}>{help}</FieldDescription>}
+          {fieldState.error && <FieldError id={`${name}-error`} errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}
+
+export function CheckboxField<T extends FieldValues>({ control, name, label }: { control: Control<T, unknown, unknown>; name: FieldPath<T>; label: string }) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <label htmlFor={name} className="flex min-h-11 items-center gap-3 text-base">
+          <Checkbox id={name} checked={!!field.value} onCheckedChange={(v) => field.onChange(v === true)} />
+          {label}
+        </label>
+      )}
+    />
+  );
+}
+
+export type CourseOption = { id: string; code: string; name: string; colour: keyof typeof COLOUR_BG };
+
+/** A Course picker that shows each Course's colour next to its code (design-system §6.11). */
+export function CourseField<T extends FieldValues>({ control, name, courses }: { control: Control<T, unknown, unknown>; name: FieldPath<T>; courses: CourseOption[] }) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <FieldLabel htmlFor={name}>Course (required)</FieldLabel>
+          <Select value={field.value ?? ""} onValueChange={field.onChange}>
+            <SelectTrigger id={name} className="w-full" aria-invalid={fieldState.invalid} aria-describedby={fieldState.error ? `${name}-error` : undefined}>
+              <SelectValue placeholder="Choose a Course" />
+            </SelectTrigger>
+            <SelectContent>
+              {courses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  <span aria-hidden="true" className={`size-3 rounded-full ${COLOUR_BG[c.colour]}`} />
+                  {c.code} {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {fieldState.error && <FieldError id={`${name}-error`} errors={[fieldState.error]} />}
         </Field>
       )}

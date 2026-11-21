@@ -1,7 +1,7 @@
 // Every table lives here (design file 17). #5 adds Better Auth's tables; later tickets add the domain tables.
 import { sql } from "drizzle-orm";
 import { COURSE_COLOURS } from "@/shared/schemas/course";
-import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 const updatedAt = () =>
@@ -133,4 +133,78 @@ export const courseNickname = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("course_nickname_unique").on(t.studentId, t.courseId, t.nickname)],
+);
+
+// Assessments and their history (§3, #7).
+export const assignmentStatus = pgEnum("assignment_status", ["todo", "in_progress", "submitted"]);
+export const itemSource = pgEnum("item_source", ["manual", "ai"]);
+const versioned = () => ({
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  version: integer("version").default(1).notNull(),
+  fieldSetAt: jsonb("field_set_at").$type<Record<string, string>>().default({}).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+const courseId = () => uuid("course_id").notNull().references(() => course.id, { onDelete: "cascade" });
+
+export const assignment = pgTable(
+  "assignment",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: courseId(),
+    title: text("title").notNull(),
+    description: text("description"),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    dueTime: time("due_time"), // null: time not announced, treated as 23:59
+    status: assignmentStatus("status").default("todo").notNull(), // the Student owns status and submittedAt
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submitWhere: text("submit_where"),
+    isGroupWork: boolean("is_group_work").default(false).notNull(),
+    source: itemSource("source").default("manual").notNull(),
+    ...versioned(),
+  },
+  (t) => [index("assignment_student_due_idx").on(t.studentId, t.dueDate)],
+);
+
+export const exam = pgTable(
+  "exam",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: courseId(),
+    title: text("title").notNull(),
+    kindLabel: text("kind_label"),
+    date: date("date", { mode: "string" }), // null: TBA
+    startTime: time("start_time"),
+    location: text("location"),
+    topics: text("topics"),
+    source: itemSource("source").default("manual").notNull(),
+    ...versioned(),
+  },
+  (t) => [index("exam_student_date_idx").on(t.studentId, t.date)],
+);
+
+export const entityType = pgEnum("entity_type", ["assignment", "exam", "session_change", "semester"]);
+export const versionOp = pgEnum("version_op", ["create", "update", "delete", "undo", "status"]);
+export const actor = pgEnum("actor", ["ai", "student", "system"]);
+
+/** One row for every write to an AI-writable item, by anyone. */
+export const entityVersion = pgTable(
+  "entity_version",
+  {
+    id: id(),
+    studentId: studentId(),
+    entityType: entityType("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    version: integer("version").notNull(),
+    op: versionOp("op").notNull(),
+    before: jsonb("before").$type<Record<string, unknown> | null>(),
+    after: jsonb("after").$type<Record<string, unknown> | null>(),
+    beforeFieldSetAt: jsonb("before_field_set_at").$type<Record<string, string> | null>(),
+    actor: actor("actor").notNull(),
+    autoChangeId: uuid("auto_change_id"), // FK added with auto_change (#12)
+    createdAt: createdAt(),
+  },
+  (t) => [index("entity_version_entity_idx").on(t.entityType, t.entityId)],
 );

@@ -1,5 +1,5 @@
 // Courses and their Nicknames, scoped to the Student (design file 39). The AI never writes here.
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { course, courseNickname, semester } from "@/server/db/schema";
 import { invalid, notFound } from "@/server/http/errors";
@@ -110,4 +110,14 @@ export async function removeNickname(studentId: string, id: string) {
     .returning({ id: courseNickname.id });
   if (!deleted.length) throw notFound("Nickname");
   return null;
+}
+
+/** Courses the Student can add Assignments and Exams to: neither the Course nor its Semester is archived. */
+export async function listCourseOptions(studentId: string) {
+  return db
+    .select({ id: course.id, code: course.code, name: course.name, colour: course.colour })
+    .from(course)
+    .innerJoin(semester, eq(semester.id, course.semesterId))
+    .where(and(eq(course.studentId, studentId), isNull(course.archivedAt), isNull(semester.archivedAt)))
+    .orderBy(asc(course.code));
 }
