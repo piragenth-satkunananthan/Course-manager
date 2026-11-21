@@ -89,7 +89,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 
 ## Hosting and delivery
 
-- One Azure for Students B1s VM (see ADR-0001), reached through its free Azure domain name. Spending must stay within the $100 Azure for Students credit, using free services where possible, with budget alerts. If the credit or student eligibility runs out, the fallback is another cloud's free credits (for example AWS).
+- One Azure for Students B1s VM (see ADR-0001), reached through its free Azure domain name. Spending must stay within the $100 Azure for Students credit, using free services where possible. There are no budget alerts (the product owner's decision, 2026-11-21): when the credit runs out, the subscription is disabled, not billed. If the credit or student eligibility runs out, the fallback is another cloud's free credits (for example AWS).
 - Docker images are built in GitHub Actions and pushed to GitHub's container registry (GHCR). The VM only downloads them.
 
 ## Milestones

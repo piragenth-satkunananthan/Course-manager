@@ -117,22 +117,9 @@ grep '^# public key:' ~/course-manager-keys/backup.agekey    # copy the age1… 
 
 **Store an offline copy now.** Put the whole `backup.agekey` file in your password manager, or on a USB drive kept somewhere safe. Without it, no backup can ever be restored.
 
-### 1.7 Budget alerts at $25, $50 and $75
+### 1.7 Budget alerts (dropped)
 
-Use the portal, because budget support for this subscription type isn't documented officially:
-
-1. Go to **Cost Management + Billing → Cost Management → Budgets → Add**.
-2. Scope: your Azure for Students subscription. Name: `course-manager-budget`. Reset period: **Annually**. Amount: **$100**.
-3. Alert conditions: **Actual** at **25%**, **50%** and **75%**, sent to your Gmail address.
-4. Click **Create**.
-
-**If "Budgets" is unavailable for this subscription,** use these two fallbacks:
-- Check the remaining credit weekly at the [Microsoft Azure Sponsorships balance page](https://www.microsoftazuresponsorships.com/Balance).
-- Rely on the fact that the subscription is disabled, not billed, when the credit runs out.
-
-Record which of the two applies in `docs/m0-report.md`.
-
-**Check:** the budget is listed with three alert thresholds. Or the fallback is recorded.
+The product owner decided on 2026-11-21 not to use budget alerts. When the credit runs out or expires, Azure disables the subscription instead of billing ([Microsoft docs](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/azurestudents-subscription-disabled)). The remaining credit can be checked at any time at the [Microsoft Azure Sponsorships balance page](https://www.microsoftazuresponsorships.com/Balance).
 
 ### 1.8 Check the public IP cost
 
@@ -140,7 +127,7 @@ Record which of the two applies in `docs/m0-report.md`.
 az network public-ip list -g "$RG" --query "[].{name:name, sku:sku.name, ip:ipAddress}" -o table
 ```
 
-Look up the "Standard static public IPv4" price for your region in the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/), and record it in `docs/m0-report.md`. It is expected to cost a few dollars a month, paid from the credit.
+The public IP is **not** on Azure's free-services list. A Standard static IPv4 costs about $0.005/hour (about $3.65/month, or about $44/year from the $100 credit). Stopping the VM doesn't stop this charge. Confirm the exact price for your region in the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/), and record it in `docs/m0-report.md`.
 
 ---
 
@@ -272,7 +259,6 @@ Tick these in issue #2. They match its acceptance criteria.
 - [ ] A 1 GB swap file survives a reboot; Docker and Compose work; `age` and `unattended-upgrades` are installed and enabled (2.2–2.4).
 - [ ] `/opt/course-manager/.env` is mode 600, owned by root, with the generated secrets (2.5).
 - [ ] **Offline copies are stored**: `backup.agekey` (1.6) and `DATA_ENCRYPTION_KEY` (2.5). The product owner confirms this in the issue.
-- [ ] The budget alerts at $25, $50 and $75 are active, or the fallback is recorded (1.7).
 - [ ] The public IP cost is recorded (1.8).
 
 ## Teardown (only if you need to start over)

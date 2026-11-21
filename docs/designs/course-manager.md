@@ -46,7 +46,7 @@ The weak point of this design is the first part. It depends on an unofficial Wha
     - the **capture path** (WhatsApp Link or AI processing);
     - the server itself.
 *   **G5: Fits the student budget.**
-    - **Cost:** Azure spend stays within the Azure for Students credit ($100 a year), using free services wherever they exist. Budget alerts fire at $25, $50 and $75.
+    - **Cost:** Azure spend stays within the Azure for Students credit ($100 a year), using free services wherever they exist. There are no budget alerts (the author's decision, 2026-11-21). When the credit runs out, Azure disables the subscription instead of billing. The Standard public IP (about $3.65/month, not on the free list) is the main known cost.
     - **Memory:** the total resident memory of all containers on the 1 GB VM is at most 750 MB, averaged over 24 hours. It is measured in M0 for the worker and after the M1 deploy for the total.
     - **Fallback:** if the credit or student eligibility runs out, move to another cloud's free credits (the author named AWS). The images are portable; the move itself is not designed here.
 *   **G6: One place for the basics.** Courses, the weekly timetable with one-off changes, Assignments and Exams can all be viewed and edited in phone and desktop browsers.
@@ -900,7 +900,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | A WhatsApp protocol change breaks Baileys | Likely at some point | The capture path stops | The capture heartbeat alerts within 1 hour; Baileys is pinned to the version M0 tested | Updating Baileys is manual work. |
 | NIM stops being free, changes its terms, or retires the pinned model | Possible | Auto Changes stop | The AI loop alone stops and alerts (§8); the provider is OpenAI-compatible and swappable after the evaluation passes (ADR-0004) | A move may cost money. |
 | Reminder emails land in spam | Possible | G2 fails without anyone noticing | Gmail filter; M0 Primary-inbox check; weekly check of the inbox against `email_log` (G2) | |
-| The Azure credit or student eligibility runs out | Certain within about 12 months | Hosting stops | Budget alerts at $25, $50 and $75; portable images; AWS named as the fallback (G5) | The move itself is not designed. |
+| The Azure credit or student eligibility runs out | Certain within about 12 months | Hosting stops | No budget alerts (the author's decision); the subscription is disabled, not billed, when the credit ends; portable images; AWS named as the fallback (G5) | The move itself is not designed. |
 | Backups are in the same Azure subscription as the VM | Low | An account problem loses both the server and its backups | Monthly manual download of the latest backup (U9) | Accepted by the author (U9). |
 | A misleading or malicious group message causes wrong changes | Possible | Wrong dates until someone notices | Validation (§9), Undo and batch Undo, highlighting, the digest's "Check these" section, the pause switch | The "trust AI" decision (ADR-0003): nothing is reviewed before it applies. |
 | SSH is open for deploys | Low | The server is compromised | Key-only SSH with password login disabled; `unattended-upgrades` | Restricting SSH to GitHub's address ranges is left for later. |
@@ -1857,7 +1857,6 @@ Every file M0 and M1 create or change is listed below with what it holds and why
     7. Set up the three healthchecks.io checks (reminders, capture, backup).
     8. Register the Resend account with the student's Gmail, and verify the API key.
     9. Install `age` and the crontab, and log in to GHCR.
-    10. Create an Azure budget on the subscription, with email alerts at $25, $50 and $75.
     11. In Gmail, create a filter for the sender ("Never send it to Spam", label "Course-manager").
     12. Note the monthly task: download the latest backup to the student's own machine (U9).
 
