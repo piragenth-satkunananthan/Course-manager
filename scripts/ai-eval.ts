@@ -39,7 +39,11 @@ for (const c of cases) {
     {
       now: new Date(c.now),
       linkedTo: f.linkedTo,
-      messages: c.thread.map((m) => ({ id: m.id, sender: m.senderName, sentAt: new Date(m.sentAt).toISOString(), kind: m.kind === "edit" ? "edit" : "text", text: m.text, editOf: null })),
+      // An edit's original is in the thread or, already processed, in recentMessages (as after the worker's system Undo).
+      messages: c.thread.map((m) => {
+        const original = m.editOf ? [...c.thread, ...(f.recentMessages ?? [])].find((o) => o.id === m.editOf) : undefined;
+        return { id: m.id, sender: m.senderName, sentAt: new Date(m.sentAt).toISOString(), kind: m.kind === "edit" ? "edit" : "text", text: m.text, editOf: original ? { id: original.id, text: original.text } : null };
+      }),
     },
   );
   const chat = [{ role: "system" as const, content: SYSTEM_PROMPT }, { role: "user" as const, content: userPrompt(ctx) }];

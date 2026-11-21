@@ -10,7 +10,7 @@ import { iso } from "./util";
 import { writeEntity } from "./write-entity";
 
 type Change = typeof autoChange.$inferSelect;
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const TABLES = { assignment, exam } as const;
 
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
@@ -79,25 +79,33 @@ export async function listActivity(studentId: string, cursor?: string): Promise<
 }
 
 /**
- * Undo by the Student (design §3): allowed only while nothing has changed the item since. Restores the earlier values
- * and their set times as a new version. Undoing an AI-created item adds a suppression, so a repeat can't recreate it.
+ * Undo (design §3): allowed only while nothing has changed the item since. Restores the earlier values and their set
+ * times as a new version. The Student's Undo of an AI-created item adds a suppression, so a repeat can't recreate it;
+ * the system's (an edited or deleted message) doesn't. Returns why it was blocked, if it was.
  */
+export async function undoChange(tx: Tx, c: Change, actor: "student" | "system"): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const state = await undoState(tx, c);
+  if (!state.ok) return state;
+  const [v] = await tx.select().from(entityVersion).where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.autoChangeId, c.id)));
+  if (!v || (c.entityType !== "assignment" && c.entityType !== "exam")) return { ok: false, reason: "This change can't be undone" };
+
+  const restore: Record<string, unknown> = c.op === "create" ? { deletedAt: new Date() } : c.op === "delete" ? { deletedAt: null } : { ...v.before };
+  await writeEntity(tx, { studentId: c.studentId, entityType: c.entityType, op: "undo", entityId: c.entityId, restore, restoreFieldSetAt: v.beforeFieldSetAt, actor, setAt: new Date().toISOString() });
+  await tx.update(autoChange).set({ undoneAt: new Date() }).where(eq(autoChange.id, c.id));
+  if (c.op === "create" && actor === "student") {
+    const after = v.after as { courseId: string; title: string; dueDate?: string; date?: string | null };
+    await tx.insert(suppression).values({ studentId: c.studentId, courseId: after.courseId, entityType: c.entityType, titleKey: titleKey(after.title), dueDate: (c.entityType === "assignment" ? after.dueDate : after.date) ?? null });
+  }
+  return { ok: true };
+}
+
+/** Undo pressed by the Student: blocked is a 409 with the reason. */
 export async function undoAutoChange(studentId: string, id: string) {
   await db.transaction(async (tx) => {
     const [c] = await tx.select().from(autoChange).where(and(eq(autoChange.studentId, studentId), eq(autoChange.id, id))).for("update");
     if (!c) throw notFound("Change");
-    const state = await undoState(tx, c);
-    if (!state.ok) throw new AppError("UNDO_BLOCKED", state.reason);
-    const [v] = await tx.select().from(entityVersion).where(eq(entityVersion.autoChangeId, c.id));
-    if (!v || (c.entityType !== "assignment" && c.entityType !== "exam")) throw new AppError("UNDO_BLOCKED", "This change can't be undone");
-
-    const restore: Record<string, unknown> = c.op === "create" ? { deletedAt: new Date() } : c.op === "delete" ? { deletedAt: null } : { ...v.before };
-    await writeEntity(tx, { studentId, entityType: c.entityType, op: "undo", entityId: c.entityId, restore, restoreFieldSetAt: v.beforeFieldSetAt, actor: "student", setAt: new Date().toISOString() });
-    await tx.update(autoChange).set({ undoneAt: new Date() }).where(eq(autoChange.id, c.id));
-    if (c.op === "create") {
-      const after = v.after as { courseId: string; title: string; dueDate?: string; date?: string | null };
-      await tx.insert(suppression).values({ studentId, courseId: after.courseId, entityType: c.entityType, titleKey: titleKey(after.title), dueDate: (c.entityType === "assignment" ? after.dueDate : after.date) ?? null });
-    }
+    const r = await undoChange(tx, c, "student");
+    if (!r.ok) throw new AppError("UNDO_BLOCKED", r.reason);
   });
   return (await listAutoChanges(studentId, eq(autoChange.id, id)))[0]!;
 }

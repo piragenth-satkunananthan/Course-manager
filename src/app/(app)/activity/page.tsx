@@ -9,6 +9,7 @@ import { ActivityQuery } from "@/shared/schemas/activity";
 const EVENT_TEXT: Record<string, (p: Record<string, unknown>) => string> = {
   ai_output_rejected: () => "The AI couldn't read a batch of messages. They're flagged for you to check.",
   ai_overflow: (p) => `One batch asked for ${String(p.notApplied)} more changes than allowed; those weren't applied.`,
+  change_kept: (p) => `A message was deleted, but "${String(p.summary)}" was kept: ${String(p.reason).toLowerCase()}.`,
   alert: (p) => `Alert emailed: ${String(p.cause).replaceAll("_", " ")}.`,
 };
 

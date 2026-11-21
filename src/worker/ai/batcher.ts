@@ -10,6 +10,7 @@ import { activityEvent, aiBatch, assignment, course, courseNickname, exam, inbox
 import { addDays, localToInstant, todayIn } from "@/server/domain/time";
 import { log } from "@/server/log";
 import { raiseAlert } from "../scheduler/alerts";
+import { processDeletes, undoEditedOriginals } from "./edits";
 import { type AiClient, AiFatalError, AiRetryableError } from "./nim-client";
 import { PROMPT_VERSION, repairPrompt, SYSTEM_PROMPT, userPrompt } from "./prompt";
 
@@ -18,7 +19,7 @@ const OLDEST_MS = 5 * 60_000;
 const STALE_MS = 10 * 60_000;
 const MAX_BATCH = 30;
 const BACKOFF_MIN = [1, 5, 15, 60]; // then hourly
-// Revoke rows wait for #13, which turns a delete into a system Undo.
+// Deletes (revoke rows) never go to the AI: processDeletes handles them.
 const BATCHABLE = inArray(inboxMessage.kind, ["text", "edit"]);
 
 /** Rows stuck in processing (a crash before commit) go back to pending; the rerun creates nothing twice. */
@@ -110,7 +111,8 @@ function pgAdapter(studentId: string, groupId: string, batchIds: string[], key: 
       const rows = await db
         .select()
         .from(inboxMessage)
-        .where(and(eq(inboxMessage.waGroupId, groupId), eq(inboxMessage.status, "done"), inArray(inboxMessage.kind, ["text", "edit"]), gte(inboxMessage.sentAt, new Date(+now - 7 * 86_400_000))))
+        // Deleted messages are left out: their changes were withdrawn, and a repost must read as new.
+        .where(and(eq(inboxMessage.waGroupId, groupId), eq(inboxMessage.status, "done"), inArray(inboxMessage.kind, ["text", "edit"]), isNull(inboxMessage.revokedAt), gte(inboxMessage.sentAt, new Date(+now - 7 * 86_400_000))))
         .orderBy(desc(inboxMessage.sentAt))
         .limit(60);
       return rows
@@ -125,6 +127,8 @@ function pgAdapter(studentId: string, groupId: string, batchIds: string[], key: 
 export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: Date): Promise<"applied" | "rejected" | "retry"> {
   const [batch] = await db.select().from(aiBatch).where(eq(aiBatch.id, batchId));
   const rows = await db.select().from(inboxMessage).where(eq(inboxMessage.batchId, batchId)).orderBy(asc(inboxMessage.sentAt));
+  // An edit first withdraws what its original did, so the AI reads the edit against the earlier state (design §9).
+  await undoEditedOriginals(batch!.studentId, rows.filter((r) => r.kind === "edit"));
   const originals = rows.filter((r) => r.editOf).map((r) => r.editOf!);
   const originalText = new Map(
     originals.length ? (await db.select().from(inboxMessage).where(inArray(inboxMessage.id, originals))).map((o) => [o.id, o.textEnc ? decrypt(o.textEnc, key) : ""]) : [],
@@ -215,9 +219,10 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
   }
 }
 
-/** One AI tick (every 60 s): reset stale rows, then run every ready group. */
+/** One AI tick (every 60 s): reset stale rows, handle deletes, then run every ready group. */
 export async function aiTick(ai: AiClient, key: Buffer, now = new Date()) {
   await resetStale(now);
+  await processDeletes();
   for (const g of await readyGroups(now)) {
     const batchId = await claimBatch(g.studentId, g.groupId, now);
     if (batchId) await runBatch(batchId, ai, key, now);

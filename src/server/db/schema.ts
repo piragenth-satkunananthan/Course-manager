@@ -301,7 +301,7 @@ export const healthSignal = pgTable("health_signal", {
 });
 
 // Activity Log entries that aren't Auto Changes (§3). Alerts are de-duplicated by kind + payload.cause within 12 h.
-export const activityKind = pgEnum("activity_kind", ["ai_output_rejected", "ai_overflow", "alert", "stuck_messages", "file_too_large"]);
+export const activityKind = pgEnum("activity_kind", ["ai_output_rejected", "ai_overflow", "alert", "stuck_messages", "file_too_large", "change_kept"]);
 export const activityEvent = pgTable(
   "activity_event",
   {

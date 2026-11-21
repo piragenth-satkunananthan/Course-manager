@@ -1,0 +1,63 @@
+{
+  "id": "delete-then-repost",
+  "category": "edits and deletes",
+  "now": "2026-11-20T10:00:00+05:30",
+  "fixture": {
+    "semester": {
+      "id": "sem",
+      "startDate": "2026-08-03",
+      "endDate": "2026-12-18"
+    },
+    "linkedTo": {
+      "courseId": "c-ds"
+    },
+    "courses": [
+      {
+        "id": "c-ds",
+        "code": "CS2010",
+        "name": "Data Structures",
+        "nicknames": [
+          "ds",
+          "data structures"
+        ]
+      },
+      {
+        "id": "c-db",
+        "code": "CS2020",
+        "name": "Databases",
+        "nicknames": [
+          "db"
+        ]
+      }
+    ],
+    "assignments": [],
+    "exams": [],
+    "suppressions": [],
+    "recentMessages": []
+  },
+  "thread": [
+    {
+      "id": "m1",
+      "senderName": "Kasun",
+      "sentAt": "2026-11-20T09:30:00+05:30",
+      "kind": "original",
+      "text": "DS lab 7 report due 6th December"
+    }
+  ],
+  "expected": {
+    "operations": [
+      {
+        "op": "create_assignment",
+        "courseId": "c-ds",
+        "title": "Lab 7 report",
+        "dueDate": "2026-12-06",
+        "sourceMessageIds": [
+          "m1"
+        ]
+      }
+    ],
+    "decisions": {
+      "m1": "applied"
+    }
+  }
+}
