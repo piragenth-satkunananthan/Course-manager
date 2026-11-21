@@ -13,3 +13,5 @@ test-results
 .claude
 docs
 *.md
+playwright.config.ts
+vitest.config.ts
