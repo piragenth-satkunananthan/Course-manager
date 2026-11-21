@@ -1,6 +1,7 @@
 import { BookPlus, CalendarCheck, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { AddMenu } from "@/components/app/add-menu";
+import { AutoChangeItem } from "@/components/app/auto-change-item";
 import { DeadlineItem } from "@/components/app/deadline-item";
 import { EmptyState } from "@/components/app/empty-state";
 import { SessionItem } from "@/components/app/occurrence";
@@ -16,8 +17,8 @@ import type { Deadline } from "@/shared/schemas/dashboard";
 
 const localDate = (d: Deadline) => (d.type === "assignment" ? d.item.dueDate : d.item.date!);
 
-// The dashboard (design-system §7.1), fixed order: Overdue → Today → Due soon → TBA Exams.
-// Check these and Recent changes join with #12; banners are in the (app) layout.
+// The dashboard (design-system §7.1), fixed order: Overdue → Today → Due soon → TBA Exams → Check these → Recent changes.
+// Banners are in the (app) layout.
 export default async function DashboardPage() {
   const studentId = await requireStudentId();
   const [courses, dashboard] = await Promise.all([listCourseOptions(studentId), getDashboard(studentId)]);
@@ -112,6 +113,33 @@ export default async function DashboardPage() {
             ))}
           </ul>
         </details>
+      )}
+
+      {dashboard.highlightedChanges.length > 0 && (
+        <section aria-labelledby="check-heading" className="mt-6">
+          <h2 id="check-heading" className="text-title font-semibold">
+            Check these <span className="text-warning">({dashboard.highlightedChanges.length})</span>
+          </h2>
+          <ul className="mt-2 space-y-2">
+            {dashboard.highlightedChanges.map((c) => (
+              <AutoChangeItem key={c.id} item={c} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {dashboard.recentAutoChanges.length > 0 && (
+        <section aria-labelledby="recent-heading" className="mt-6">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="recent-heading" className="text-title font-semibold">Recent changes (48 h)</h2>
+            <Link href="/activity" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary md:min-h-10">Activity ›</Link>
+          </div>
+          <ul className="mt-2 space-y-2">
+            {dashboard.recentAutoChanges.map((c) => (
+              <AutoChangeItem key={c.id} item={c} />
+            ))}
+          </ul>
+        </section>
       )}
     </>
   );

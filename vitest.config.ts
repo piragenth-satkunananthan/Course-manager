@@ -18,6 +18,7 @@ export default defineConfig({
             DATABASE_URL: TEST_DATABASE_URL,
             APP_ORIGIN: "http://localhost:3100",
             BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-00",
+            DATA_ENCRYPTION_KEY: "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktMzJiISE=",
           },
           fileParallelism: false,
         },

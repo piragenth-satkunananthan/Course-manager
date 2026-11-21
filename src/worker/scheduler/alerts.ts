@@ -23,6 +23,14 @@ const CAUSES = {
     title: "WhatsApp refused the connection",
     whatToDo: "WhatsApp reported a multi-device mismatch. Unlink from Settings, then link again with a pairing code.",
   },
+  ai_overflow: {
+    title: "one batch of messages asked for too many changes",
+    whatToDo: "The AI applied the first 10 changes and flagged the rest. Check the Activity Log for what was applied and what wasn't.",
+  },
+  ai_auth: {
+    title: "the AI service refused the key",
+    whatToDo: "Auto Changes have stopped; messages are queued. Check NIM_API_KEY and NIM_MODEL in the server's .env.",
+  },
   final_reminder_undeliverable: {
     title: "a Final Reminder couldn't be sent",
     whatToDo: "A reminder email failed until its Deadline passed. Check the dashboard for what's due, and check the Resend key and account.",

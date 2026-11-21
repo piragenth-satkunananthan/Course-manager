@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import type { Page } from "@playwright/test";
+import { E2E_ENV } from "../playwright.config";
 import { STUDENT } from "./global-setup";
 
 export async function signIn(page: Page, password = STUDENT.password, email = STUDENT.email) {
@@ -40,4 +42,9 @@ export async function auditLayout(page: Page, min: number) {
       .filter((x) => x.h < min || x.w < min);
     return { sidewaysScroll: document.documentElement.scrollWidth - window.innerWidth, h1Count: document.querySelectorAll("h1").length, small };
   }, min);
+}
+
+/** A real Auto Change: a WhatsApp message processed by the real AI batch, with a fake AI creating `title`. */
+export function seedAutoChange(courseId: string, title: string, dueDate: string, email = "student@example.com") {
+  execFileSync("npx", ["tsx", "e2e/support/seed-auto-change.ts", email, courseId, title, dueDate], { env: { ...process.env, ...E2E_ENV }, stdio: "inherit" });
 }

@@ -1,5 +1,6 @@
 // One scheduler tick (every 60 s): each job runs on its own, so a failure in one never stops the other.
-import { healthSignal } from "@/server/db/schema";
+import { eq, inArray, sql } from "drizzle-orm";
+import { healthSignal, inboxMessage, user } from "@/server/db/schema";
 import { db } from "@/server/db/client";
 import { readSignals } from "@/server/data/health";
 import { evaluateHealth } from "@/server/domain/health";
@@ -22,12 +23,20 @@ export async function tick(now = new Date()) {
 
 /** The healthchecks.io reminders check is pinged only while the scheduler and email are healthy (§10). It emails the Student when pings stop. */
 async function pingHeartbeats(now: Date) {
-  const url = process.env.HEALTHCHECK_REMINDERS_URL;
-  if (!url || !evaluateHealth(await readSignals(), now).pingReminders) return;
-  try {
-    await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  } catch (e) {
-    log.warn("heartbeat ping failed", { check: "reminders", error: e });
+  const [waiting] = await db
+    .select({ oldest: sql<string | null>`min(${inboxMessage.receivedAt})`, paused: sql<boolean>`bool_or(${user.autoChangesPaused})` })
+    .from(inboxMessage)
+    .innerJoin(user, eq(user.id, inboxMessage.studentId))
+    .where(inArray(inboxMessage.status, ["pending", "processing"]));
+  const health = evaluateHealth(await readSignals(), now, { oldestWaitingMs: waiting?.oldest ? +now - +new Date(waiting.oldest) : null, paused: !!waiting?.paused });
+  // reminders: scheduler and email healthy. capture: WhatsApp and the AI healthy (design §10).
+  for (const [check, url, ok] of [["reminders", process.env.HEALTHCHECK_REMINDERS_URL, health.pingReminders], ["capture", process.env.HEALTHCHECK_CAPTURE_URL, health.pingCapture]] as const) {
+    if (!url || !ok) continue;
+    try {
+      await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    } catch (e) {
+      log.warn("heartbeat ping failed", { check, error: e });
+    }
   }
 }
 

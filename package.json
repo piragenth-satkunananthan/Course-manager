@@ -22,7 +22,8 @@
     "create-student": "tsx tools/create-student.ts",
     "spike:listen": "tsx spikes/m0/wa-listen.ts",
     "spike:messages": "tsx spikes/m0/dump-messages.ts",
-    "spike:eval": "tsx spikes/m0/nim-eval.ts"
+    "spike:eval": "tsx spikes/m0/nim-eval.ts",
+    "ai-eval": "tsx scripts/ai-eval.ts"
   },
   "dependencies": {
     "@date-fns/tz": "1.5.0",

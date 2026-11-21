@@ -37,7 +37,7 @@ Create three checks, emailing your Gmail (design §10):
 | Check | Period | Grace | Pinged by |
 |---|---|---|---|
 | `reminders` | 1 minute | 60 minutes | the worker, while the scheduler and email are healthy |
-| `capture` | 1 minute | 60 minutes | the worker, from #11 (create it then) |
+| `capture` | 1 minute | 60 minutes | the worker, while WhatsApp is connected and no message has waited over 30 minutes for the AI (from #12) |
 | `backup` | 1 day | 26 hours | `ops/backup.sh`, after a successful upload |
 
 So a stopped worker or VM is emailed within about 61–70 minutes, and a missed backup within 26 hours.
@@ -50,7 +50,13 @@ sudo sh -c 'printf "BACKUP_SAS=%s\n" "<the SAS from 1.1>" >> /opt/course-manager
 sudo sh -c 'printf "HEALTHCHECK_REMINDERS_URL=%s\nHEALTHCHECK_BACKUP_URL=%s\n" "<reminders ping URL>" "<backup ping URL>" >> /opt/course-manager/.env'
 ```
 
-The worker reads `HEALTHCHECK_REMINDERS_URL` after the next deploy (the Deploy workflow).
+From #12, the capture ping and the AI service:
+
+```bash
+sudo sh -c 'printf "HEALTHCHECK_CAPTURE_URL=%s\nNIM_API_KEY=%s\nNIM_MODEL=%s\n" "<capture ping URL>" "<NVIDIA NIM key>" "<the model ai-eval passed with>" >> /opt/course-manager/.env'
+```
+
+The worker reads these after the next deploy (the Deploy workflow). Without `NIM_API_KEY` and `NIM_MODEL`, messages queue and the AI loop re-checks every 5 minutes.
 
 ### 1.4 The nightly backup
 

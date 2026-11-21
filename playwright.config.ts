@@ -8,6 +8,7 @@ export const E2E_ENV = {
   BETTER_AUTH_URL: `http://localhost:${PORT}`,
   BETTER_AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-0000",
   RELAX_RATE_LIMITS: "1",
+  DATA_ENCRYPTION_KEY: Buffer.from("e2e-key-e2e-key-e2e-key-e2e-key!").toString("base64"),
 };
 
 // Runs against the production build (`npm run build` first).

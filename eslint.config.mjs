@@ -8,7 +8,7 @@ export default defineConfig([
   // §6: only these may touch the database client, so every query stays scoped to the Student.
   {
     files: ["**/*.{ts,tsx}"],
-    ignores: ["src/server/data/**", "src/server/auth.ts", "src/server/email/**", "src/app/api/health/route.ts", "src/worker/**", "tools/**", "scripts/**", "tests/**", "e2e/**"],
+    ignores: ["src/server/data/**", "src/server/auth.ts", "src/server/email/**", "src/server/ai/**", "src/app/api/health/route.ts", "src/worker/**", "tools/**", "scripts/**", "tests/**", "e2e/**"],
     rules: { "no-restricted-imports": ["error", { patterns: [{ group: ["@/server/db/client", "**/server/db/client"], message: "Use src/server/data/ (scoped to the Student)." }] }] },
   },
   // Design file 8: local-time arithmetic goes through src/server/domain/time.ts only.

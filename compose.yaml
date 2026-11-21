@@ -8,6 +8,7 @@ x-image: &worker-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-man
 x-web-image: &web-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-web:${IMAGE_TAG:?set IMAGE_TAG}
 x-db-url: &db-url postgres://app:${POSTGRES_PASSWORD:?}@postgres:5432/course_manager
 x-auth-env: &auth-env
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?} # web shows source messages; the worker stores them
   APP_ORIGIN: ${APP_ORIGIN:?}
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
@@ -60,6 +61,10 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Course-manager <onboarding@resend.dev>}
       HEALTHCHECK_REMINDERS_URL: ${HEALTHCHECK_REMINDERS_URL:-}
+      HEALTHCHECK_CAPTURE_URL: ${HEALTHCHECK_CAPTURE_URL:-}
+      NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NIM_API_KEY: ${NIM_API_KEY:-}
+      NIM_MODEL: ${NIM_MODEL:-}
     # No container healthcheck: health_signal(scheduler), the banner and the healthchecks.io ping cover it (§10).
     depends_on:
       postgres: { condition: service_healthy }

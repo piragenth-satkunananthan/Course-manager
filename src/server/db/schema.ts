@@ -398,3 +398,66 @@ export const inboxMessage = pgTable(
     index("inbox_message_pending_idx").on(t.status, t.waGroupId),
   ],
 );
+
+// AI processing and Auto Changes (§3, #12).
+export const batchStatus = pgEnum("batch_status", ["running", "applied", "rejected", "failed"]);
+export const aiBatch = pgTable("ai_batch", {
+  id: id(),
+  studentId: studentId(),
+  waGroupId: uuid("wa_group_id").notNull().references(() => waGroup.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  modelId: text("model_id"),
+  promptVersion: text("prompt_version"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  status: batchStatus("status").default("running").notNull(),
+  error: text("error"),
+});
+
+export const changeRisk = pgEnum("change_risk", ["normal", "moved_later", "cancelled"]);
+/** One row per change the AI applied. It powers the Activity Log and Undo. */
+export const autoChange = pgTable(
+  "auto_change",
+  {
+    id: id(),
+    studentId: studentId(),
+    batchId: uuid("batch_id").notNull().references(() => aiBatch.id, { onDelete: "cascade" }),
+    entityType: entityType("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    op: versionOp("op").notNull(), // create, update or delete
+    afterVersion: integer("after_version").notNull(),
+    summary: text("summary").notNull(),
+    risk: changeRisk("risk").default("normal").notNull(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    modelId: text("model_id"),
+    promptVersion: text("prompt_version"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("auto_change_student_idx").on(t.studentId, t.createdAt), index("auto_change_entity_idx").on(t.entityType, t.entityId)],
+);
+
+/** Which messages caused which changes (many to many). */
+export const autoChangeSource = pgTable(
+  "auto_change_source",
+  {
+    autoChangeId: uuid("auto_change_id").notNull().references(() => autoChange.id, { onDelete: "cascade" }),
+    inboxMessageId: uuid("inbox_message_id").notNull().references(() => inboxMessage.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.autoChangeId, t.inboxMessageId] })],
+);
+
+/** Created only when the Student undoes or deletes an AI-created Assessment, so a repeat announcement doesn't recreate it. */
+export const suppression = pgTable(
+  "suppression",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: courseId(),
+    entityType: entityType("entity_type").notNull(), // assignment or exam
+    titleKey: text("title_key").notNull(), // normalised title
+    dueDate: date("due_date", { mode: "string" }), // null for a TBA Exam
+    createdAt: createdAt(),
+  },
+  (t) => [index("suppression_course_idx").on(t.courseId)],
+);
