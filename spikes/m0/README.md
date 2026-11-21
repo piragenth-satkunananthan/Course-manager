@@ -64,7 +64,7 @@ Pick about 50 messages covering every category in `CONTEXT.md` (times like "4.30
 
 A case is a **deadline case** when its expected operations, or the model's, create, update or cancel an Assignment or Exam, so an invented deadline counts against the 100% bar. Titles, descriptions, topics, where-to-submit and exam kind labels aren't compared, because their wording varies. Locations are compared ignoring case and spacing. Everything else must match exactly, ignoring the order of operations. A case id may appear in only one half.
 
-`fixture` is sent to the model verbatim as the context. The spike has no context builder, so give it what §9 sends: `occurrences` for the next 21 days rather than weekly `classSessions`. Design file 67 lists `classSessions`, so `scripts/ai-eval.ts` will convert. To make token counts realistic, add up to 60 of the group's earlier messages to the fixture as `recentMessages`.
+`fixture` is sent to the model verbatim as the context. The spike has no context builder, so give it what §9 sends: `occurrences` for the next 21 days rather than weekly `classSessions`. Design file 67 uses the same format. To make token counts realistic, add up to 60 of the group's earlier messages to the fixture as `recentMessages`.
 
 ## nim-eval (#4)
 
