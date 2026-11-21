@@ -68,6 +68,26 @@ describe("gradeCase", () => {
     expect(g.schemaError).toMatch(/status/);
   });
 
+  it("counts a case as a deadline case when the model invents a deadline", () => {
+    const chatter: EvalCase = { ...deadlineCase, expected: { operations: [], decisions: { m1: "ignored", m2: "question" } } };
+    const g = gradeCase(chatter, output([good], { m1: "ignored", m2: "question" }));
+    expect(g).toMatchObject({ pass: false, deadline: true });
+    expect(gradeCase(chatter, output([], { m1: "ignored", m2: "question" }))).toMatchObject({ pass: true, deadline: false });
+  });
+
+  it("compares locations ignoring case and spacing", () => {
+    const c: EvalCase = {
+      ...deadlineCase,
+      expected: {
+        operations: [{ op: "reschedule_occurrence", classSessionId: "s1", date: "2026-11-24", newDate: "2026-11-25", newStart: "15:00", newEnd: "17:00", newLocation: "Lab 2", sourceMessageIds: ["m1"] }],
+        decisions: deadlineCase.expected.decisions,
+      },
+    };
+    const op = c.expected.operations[0] as object;
+    expect(gradeCase(c, output([{ ...op, newLocation: " lab  2" }])).pass).toBe(true);
+    expect(gradeCase(c, output([{ ...op, newLocation: "Hall B" }])).pass).toBe(false);
+  });
+
   it("accepts JSON wrapped in a markdown fence", () => {
     expect(gradeCase(deadlineCase, "```json\n" + output([good]) + "\n```").pass).toBe(true);
   });

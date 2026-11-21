@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify } from "./classify.ts";
+import { classify, redactShape } from "./classify.ts";
 
 const G = "120363000000000001@g.us";
 const OTHER = "120363000000000999@g.us";
@@ -65,5 +65,27 @@ describe("classify", () => {
       ["E2", "revoke", null],
       ["*", "revoke", null],
     ]);
+  });
+});
+
+describe("redactShape", () => {
+  it("keeps ids, timestamps and types but hides text, link previews, names and phone numbers", () => {
+    const edit = {
+      key: { remoteJid: G, id: "D1", fromMe: false, participant: "94770000001@s.whatsapp.net" },
+      update: {
+        messageTimestamp: 1763709999,
+        pushName: "Kavin",
+        message: { editedMessage: { message: { extendedTextMessage: {
+          text: "due Thursday https://lms.example/x", matchedText: "https://lms.example/x", title: "Lab 3", description: "Submit here",
+          jpegThumbnail: new Uint8Array(4),
+        } } } },
+      },
+    };
+    const out = JSON.stringify(redactShape(edit));
+    for (const secret of ["Thursday", "lms.example", "Lab 3", "Submit", "Kavin", "94770000001"]) expect(out).not.toContain(secret);
+    expect(redactShape(edit)).toMatchObject({
+      key: { remoteJid: "<jid>@g.us", id: "D1", fromMe: false, participant: "<jid>@s.whatsapp.net" },
+      update: { messageTimestamp: 1763709999, message: { editedMessage: { message: { extendedTextMessage: { text: "<34 chars>", jpegThumbnail: "<4 bytes>" } } } } },
+    });
   });
 });

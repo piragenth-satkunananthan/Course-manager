@@ -46,7 +46,7 @@ docker logs -f wa-listen     # every event is printed as one JSON line
 | Connects and disconnects, with the reason | automatic | `event: "connection"` lines in `data/events.jsonl` |
 | Message counts per group per day | automatic | `npm run spike:messages -- --counts`, on the laptop after copying the file (see below), or in the same `node:22-slim` container on the VM |
 | Restart test | `docker stop wa-listen` while a group is active, wait 10 min, `docker start wa-listen` | the counts show the missed messages with type `append`; `offline_catch_up_done` marks the end of the catch-up |
-| Edit and delete shapes | in a linked test group, edit one message and delete another (ideally from a classmate's phone, because ingest ignores your own messages; the shapes are logged either way) | `event: "raw_shape"` lines (text redacted to its length) |
+| Edit and delete shapes | in a linked test group, edit one message and delete another (ideally from a classmate's phone, because ingest ignores your own messages; the shapes are logged either way) | `event: "raw_shape"` lines: the protocol-message upsert, the `messages.update` it becomes, and any `messages.delete`. Every string except ids, timestamps and types is hidden, and JIDs show only their suffix |
 | Late-link decryption | add a group to `groups.txt` partway through the run | its first messages in the counts, and any `decrypt_failure` lines |
 | Pairing by code twice, once after an unlink | remove the device on the phone: the listener logs `logged_out`, wipes `data/auth` and stops. Run `sudo docker start wa-listen` to get a new code | `pairing_code` and `connection` lines |
 | Phone notifications | check every day | write it in `docs/m0-report.md` |
@@ -62,7 +62,9 @@ npm run spike:messages -- --counts > "$AI_EVAL_DIR/counts.csv"
 
 Pick about 50 messages covering every category in `CONTEXT.md` (times like "4.30", relative dates, corrections, edits and deletes, duplicates, questions and chatter, mixed English, Unknown Courses, Session Group messages, timetable changes, Semester extensions). Write one case file per thread in the `example-case.json` format, and split them into `$AI_EVAL_DIR/tuning/` and `$AI_EVAL_DIR/heldout/`.
 
-A case is a **deadline case** when its expected operations create, update or cancel an Assignment or Exam. Titles, descriptions, topics and locations aren't compared, because their wording varies. Everything else must match exactly, ignoring the order of operations.
+A case is a **deadline case** when its expected operations, or the model's, create, update or cancel an Assignment or Exam, so an invented deadline counts against the 100% bar. Titles, descriptions, topics, where-to-submit and exam kind labels aren't compared, because their wording varies. Locations are compared ignoring case and spacing. Everything else must match exactly, ignoring the order of operations. A case id may appear in only one half.
+
+`fixture` is sent to the model verbatim as the context. The spike has no context builder, so give it what §9 sends: `occurrences` for the next 21 days rather than weekly `classSessions`. Design file 67 lists `classSessions`, so `scripts/ai-eval.ts` will convert. To make token counts realistic, add up to 60 of the group's earlier messages to the fixture as `recentMessages`.
 
 ## nim-eval (#4)
 
@@ -73,7 +75,7 @@ npm run spike:eval -- --model meta/llama-3.3-70b-instruct --tune           # as 
 npm run spike:eval -- --model meta/llama-3.3-70b-instruct --grade --counts "$AI_EVAL_DIR/counts.csv"
 ```
 
-Add `--guided` to send the `ops.v1` JSON Schema, if the probe shows it's accepted. `--grade` runs the held-out half once per model, refuses a second run, and exits 1 below the bar (100% on deadline cases, at least 95% overall). Results, with token use, latency and the projected daily tokens, go to `$AI_EVAL_DIR/results/`.
+Add `--guided json_schema` or `--guided nvext` to send the `ops.v1` JSON Schema, whichever the probe shows is accepted. `--grade` claims the held-out half for that model before its first call (`results/graded-<model>.json`), so it can't be re-run, even after a crash, unless you delete that file on purpose. It exits 1 below the bar (100% on deadline cases, at least 95% overall). Results go to `$AI_EVAL_DIR/results/`, with the score per category, token use, latency and an upper bound on daily requests and tokens (one call per message).
 
 ## Cleaning up after M0
 

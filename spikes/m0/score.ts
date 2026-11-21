@@ -22,15 +22,16 @@ export type Grade = {
   missedDeadlineOps: number;
 };
 
-// shortcut: free-text fields are not compared (wording varies); upgrade to a fuzzy match if M0 shows wrong locations slipping through.
-const FREE_TEXT = new Set(["title", "description", "submitWhere", "topics", "kindLabel", "location", "newLocation"]);
+// shortcut: wording-only fields are not compared; upgrade to a fuzzy match if M0 shows wrong titles slipping through.
+const FREE_TEXT = new Set(["title", "description", "submitWhere", "topics", "kindLabel"]);
+const LOOSE = new Set(["location", "newLocation"]); // compared ignoring case and spacing
 const isDeadlineOp = (o: any) => /_(assignment|exam)$/.test(o?.op ?? "");
 
 function canon(v: any, key = ""): any {
   if (Array.isArray(v)) return key === "sourceMessageIds" ? [...v].sort() : v.map((x) => canon(x));
   if (v && typeof v === "object")
     return Object.fromEntries(Object.keys(v).filter((k) => !FREE_TEXT.has(k)).sort().map((k) => [k, canon(v[k], k)]));
-  return v;
+  return LOOSE.has(key) && typeof v === "string" ? v.toLowerCase().replace(/\s+/g, " ").trim() : v;
 }
 
 // Multiset difference on canonical JSON.
@@ -58,8 +59,9 @@ export function parseOutput(raw: string) {
 
 export function gradeCase(c: EvalCase, raw: string): Grade {
   const expected = c.expected.operations;
-  const deadline = expected.some(isDeadlineOp);
   const parsed = parseOutput(raw);
+  // Deadline-affecting: a deadline op was expected, or the model produced one (an invented or wrong cancel counts too).
+  const deadline = expected.some(isDeadlineOp) || !!parsed.data?.operations.some(isDeadlineOp);
   if ("error" in parsed)
     return { id: c.id, pass: false, deadline, schemaError: parsed.error, missing: expected, extra: [], decisionErrors: [], missedDeadlineOps: expected.filter(isDeadlineOp).length };
 

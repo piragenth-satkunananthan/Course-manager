@@ -28,10 +28,10 @@ export function classify(event: string, payload: any, linked: ReadonlySet<string
     id: k.id!,
     sender: m?.pushName || k.participant || "unknown",
   });
-  const mine = (k: Key) => !!k.remoteJid && linked.has(k.remoteJid) && !k.fromMe;
+  const wanted = (k: Key) => !!k.remoteJid && linked.has(k.remoteJid) && !k.fromMe;
 
   if (event === "messages.upsert") {
-    return (payload.messages as Msg[]).filter((m) => mine(m.key)).map((m): WaRecord => {
+    return (payload.messages as Msg[]).filter((m) => wanted(m.key)).map((m): WaRecord => {
       const text = textOf(m.message);
       const type = !m.message && m.messageStubType === STUB_CIPHERTEXT ? "undecryptable" : text === undefined ? "other" : payload.type;
       return { ...base(m.key, m), sentAt: ts(m.messageTimestamp), type, ...(text === undefined ? {} : { text }) };
@@ -39,7 +39,7 @@ export function classify(event: string, payload: any, linked: ReadonlySet<string
   }
 
   if (event === "messages.update") {
-    return (payload as Update[]).filter((u) => mine(u.key)).flatMap((u): WaRecord[] => {
+    return (payload as Update[]).filter((u) => wanted(u.key)).flatMap((u): WaRecord[] => {
       const edited = u.update.message?.editedMessage?.message;
       if (edited) return [{ ...base(u.key), sentAt: ts(u.update.messageTimestamp), type: "edit", text: textOf(edited) ?? "" }];
       if (u.update.messageStubType === STUB_REVOKE) return [{ ...base(u.key), sentAt: null, type: "revoke" }];
@@ -49,8 +49,20 @@ export function classify(event: string, payload: any, linked: ReadonlySet<string
 
   if (event === "messages.delete") {
     if ("all" in payload) return linked.has(payload.jid) ? [{ group: payload.jid, id: "*", sender: "unknown", sentAt: null, type: "revoke" }] : [];
-    return (payload.keys as Key[]).filter(mine).map((k): WaRecord => ({ ...base(k), sentAt: null, type: "revoke" }));
+    return (payload.keys as Key[]).filter(wanted).map((k): WaRecord => ({ ...base(k), sentAt: null, type: "revoke" }));
   }
 
   return [];
+}
+
+// For logging event shapes: keeps structure, ids, timestamps and types; hides every other string
+// (message text, link previews, names) and the number part of every JID. Fail-safe: unknown keys are hidden.
+const KEEP = new Set(["id", "fromMe", "messageTimestamp", "timestampMs", "messageStubType", "type", "status", "addressingMode"]);
+export function redactShape(v: any, k = ""): any {
+  if (typeof v === "string") return KEEP.has(k) ? v : v.includes("@") ? v.replace(/^[^@]*/, "<jid>") : `<${v.length} chars>`;
+  if (typeof v === "bigint") return String(v);
+  if (v instanceof Uint8Array) return `<${v.length} bytes>`;
+  if (Array.isArray(v)) return v.map((x) => redactShape(x));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([kk, x]) => [kk, redactShape(x, kk)]));
+  return v;
 }

@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { join } from "node:path";
 import makeWASocket, { DisconnectReason, jidNormalizedUser, useMultiFileAuthState } from "baileys";
 import pino from "pino";
-import { classify } from "./classify.ts";
+import { classify, redactShape } from "./classify.ts";
 import { encryptLine, loadKey } from "./crypto.ts";
 
 const DATA = process.env.SPIKE_DATA_DIR ?? "spikes/m0/data";
@@ -45,13 +45,6 @@ const sampleMemory = () => {
 };
 sampleMemory();
 setInterval(sampleMemory, 5 * 60_000);
-
-// Event shapes for the edit/delete test, with message text replaced by its length.
-const redact = (v: any): any =>
-  Array.isArray(v) ? v.map(redact)
-  : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) =>
-      [k, typeof x === "string" && /^(conversation|text|caption|pushName)$/.test(k) ? `<redacted ${x.length} chars>` : redact(x)]))
-  : typeof v === "bigint" ? String(v) : v;
 
 const own = new Set<string>();
 const BACKOFF = [5, 30, 120, 300];
@@ -94,7 +87,8 @@ async function start() {
         log("logged_out", { next: "auth wiped; run the listener again to pair" });
         process.exit(0);
       }
-      if (code === DisconnectReason.connectionReplaced) process.exit(0); // another instance is running
+      // §8: these need a person, so stop instead of reconnecting (exit 0 keeps the container stopped).
+      if ([DisconnectReason.connectionReplaced, DisconnectReason.badSession, DisconnectReason.forbidden, DisconnectReason.multideviceMismatch].includes(code!)) process.exit(0);
       const delay = code === DisconnectReason.restartRequired ? 0 : BACKOFF[Math.min(attempt++, BACKOFF.length - 1)];
       setTimeout(() => start().catch(crash), delay * 1000);
     }
@@ -109,13 +103,14 @@ async function start() {
       if (meta.type === "undecryptable") log("decrypt_failure", meta);
     }
     if (event === "messages.upsert" && records.length) log("upsert", { type: payload.type, count: records.length });
-    // Raw shapes (text redacted) for every edit/revoke/delete in a linked group, own messages included.
-    if (event !== "messages.upsert") {
-      const relevant = event === "messages.delete"
-        ? ((payload.keys ?? [{ remoteJid: payload.jid }]).some((k: any) => linked.has(k.remoteJid)) ? [payload] : [])
-        : payload.filter((u: any) => linked.has(u.key?.remoteJid) && (u.update?.message?.editedMessage || u.update?.messageStubType != null));
-      if (relevant.length) log("raw_shape", { source: event, payload: redact(relevant) });
-    }
+    // Redacted raw shapes of every edit/revoke/delete in a linked group, own messages included:
+    // the protocol message upsert, the messages.update it becomes, and messages.delete.
+    const inLinked = (k: any) => linked.has(k?.remoteJid);
+    const relevant =
+      event === "messages.upsert" ? payload.messages.filter((m: any) => inLinked(m.key) && m.message?.protocolMessage)
+      : event === "messages.update" ? payload.filter((u: any) => inLinked(u.key) && (u.update?.message?.editedMessage || u.update?.messageStubType != null))
+      : (payload.keys ?? [{ remoteJid: payload.jid }]).some(inLinked) ? [payload] : [];
+    if (relevant.length) log("raw_shape", { source: event, payload: redactShape(relevant) });
   };
   sock.ev.on("messages.upsert", handle("messages.upsert"));
   sock.ev.on("messages.update", handle("messages.update"));
