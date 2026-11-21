@@ -14,7 +14,7 @@
 | 2 | 7-day run: steady memory (from `memory.csv`), disconnects with reasons, messages per group per day | |
 | 2 | Phone notifications still arrive (daily: day 1 … day 7) | |
 | 3 | Restart test: stopped 10 min during activity; messages present after restart, delivered as `append` | |
-| 4 | Edit and delete: exact event shapes and timestamps (paste the redacted `raw_shape` lines, and check them for text and phone numbers first: this file is committed) | |
+| 4 | Edit and delete: exact event shapes and timestamps, observed passively (paste the redacted `raw_shape` lines, and check them for text and phone numbers first: this file is committed). If none was seen, the shapes from the Baileys source, marked "from source, not observed" | |
 | 5 | Late-link: do a newly linked group's first messages decrypt? | |
 | 6 | Pairing by code at least twice, once after an unlink | |
 | 7 | Test set: about 50 messages, every CONTEXT.md category, tuning and held-out halves separate, stored outside the repo | |
