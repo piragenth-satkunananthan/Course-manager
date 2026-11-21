@@ -1,0 +1,9 @@
+# TLS and the only published port (design file 77). Caddy's default issuers are Let's Encrypt, then ZeroSSL.
+# HSTS comes from the app (next.config.ts), so it isn't sent twice.
+{$APP_HOST} {
+	encode gzip
+	reverse_proxy web:3000 {
+		# Overwrite whatever the client sent: Better Auth rate-limits by this header.
+		header_up X-Real-IP {remote_host}
+	}
+}
