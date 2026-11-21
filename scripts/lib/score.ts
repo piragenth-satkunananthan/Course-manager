@@ -28,6 +28,14 @@ const FREE_TEXT = new Set(["title", "description", "submitWhere", "topics", "kin
 const LOOSE = new Set(["location", "newLocation"]); // compared ignoring case and spacing
 const isDeadlineOp = (o: unknown) => /_(assignment|exam)$/.test((o as { op?: string } | null)?.op ?? "");
 
+/** A create that spells out the app's own defaults means the same as one that leaves them out. */
+function withoutDefaults(v: unknown): unknown {
+  const o = v as Record<string, unknown> | null;
+  if (o?.op !== "create_assignment") return v;
+  const { dueTime, isGroupWork, ...rest } = o;
+  return { ...rest, ...(dueTime && dueTime !== "23:59" ? { dueTime } : {}), ...(isGroupWork ? { isGroupWork } : {}) }; // no time = 23:59 (deadlines.ts)
+}
+
 function canon(v: unknown, key = ""): unknown {
   if (Array.isArray(v)) return key === "sourceMessageIds" ? [...v].sort() : v.map((x) => canon(x));
   if (v && typeof v === "object")
@@ -37,9 +45,9 @@ function canon(v: unknown, key = ""): unknown {
 
 // Multiset difference on canonical JSON.
 function minus(a: unknown[], b: unknown[]): unknown[] {
-  const pool = b.map((x) => JSON.stringify(canon(x)));
+  const pool = b.map((x) => JSON.stringify(canon(withoutDefaults(x))));
   return a.filter((x) => {
-    const i = pool.indexOf(JSON.stringify(canon(x)));
+    const i = pool.indexOf(JSON.stringify(canon(withoutDefaults(x))));
     if (i === -1) return true;
     pool.splice(i, 1);
     return false;

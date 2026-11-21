@@ -24,7 +24,9 @@ export function nimClient(model = process.env.NIM_MODEL ?? "", apiKey = process.
         throw new AiRetryableError(`NIM unreachable: ${(e as Error).message}`);
       }
       if (res.status === 401 || res.status === 403) throw new AiFatalError(`NIM refused the key (${res.status})`);
-      if (!res.ok) throw new AiRetryableError(`NIM ${res.status}`);
+      if (res.status === 429 || res.status >= 500) throw new AiRetryableError(`NIM ${res.status}`);
+      // Any other 4xx is a request NIM will never accept (a wrong model name, too long a context): retrying won't help.
+      if (!res.ok) throw new Error(`NIM ${res.status}: ${(await res.text().catch(() => "")).slice(0, 300)}`);
       const j = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
       return { content: j.choices?.[0]?.message?.content ?? "", inputTokens: j.usage?.prompt_tokens ?? 0, outputTokens: j.usage?.completion_tokens ?? 0 };
     },

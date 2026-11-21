@@ -104,3 +104,14 @@ describe("summarise", () => {
     expect(s.overallScore).toBeCloseTo(2 / 3);
   });
 });
+
+describe("defaults", () => {
+  it("treats a create that spells out the app's defaults (23:59, not group work) as the same create", async () => {
+    const { gradeCase } = await import("../../scripts/lib/score");
+    const op = { op: "create_assignment", courseId: "c", title: "A", dueDate: "2026-11-20", sourceMessageIds: ["m1"] };
+    const c = { id: "x", category: "t", now: "", fixture: {}, thread: [], expected: { operations: [op], decisions: { m1: "applied" } } };
+    const out = (o: object) => JSON.stringify({ messages: [{ id: "m1", decision: "applied", reason: "r" }], operations: [{ ...op, ...o }], unknownCourses: [] });
+    expect(gradeCase(c as never, out({ dueTime: "23:59", isGroupWork: false })).pass).toBe(true);
+    expect(gradeCase(c as never, out({ dueTime: "17:00" })).pass).toBe(false);
+  });
+});

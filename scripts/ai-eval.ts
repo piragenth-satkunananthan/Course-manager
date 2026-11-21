@@ -3,17 +3,33 @@
 // (100% on deadline cases, at least 95% overall).
 //   NIM_API_KEY=… NIM_MODEL=… npm run ai-eval                         synthetic cases + $AI_EVAL_DIR/heldout
 //   npm run ai-eval -- --set tuning                                    $AI_EVAL_DIR/tuning only, while tuning the prompt
+//   npm run ai-eval -- --models                                        the models NIM_API_KEY can use
+//   npm run ai-eval -- --details                                       why each synthetic case failed
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { type AiContext, buildContext } from "../src/server/ai/context";
 import { validateOutput } from "../src/server/ai/validate";
-import { nimClient } from "../src/worker/ai/nim-client";
+import { checkModel, nimClient } from "../src/worker/ai/nim-client";
 import { PROMPT_VERSION, repairPrompt, SYSTEM_PROMPT, userPrompt } from "../src/worker/ai/prompt";
 import { type EvalCase, gradeCase, summarise } from "./lib/score";
 
-const { values } = parseArgs({ options: { set: { type: "string" } } });
+if (existsSync(".env")) process.loadEnvFile(".env"); // the same NIM_API_KEY and NIM_MODEL the worker uses
+if (process.argv.includes("--models")) {
+  const res = await fetch(`${process.env.NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1"}/models`, { headers: { authorization: `Bearer ${process.env.NIM_API_KEY}` } });
+  console.log(((await res.json()) as { data: { id: string }[] }).data.map((m) => m.id).sort().join("\n"));
+  process.exit(0);
+}
+try {
+  await checkModel();
+} catch (e) {
+  console.error(`Can't run the evaluation: ${(e as Error).message}.`);
+  console.error("Set NIM_API_KEY and NIM_MODEL (in .env or the environment). List the models your key can use with: npm run ai-eval -- --models");
+  process.exit(2);
+}
+const { values } = parseArgs({ options: { set: { type: "string" }, models: { type: "boolean" }, details: { type: "boolean" } } });
 const evalDir = process.env.AI_EVAL_DIR;
+if (values.details && process.env.AI_EVAL_DIR) throw new Error("--details prints message text: run it without AI_EVAL_DIR");
 const dirs =
   values.set === "tuning"
     ? [join(evalDir ?? "", "tuning")]
@@ -57,6 +73,9 @@ for (const c of cases) {
   const g = gradeCase(c, applied);
   grades.push(g);
   console.log(`${g.pass ? "PASS" : "FAIL"} ${g.deadline ? "[deadline] " : ""}${c.id}${g.schemaError ? " (invalid output)" : ""}`);
+  // Details print only for the committed synthetic cases: held-out cases hold real messages.
+  if (!g.pass && values.details)
+    console.log(JSON.stringify({ schemaError: g.schemaError?.slice(0, 300), missing: g.missing, extra: g.extra, decisions: g.decisionErrors, dropped: r.ok ? r.dropped.map((d) => d.reason) : undefined }));
 }
 const s = summarise(grades);
 console.log(JSON.stringify(s, null, 2));
