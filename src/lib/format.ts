@@ -34,3 +34,6 @@ export function relativeDay(date: string, today: string) {
 export function dueLine(date: string, time: string | null, today: string, verb = "Due", untimed = "time not announced") {
   return `${verb} ${formatDate(date)}${time ? `, ${time}` : ` · ${untimed}`} · ${relativeDay(date, today)}`;
 }
+
+export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const; // ISO 1–7
+export const SESSION_KIND_LABEL = { lecture: "Lecture", tutorial: "Tutorial", lab: "Lab" } as const;

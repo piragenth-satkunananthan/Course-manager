@@ -160,3 +160,15 @@ export async function deleteExam(studentId: string, id: string, expectedVersion:
   );
   return null;
 }
+
+/** Assignments and dated Exams due on one local date, for the day list's "Due" section. */
+export async function listDeadlinesOn(studentId: string, date: string) {
+  const [assignments, exams] = await Promise.all([
+    loadAssignments(db, studentId, eq(assignment.dueDate, date)),
+    loadExams(db, studentId, eq(exam.date, date)),
+  ]);
+  return [
+    ...assignments.map((item) => ({ type: "assignment" as const, item })),
+    ...exams.map((item) => ({ type: "exam" as const, item })),
+  ].sort((a, b) => (a.item.dueAt ?? "~").localeCompare(b.item.dueAt ?? "~"));
+}

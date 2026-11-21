@@ -26,3 +26,9 @@ export function addDays(date: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+/** ISO weekday of a local date: 1 = Monday … 7 = Sunday. */
+export function weekdayOf(date: string): number {
+  const d = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return d === 0 ? 7 : d;
+}

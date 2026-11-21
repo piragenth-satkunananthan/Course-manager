@@ -3,18 +3,20 @@ import Link from "next/link";
 import { AddMenu } from "@/components/app/add-menu";
 import { DeadlineItem } from "@/components/app/deadline-item";
 import { EmptyState } from "@/components/app/empty-state";
+import { SessionItem } from "@/components/app/occurrence";
 import { Button } from "@/components/ui/button";
-import { dayLabel } from "@/lib/format";
+import { dayLabel, formatDate } from "@/lib/format";
 import { listCourseOptions } from "@/server/data/courses";
 import { getDashboard } from "@/server/data/dashboard";
+import { isHappeningNow } from "@/server/domain/occurrences";
 import { addDays, todayIn } from "@/server/domain/time";
 import { requireStudentId } from "@/server/session";
 import type { Deadline } from "@/shared/schemas/dashboard";
 
 const localDate = (d: Deadline) => (d.type === "assignment" ? d.item.dueDate : d.item.date!);
 
-// The dashboard (design-system §7.1), fixed order: Overdue → Due soon → TBA Exams.
-// Today's classes (#8), Check these and Recent changes (#12), and banners (#10, #11) join later.
+// The dashboard (design-system §7.1), fixed order: Overdue → Today → Due soon → TBA Exams.
+// Check these and Recent changes (#12), and banners (#10, #11) join later.
 export default async function DashboardPage() {
   const studentId = await requireStudentId();
   const [courses, dashboard] = await Promise.all([listCourseOptions(studentId), getDashboard(studentId)]);
@@ -68,6 +70,19 @@ export default async function DashboardPage() {
           </ul>
         </section>
       )}
+
+      <section aria-labelledby="today-heading" className="mt-6">
+        <h2 id="today-heading" className="text-title font-semibold">Today · {formatDate(today)}</h2>
+        {dashboard.todaySessions.length === 0 ? (
+          <p className="mt-2 text-muted-foreground">No classes today.</p>
+        ) : (
+          <ul className="mt-2 space-y-2" aria-label="Today's classes">
+            {dashboard.todaySessions.map((o) => (
+              <SessionItem key={`${o.classSessionId ?? o.sessionChangeId}-${o.date}`} o={o} now={isHappeningNow(o, new Date())} />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section aria-labelledby="soon-heading" className="mt-6">
         <h2 id="soon-heading" className="text-title font-semibold">Due soon (next 14 days)</h2>

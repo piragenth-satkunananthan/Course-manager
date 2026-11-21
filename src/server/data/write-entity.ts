@@ -3,7 +3,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { db } from "@/server/db/client";
-import { assignment, entityVersion, exam } from "@/server/db/schema";
+import { assignment, entityVersion, exam, sessionChange } from "@/server/db/schema";
 import { planFieldUpdate } from "@/server/domain/versioning";
 import { AppError, notFound } from "@/server/http/errors";
 
@@ -22,6 +22,11 @@ const ENTITIES = {
     table: exam as unknown as VersionedTable,
     fields: ["courseId", "title", "kindLabel", "date", "startTime", "location", "topics"],
     ai: ["courseId", "title", "kindLabel", "date", "startTime", "location", "topics"], // §3: every field except source
+  },
+  session_change: {
+    table: sessionChange as unknown as VersionedTable,
+    fields: ["courseId", "classSessionId", "kind", "sessionKind", "originalDate", "newDate", "newStartTime", "newEndTime", "newLocation"],
+    ai: ["kind", "newDate", "newStartTime", "newEndTime", "newLocation"], // §9 update_session_change
   },
 } as const;
 export type EntityType = keyof typeof ENTITIES;

@@ -4,13 +4,15 @@ import { notFound } from "next/navigation";
 import * as z from "zod";
 import { CourseActions } from "@/components/app/course-actions";
 import { NicknameEditor } from "@/components/app/nickname-editor";
+import { WeeklyClasses } from "@/components/app/weekly-classes";
 import { Badge } from "@/components/ui/badge";
 import { COLOUR_BG } from "@/lib/course-colours";
 import { getCourse } from "@/server/data/courses";
+import { listClassSessions } from "@/server/data/timetable";
 import { AppError } from "@/server/http/errors";
 import { requireStudentId } from "@/server/session";
 
-// #6: details and Nicknames. Class Sessions (#8) and Assignments and Exams (#7) join this page later.
+// Details, weekly classes and Nicknames. The Assignments and Exams tabs join later.
 export default async function CoursePage({ params }: { params: Promise<{ id: string }> }) {
   const studentId = await requireStudentId();
   const { id } = await params;
@@ -41,7 +43,8 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         </div>
         <CourseActions course={course} />
       </div>
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
+        <WeeklyClasses courseId={course.id} code={course.code} sessions={await listClassSessions(studentId, course.id)} />
         <NicknameEditor courseId={course.id} code={course.code} nicknames={course.nicknames} />
       </div>
     </>

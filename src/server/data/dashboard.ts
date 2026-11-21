@@ -1,4 +1,4 @@
-// The dashboard (design file 44). Today's classes (#8), Auto Changes (#12) and banners (#10, #11) join later.
+// The dashboard (design file 44). Auto Changes (#12) and banners (#10, #11) join later.
 import { and, eq, gte, inArray, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { assignment, course, exam, semester } from "@/server/db/schema";
@@ -7,6 +7,7 @@ import { addDays, todayIn } from "@/server/domain/time";
 import type { Exam } from "@/shared/schemas/exam";
 import type { Dashboard, Deadline } from "@/shared/schemas/dashboard";
 import { loadAssignments, loadExams } from "./assessments";
+import { getOccurrences } from "./timetable";
 
 type Item = DeadlineInput & { deadline: Deadline };
 
@@ -17,9 +18,11 @@ export async function getDashboard(studentId: string, now = new Date()): Promise
     .from(course)
     .innerJoin(semester, eq(semester.id, course.semesterId))
     .where(and(eq(course.studentId, studentId), isNull(course.archivedAt), isNull(semester.archivedAt)));
-  const [assignments, exams] = await Promise.all([
+  const today = todayIn(now);
+  const [assignments, exams, todaySessions] = await Promise.all([
     loadAssignments(db, studentId, and(inArray(assignment.courseId, activeCourseIds), ne(assignment.status, "submitted"))),
-    loadExams(db, studentId, and(inArray(exam.courseId, activeCourseIds), or(isNull(exam.date), gte(exam.date, addDays(todayIn(now), -1))))),
+    loadExams(db, studentId, and(inArray(exam.courseId, activeCourseIds), or(isNull(exam.date), gte(exam.date, addDays(today, -1))))),
+    getOccurrences(studentId, today, today),
   ]);
 
   const items: Item[] = [
@@ -29,7 +32,7 @@ export async function getDashboard(studentId: string, now = new Date()): Promise
   const c = classifyForDashboard(items, now);
   return {
     overdue: c.overdue.map((i) => i.deadline),
-    todaySessions: [],
+    todaySessions,
     upcoming: c.upcoming.map((i) => i.deadline),
     tbaExams: c.tbaExams.map((i) => i.deadline.item as Exam),
     highlightedChanges: [],

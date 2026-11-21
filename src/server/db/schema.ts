@@ -208,3 +208,54 @@ export const entityVersion = pgTable(
   },
   (t) => [index("entity_version_entity_idx").on(t.entityType, t.entityId)],
 );
+
+// The timetable (§3, #8). Occurrences are calculated from these, never stored.
+export const sessionKind = pgEnum("session_kind", ["lecture", "tutorial", "lab"]);
+
+export const classSession = pgTable(
+  "class_session",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: courseId(),
+    kind: sessionKind("kind").notNull(),
+    weekday: integer("weekday").notNull(), // ISO: 1 = Monday … 7 = Sunday
+    startTime: time("start_time").notNull(),
+    endTime: time("end_time").notNull(),
+    location: text("location"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("class_session_time_chk", sql`${t.endTime} > ${t.startTime} and ${t.weekday} between 1 and 7`),
+    index("class_session_course_idx").on(t.courseId),
+  ],
+);
+
+export const sessionChangeKind = pgEnum("session_change_kind", ["cancel", "reschedule", "extra"]);
+
+export const sessionChange = pgTable(
+  "session_change",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: courseId(),
+    classSessionId: uuid("class_session_id").references(() => classSession.id, { onDelete: "cascade" }), // null for extras
+    kind: sessionChangeKind("kind").notNull(),
+    sessionKind: sessionKind("session_kind"), // for extras: what kind of class
+    originalDate: date("original_date", { mode: "string" }), // the occurrence changed; null for extras
+    newDate: date("new_date", { mode: "string" }),
+    newStartTime: time("new_start_time"),
+    newEndTime: time("new_end_time"),
+    newLocation: text("new_location"),
+    source: itemSource("source").default("manual").notNull(),
+    ...versioned(),
+  },
+  (t) => [
+    // Each occurrence has at most one active change, updated (never duplicated) when corrected.
+    uniqueIndex("session_change_one_active")
+      .on(t.classSessionId, t.originalDate)
+      .where(sql`${t.deletedAt} is null and ${t.kind} in ('cancel', 'reschedule')`),
+    index("session_change_course_idx").on(t.courseId),
+  ],
+);

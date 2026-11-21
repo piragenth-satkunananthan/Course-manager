@@ -180,3 +180,34 @@ export function CourseField<T extends FieldValues>({ control, name, courses }: {
     />
   );
 }
+
+/** A labelled select of fixed options (design-system §6.11). */
+export function SelectField<T extends FieldValues>({
+  control, name, label, options, required, placeholder,
+}: { control: Control<T, unknown, unknown>; name: FieldPath<T>; label: string; options: { value: string; label: string }[]; required?: boolean; placeholder?: string }) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <FieldLabel htmlFor={name}>
+            {label}
+            {required && " (required)"}
+          </FieldLabel>
+          <Select value={field.value == null ? "" : String(field.value)} onValueChange={field.onChange}>
+            <SelectTrigger id={name} className="w-full" aria-invalid={fieldState.invalid} aria-describedby={fieldState.error ? `${name}-error` : undefined}>
+              <SelectValue placeholder={placeholder ?? "Choose"} />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldState.error && <FieldError id={`${name}-error`} errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}

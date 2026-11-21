@@ -99,7 +99,7 @@ test("a full account: layout with data, validation, a failed save, and loading",
 
   for (const width of [null, 320]) {
     if (width) await page.setViewportSize({ width, height: 700 });
-    for (const path of ["/", "/courses", `/courses/${courseId}`, "/settings"]) {
+    for (const path of ["/", "/courses", `/courses/${courseId}`, "/settings", `/timetable?date=${shift(2)}`]) {
       await page.goto(path);
       const a = await auditLayout(page, phone || width ? 44 : 40);
       expect(a, `${path} at ${width ?? "default"} px`).toEqual({ sidewaysScroll: 0, h1Count: 1, small: [] });
