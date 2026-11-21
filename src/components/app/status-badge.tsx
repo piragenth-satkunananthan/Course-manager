@@ -1,5 +1,5 @@
 // Always an icon plus a word, from a fixed set (design-system §6.4).
-import { CircleAlert, CircleCheck, CircleHelp, Clock } from "lucide-react";
+import { CalendarClock, CircleAlert, CircleCheck, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const KINDS = {
@@ -7,7 +7,7 @@ const KINDS = {
   dueToday: { label: "Due today", icon: Clock, className: "bg-warning-subtle text-warning" },
   dueTomorrow: { label: "Due tomorrow", icon: Clock, className: "bg-warning-subtle text-warning" },
   submitted: { label: "Submitted", icon: CircleCheck, className: "bg-success-subtle text-success" },
-  tba: { label: "TBA", icon: CircleHelp, className: "bg-muted text-muted-foreground" },
+  tba: { label: "TBA", icon: CalendarClock, className: "bg-muted text-muted-foreground" },
 } as const;
 
 export type StatusKind = keyof typeof KINDS;

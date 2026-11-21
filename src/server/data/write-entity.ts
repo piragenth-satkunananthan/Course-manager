@@ -21,7 +21,7 @@ const ENTITIES = {
   exam: {
     table: exam as unknown as VersionedTable,
     fields: ["courseId", "title", "kindLabel", "date", "startTime", "location", "topics"],
-    ai: ["title", "kindLabel", "date", "startTime", "location", "topics"],
+    ai: ["courseId", "title", "kindLabel", "date", "startTime", "location", "topics"], // §3: every field except source
   },
 } as const;
 export type EntityType = keyof typeof ENTITIES;
@@ -38,61 +38,67 @@ export function snapshot(entityType: EntityType, row: Record<string, unknown>) {
   );
 }
 
-type Write = {
-  studentId: string;
-  entityType: EntityType;
-  actor: Actor;
-  setAt: string; // ISO instant: the message's sent time for the AI, now for the Student
-  toDto: (row: Row) => Promise<unknown>; // for the CONFLICT body
-} & (
-  | { op: "create"; proposed: Record<string, unknown> }
-  | { op: "update"; entityId: string; proposed: Record<string, unknown>; expectedVersion?: number }
-  | { op: "delete"; entityId: string; expectedVersion?: number }
-);
+type Base = { studentId: string; entityType: EntityType; actor: Actor; setAt: string }; // setAt: the message's sent time for the AI, now for the Student
+type Write = Base &
+  (
+    | { op: "create"; proposed: Record<string, unknown> }
+    | { op: "update" | "delete"; entityId: string; proposed?: Record<string, unknown>; expectedVersion?: number; toDto: (row: Row) => Promise<unknown> } // toDto: the CONFLICT body
+  );
+
+/** One history row. Also used for status changes, which don't go through writeEntity (§3). */
+export function recordHistory(
+  tx: Tx,
+  h: { studentId: string; entityType: EntityType; entityId: string; version: number; op: "create" | "update" | "delete" | "status"; actor: Actor; before: object | null; after: object | null; beforeFieldSetAt?: object | null },
+) {
+  return tx.insert(entityVersion).values({
+    ...h,
+    before: h.before as Record<string, unknown> | null,
+    after: h.after as Record<string, unknown> | null,
+    beforeFieldSetAt: (h.beforeFieldSetAt ?? null) as Record<string, string> | null,
+  });
+}
 
 export async function writeEntity(tx: Tx, w: Write): Promise<{ row: Row; noChange: boolean }> {
   const { table, fields, ai } = ENTITIES[w.entityType];
   const owned: readonly string[] = w.actor === "ai" ? ai : fields;
   const history = (row: Row, op: "create" | "update" | "delete", before: object | null, after: object | null, beforeFieldSetAt: object | null) =>
-    tx.insert(entityVersion).values({
-      studentId: w.studentId, entityType: w.entityType, entityId: row.id, version: row.version, op, actor: w.actor,
-      before: before as Record<string, unknown> | null, after: after as Record<string, unknown> | null, beforeFieldSetAt: beforeFieldSetAt as Record<string, string> | null,
-    });
+    recordHistory(tx, { studentId: w.studentId, entityType: w.entityType, entityId: row.id, version: row.version, op, actor: w.actor, before, after, beforeFieldSetAt });
+  const mine = (id: string) => and(eq(table.id, id), eq(table.studentId, w.studentId));
 
   if (w.op === "create") {
-    const values = Object.fromEntries(Object.entries(w.proposed).filter(([k, v]) => owned.includes(k) && v !== undefined));
+    // Ownership limits edits, not creation: an AI create names its Course too. The source records who created it.
+    const values = Object.fromEntries(Object.entries(w.proposed).filter(([k, v]) => fields.includes(k as never) && v !== undefined));
     const fieldSetAt = Object.fromEntries(Object.keys(values).map((k) => [k, w.setAt]));
-    const [row] = (await tx.insert(table).values({ ...values, studentId: w.studentId, fieldSetAt } as never).returning()) as Row[];
+    const source = w.actor === "ai" ? "ai" : "manual";
+    const [row] = (await tx.insert(table).values({ ...values, studentId: w.studentId, source, fieldSetAt } as never).returning()) as Row[];
     await history(row!, "create", null, snapshot(w.entityType, row!), null);
     return { row: row!, noChange: false };
   }
 
-  const [current] = (await tx
-    .select()
-    .from(table)
-    .where(and(eq(table.id, w.entityId), eq(table.studentId, w.studentId), isNull(table.deletedAt)))
-    .for("update")) as Row[];
+  const [current] = (await tx.select().from(table).where(and(mine(w.entityId), isNull(table.deletedAt))).for("update")) as Row[];
   if (!current) throw notFound("Item");
   if (w.expectedVersion !== undefined && w.expectedVersion !== current.version)
     throw new AppError("CONFLICT", "This item just changed. It has been reloaded with the latest values.", { current: await w.toDto(current) });
 
   const before = snapshot(w.entityType, current);
   if (w.op === "delete") {
+    // A soft delete. History records deletedAt itself, so Undo (#12) can write the before value back.
+    const deletedAt = new Date();
     const [row] = (await tx
       .update(table)
-      .set({ deletedAt: new Date(), version: sql`${table.version} + 1` } as never)
-      .where(eq(table.id, current.id))
+      .set({ deletedAt, version: sql`${table.version} + 1` } as never)
+      .where(mine(current.id))
       .returning()) as Row[];
-    await history(row!, "delete", before, null, current.fieldSetAt);
+    await history(row!, "delete", { ...before, deletedAt: null }, { deletedAt: deletedAt.toISOString() }, current.fieldSetAt);
     return { row: row!, noChange: false };
   }
 
-  const plan = planFieldUpdate(before, current.fieldSetAt, w.proposed, w.setAt, owned);
+  const plan = planFieldUpdate(before, current.fieldSetAt, w.proposed ?? {}, w.setAt, owned, w.actor);
   if (plan.noChange) return { row: current, noChange: true };
   const [row] = (await tx
     .update(table)
     .set({ ...plan.fields, fieldSetAt: plan.newFieldSetAt, version: sql`${table.version} + 1` } as never)
-    .where(eq(table.id, current.id))
+    .where(mine(current.id))
     .returning()) as Row[];
   await history(row!, "update", Object.fromEntries(Object.keys(plan.fields).map((k) => [k, before[k]])), plan.fields, current.fieldSetAt);
   return { row: row!, noChange: false };

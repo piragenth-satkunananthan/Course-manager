@@ -3,12 +3,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 import * as assignmentStatus from "@/app/api/v1/assignments/[id]/status/route";
 import * as assignment from "@/app/api/v1/assignments/[id]/route";
 import * as assignments from "@/app/api/v1/assignments/route";
+import * as courseArchive from "@/app/api/v1/courses/[id]/archive/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as dashboard from "@/app/api/v1/dashboard/route";
 import * as exam from "@/app/api/v1/exams/[id]/route";
 import * as exams from "@/app/api/v1/exams/route";
 import * as semesters from "@/app/api/v1/semesters/route";
-import { pool } from "@/server/db/client";
+import { writeEntity } from "@/server/data/write-entity";
+import { db, pool } from "@/server/db/client";
 import { addDays, todayIn } from "@/server/domain/time";
 import { client, resetData, seedStudent } from "./api";
 
@@ -83,9 +85,17 @@ describe("Assignments", () => {
     const res = await a(assignment.DELETE, "DELETE", `/assignments/${item.id}`, { params: { id: item.id }, query: { expectedVersion: "1" } });
     expect(res.status).toBe(204);
     expect((await a(assignments.GET, "GET", "/assignments")).json.map((x: { id: string }) => x.id)).not.toContain(item.id);
-    expect((await history(item.id)).at(-1)).toMatchObject({ op: "delete", version: 2 });
+    expect((await history(item.id)).at(-1)).toMatchObject({ op: "delete", version: 2, before: { deletedAt: null }, after: { deletedAt: expect.stringMatching(/Z$/) } });
     const again = await a(assignment.PATCH, "PATCH", `/assignments/${item.id}`, { params: { id: item.id }, body: { expectedVersion: 2, title: "x" } });
     expect(again.status).toBe(404);
+  });
+
+  it("filters the list by due date", async () => {
+    const early = await newAssignment({ title: "Early", dueDate: day(40) });
+    const late = await newAssignment({ title: "Late", dueDate: day(45) });
+    const ids = (await a(assignments.GET, "GET", "/assignments", { query: { from: day(39), to: day(41) } })).json.map((x: { id: string }) => x.id);
+    expect(ids).toContain(early.id);
+    expect(ids).not.toContain(late.id);
   });
 
   it("validates times and names the field", async () => {
@@ -105,6 +115,14 @@ describe("Exams", () => {
   it("refuses a start time without a date", async () => {
     const res = await a(exams.POST, "POST", "/exams", { body: { courseId, title: "Quiz", startTime: "09:00" } });
     expect(res.json.error.fieldErrors.startTime).toBeTruthy();
+  });
+
+  it("refuses an edit that would leave a time without a date, and changes nothing", async () => {
+    const e = (await a(exams.POST, "POST", "/exams", { body: { courseId, title: "Lab test", date: day(6), startTime: "10:00" } })).json;
+    const res = await a(exam.PATCH, "PATCH", `/exams/${e.id}`, { params: { id: e.id }, body: { expectedVersion: 1, date: "" } });
+    expect(res).toMatchObject({ status: 400, json: { error: { fieldErrors: { startTime: expect.any(String) } } } });
+    const after = (await a(exams.GET, "GET", "/exams", { query: { courseId } })).json.find((x: { id: string }) => x.id === e.id);
+    expect(after).toMatchObject({ date: day(6), startTime: "10:00", version: 1 });
   });
 
   it("deletes with the current version", async () => {
@@ -155,5 +173,34 @@ describe("the dashboard", () => {
     expect(d.upcoming.map((x: { type: string; item: { id: string } }) => [x.type, x.item.id])).toEqual([["assignment", soon.id], ["exam", examSoon.id]]);
     expect(d.tbaExams.map((x: { id: string }) => x.id)).toEqual([tba.id]);
     expect(d).toMatchObject({ todaySessions: [], highlightedChanges: [], recentAutoChanges: [], banners: [] });
+  });
+
+  it("lists an Exam with a date but no time on its day, and drops archived Courses", async () => {
+    const untimed = (await a(exams.POST, "POST", "/exams", { body: { courseId, title: "Viva", date: day(0) } })).json;
+    expect((await a(dashboard.GET, "GET", "/dashboard")).json.upcoming.map((x: { item: { id: string } }) => x.item.id)).toContain(untimed.id);
+    await a(courseArchive.POST, "POST", `/courses/${courseId}/archive`, { params: { id: courseId } });
+    expect((await a(dashboard.GET, "GET", "/dashboard")).json).toMatchObject({ overdue: [], upcoming: [], tbaExams: [] });
+  });
+});
+
+describe("the shared write path, as the AI will use it (#12)", () => {
+  it("creates an item marked as from the AI, and keeps the AI off fields it doesn't own", async () => {
+    await resetData();
+    const me = await seedStudent("ai@example.com");
+    a = client(me.cookie);
+    const semesterId = (await a(semesters.POST, "POST", "/semesters", { body: { name: "S", startDate: day(-60), endDate: day(60) } })).json.id;
+    const c1 = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "C1", name: "One", colour: "blue" } })).json.id;
+    const c2 = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "C2", name: "Two", colour: "pink" } })).json.id;
+    const sentAt = new Date().toISOString();
+
+    const { row } = await db.transaction((tx) =>
+      writeEntity(tx, { studentId: me.id, entityType: "assignment", op: "create", actor: "ai", setAt: sentAt, proposed: { courseId: c1, title: "Lab 5", dueDate: day(4) } }),
+    );
+    expect(row).toMatchObject({ courseId: c1, source: "ai" });
+
+    const moved = await db.transaction((tx) =>
+      writeEntity(tx, { studentId: me.id, entityType: "assignment", op: "update", entityId: row.id, actor: "ai", setAt: new Date().toISOString(), proposed: { courseId: c2 }, toDto: async () => null }),
+    );
+    expect(moved).toMatchObject({ noChange: true, row: { courseId: c1 } });
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 // One Deadline in a list (design-system §6.1), its detail sheet (§7.3), and the one-tap Submit checkbox.
-import { FileText, GraduationCap } from "lucide-react";
+import { FileText, GraduationCap, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { RadioGroup as RadioPrimitive } from "radix-ui";
@@ -14,6 +14,14 @@ import { apiFetch, toastApiError } from "@/lib/api-fetch";
 import { COLOUR_BG } from "@/lib/course-colours";
 import { dueLine, formatDate } from "@/lib/format";
 import { Assignment, ASSIGNMENT_STATUSES } from "@/shared/schemas/assignment";
+
+/** The one place a status is changed from the UI: the Submit checkbox and the status selector. */
+async function putStatus(id: string, title: string, status: Assignment["status"]) {
+  const res = await apiFetch(`/assignments/${id}/status`, { method: "PUT", body: { status }, schema: Assignment });
+  if (!res.ok) return (toastApiError(res.error), false);
+  toast.success(status === "submitted" ? `Marked ${title} submitted` : `${title} is ${STATUS_LABEL[status].toLowerCase()}`);
+  return true;
+}
 import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Exam } from "@/shared/schemas/exam";
 import { AssignmentForm, ExamForm } from "./assessment-forms";
@@ -43,11 +51,12 @@ export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, co
   const badge = badgeFor(d, overdue, today, tomorrow);
   const submitted = d.type === "assignment" && d.item.status === "submitted";
 
+  const [pending, setPending] = useState(false);
   async function toggleSubmitted(checked: boolean) {
-    const res = await apiFetch(`/assignments/${d.item.id}/status`, { method: "PUT", body: { status: checked ? "submitted" : "todo" }, schema: Assignment });
-    if (!res.ok) return toastApiError(res.error);
-    toast.success(checked ? `Marked ${d.item.title} submitted` : `${d.item.title} is to do again`);
-    router.refresh();
+    setPending(true);
+    // shortcut: unticking returns to To do; the detail sheet sets In progress. Upgrade if lists of submitted work (M1b) need the previous status.
+    if (await putStatus(d.item.id, d.item.title, checked ? "submitted" : "todo")) router.refresh();
+    setPending(false);
   }
 
   return (
@@ -64,7 +73,7 @@ export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, co
       </button>
       {d.type === "assignment" && (
         <label className="flex w-11 shrink-0 items-center justify-center" title="Mark submitted">
-          <Checkbox checked={submitted} onCheckedChange={(v) => toggleSubmitted(v === true)} aria-label={`Mark ${d.item.title} submitted`} />
+          <Checkbox checked={submitted} disabled={pending} onCheckedChange={(v) => toggleSubmitted(v === true)} aria-label={`Mark ${d.item.title} submitted`} />
         </label>
       )}
       <DeadlineDetail deadline={d} open={open} onOpenChange={setOpen} today={today} courses={courses} />
@@ -85,19 +94,21 @@ function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { d
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pending, setPending] = useState(false);
   const kind = d.type === "assignment" ? "Assignment" : "Exam";
   const path = d.type === "assignment" ? "assignments" : "exams";
   const close = () => (onOpenChange(false), setEditing(false));
 
   async function setStatus(status: Assignment["status"]) {
-    const res = await apiFetch(`/assignments/${d.item.id}/status`, { method: "PUT", body: { status }, schema: Assignment });
-    if (!res.ok) return toastApiError(res.error);
-    toast.success(`Marked ${STATUS_LABEL[status].toLowerCase()}`);
-    router.refresh();
+    setPending(true);
+    if (await putStatus(d.item.id, d.item.title, status)) router.refresh();
+    setPending(false);
   }
 
   async function remove() {
+    setPending(true);
     const res = await apiFetch(`/${path}/${d.item.id}?expectedVersion=${d.item.version}`, { method: "DELETE" });
+    setPending(false);
     setDeleting(false);
     if (!res.ok) {
       toastApiError(res.error);
@@ -144,13 +155,14 @@ function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { d
                   aria-labelledby={`status-${d.item.id}`}
                   value={d.item.status}
                   onValueChange={(v) => setStatus(v as Assignment["status"])}
+                  disabled={pending}
                   className="mt-1 grid grid-cols-3 rounded-md border border-input p-1"
                 >
                   {ASSIGNMENT_STATUSES.map((s) => (
                     <RadioPrimitive.Item
                       key={s}
                       value={s}
-                      className="min-h-11 rounded-sm px-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:bg-primary-subtle data-[state=checked]:text-primary md:min-h-10"
+                      className="min-h-11 rounded-sm px-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 data-[state=checked]:bg-primary-subtle data-[state=checked]:text-primary"
                     >
                       {STATUS_LABEL[s]}
                     </RadioPrimitive.Item>
@@ -173,7 +185,10 @@ function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { d
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={remove}>Delete {kind}</Button>
+            <Button variant="destructive" onClick={remove} disabled={pending}>
+              {pending && <LoaderCircle size={20} className="animate-spin" aria-hidden="true" />}
+              Delete {kind}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

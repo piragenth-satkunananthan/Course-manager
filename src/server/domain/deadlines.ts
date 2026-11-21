@@ -19,10 +19,10 @@ const localDate = (item: DeadlineInput) => (item.type === "assignment" ? item.du
 const sortKey = (item: DeadlineInput) => +(effectiveDueInstant(item) ?? localToInstant(localDate(item)!, "23:59"));
 const byDue = <T extends DeadlineInput>(a: T, b: T) => sortKey(a) - sortKey(b);
 
-/** The dashboard's sections: Overdue, the next 14 days (local dates), and Exams with no date. Submitted work drops out. */
+/** The dashboard's sections: Overdue, the next 14 days (today and 13 more, local dates), and Exams with no date. Submitted work drops out. */
 export function classifyForDashboard<T extends DeadlineInput>(items: T[], now: Date) {
   const today = todayIn(now);
-  const last = addDays(today, 14);
+  const last = addDays(today, 13);
   const open = items.filter((i) => i.type === "exam" || i.status !== "submitted");
   return {
     overdue: open.filter((i) => isOverdue(i, now)).sort(byDue),

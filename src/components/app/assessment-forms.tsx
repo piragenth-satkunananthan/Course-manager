@@ -1,6 +1,7 @@
 "use client";
 // Add or edit an Assignment or an Exam (design-system §7.3). Edits send expectedVersion; on a conflict the form
 // reloads the latest values with a toast (U7), and saving again uses the new version.
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import type * as z from "zod";
@@ -20,6 +21,7 @@ const examValues = (e?: Exam): z.input<typeof ExamCreate> => ({
 
 /** Shared save flow: create, or update with the version we loaded; reload on CONFLICT. */
 function useSave<Dto extends { id: string; version: number }>(path: string, schema: z.ZodType<Dto>, existing: Dto | undefined, reload: (current: Dto) => void) {
+  const router = useRouter();
   const [version, setVersion] = useState(existing?.version);
   return async (body: object): Promise<{ ok: true; data: Dto } | { ok: false; error: ApiError | null }> => {
     const res = existing
@@ -31,6 +33,7 @@ function useSave<Dto extends { id: string; version: number }>(path: string, sche
       if (current.success) {
         setVersion(current.data.version);
         reload(current.data);
+        router.refresh(); // the list behind the form shows the latest values too
         toast.warning(res.error.message);
         return { ok: false, error: null };
       }

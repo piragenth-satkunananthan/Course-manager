@@ -20,8 +20,7 @@ export type AssignmentCreate = z.output<typeof AssignmentCreate>;
 export const AssignmentUpdate = z.strictObject({ expectedVersion: Version, ...z.object(fields).partial().shape, isGroupWork: z.boolean().optional() });
 export type AssignmentUpdate = z.output<typeof AssignmentUpdate>;
 export const AssignmentStatusPut = z.strictObject({ status: AssignmentStatus });
-export const AssignmentListQuery = z.strictObject({ courseId: Id.optional(), status: AssignmentStatus.optional() });
-export const VersionQuery = z.strictObject({ expectedVersion: Version });
+export const AssignmentListQuery = z.strictObject({ courseId: Id.optional(), status: AssignmentStatus.optional(), from: IsoDate.optional(), to: IsoDate.optional() });
 
 export const Assignment = z.object({
   id: Id,

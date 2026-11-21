@@ -44,3 +44,6 @@ export const optionalTime = z
   .union([LocalTime, z.literal("")])
   .nullish()
   .transform((v) => v || null);
+
+/** The query of a DELETE on an item the AI can change. */
+export const VersionQuery = z.strictObject({ expectedVersion: Version });

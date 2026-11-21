@@ -37,8 +37,8 @@ describe("classifyForDashboard", () => {
       a("later-today", "2026-11-20", "18:00"),
       a("overdue-old", "2026-11-10"),
       a("overdue-new", "2026-11-19", "16:30"),
-      a("day-14", "2026-12-04"),
-      a("day-15", "2026-12-05"),
+      a("day-14", "2026-12-03"), // the 14th day, counting today
+      a("day-15", "2026-12-04"),
       a("submitted", "2026-11-22", null, "submitted"),
       e("exam-untimed-today", "2026-11-20"),
       e("exam-past", "2026-11-18", "09:00"),

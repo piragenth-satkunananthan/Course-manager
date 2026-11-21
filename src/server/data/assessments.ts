@@ -1,21 +1,21 @@
 // Assignments and Exams, scoped to the Student (design files 42, 43). Writes go through writeEntity.
-import { and, asc, eq, isNull, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, type SQL } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { assignment, course, entityVersion, exam } from "@/server/db/schema";
+import { assignment, course, exam } from "@/server/db/schema";
 import { effectiveDueInstant } from "@/server/domain/deadlines";
 import { invalid, notFound } from "@/server/http/errors";
 import type { Assignment, AssignmentCreate, AssignmentUpdate } from "@/shared/schemas/assignment";
 import type { Exam, ExamCreate, ExamUpdate } from "@/shared/schemas/exam";
 import { iso } from "./util";
-import { snapshot, writeEntity } from "./write-entity";
+import { recordHistory, snapshot, writeEntity } from "./write-entity";
 
-type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
 
 // ---- reading -------------------------------------------------------------------------------
 
-export async function loadAssignments(x: Executor, studentId: string, where?: SQL): Promise<Assignment[]> {
-  const rows = await x
+export async function loadAssignments(dbOrTx: DbOrTx, studentId: string, where?: SQL): Promise<Assignment[]> {
+  const rows = await dbOrTx
     .select({ a: assignment, courseCode: course.code, courseColour: course.colour })
     .from(assignment)
     .innerJoin(course, eq(course.id, assignment.courseId))
@@ -32,8 +32,8 @@ export async function loadAssignments(x: Executor, studentId: string, where?: SQ
   });
 }
 
-export async function loadExams(x: Executor, studentId: string, where?: SQL): Promise<Exam[]> {
-  const rows = await x
+export async function loadExams(dbOrTx: DbOrTx, studentId: string, where?: SQL): Promise<Exam[]> {
+  const rows = await dbOrTx
     .select({ e: exam, courseCode: course.code, courseColour: course.colour })
     .from(exam)
     .innerJoin(course, eq(course.id, exam.courseId))
@@ -49,8 +49,8 @@ export async function loadExams(x: Executor, studentId: string, where?: SQL): Pr
   });
 }
 
-const oneAssignment = async (x: Executor, studentId: string, id: string) => (await loadAssignments(x, studentId, eq(assignment.id, id)))[0]!;
-const oneExam = async (x: Executor, studentId: string, id: string) => (await loadExams(x, studentId, eq(exam.id, id)))[0]!;
+const oneAssignment = async (dbOrTx: DbOrTx, studentId: string, id: string) => (await loadAssignments(dbOrTx, studentId, eq(assignment.id, id)))[0]!;
+const oneExam = async (dbOrTx: DbOrTx, studentId: string, id: string) => (await loadExams(dbOrTx, studentId, eq(exam.id, id)))[0]!;
 
 async function assertCourse(studentId: string, courseId: string | undefined) {
   if (!courseId) return;
@@ -60,17 +60,27 @@ async function assertCourse(studentId: string, courseId: string | undefined) {
 
 // ---- Assignments ---------------------------------------------------------------------------
 
-export async function listAssignments(studentId: string, q: { courseId?: string; status?: Assignment["status"] }) {
+export async function listAssignments(studentId: string, q: { courseId?: string; status?: Assignment["status"]; from?: string; to?: string }) {
   await assertCourse(studentId, q.courseId);
-  return loadAssignments(db, studentId, and(q.courseId ? eq(assignment.courseId, q.courseId) : undefined, q.status ? eq(assignment.status, q.status) : undefined));
+  return loadAssignments(
+    db,
+    studentId,
+    and(
+      q.courseId ? eq(assignment.courseId, q.courseId) : undefined,
+      q.status ? eq(assignment.status, q.status) : undefined,
+      q.from ? gte(assignment.dueDate, q.from) : undefined,
+      q.to ? lte(assignment.dueDate, q.to) : undefined,
+    ),
+  );
 }
 
-const studentWrite = { actor: "student" as const, setAt: () => new Date().toISOString() };
+/** Student writes are stamped with the edit time (§3). */
+const student = () => ({ actor: "student" as const, setAt: new Date().toISOString() });
 
 export async function createAssignment(studentId: string, input: AssignmentCreate) {
   await assertCourse(studentId, input.courseId);
   return db.transaction(async (tx) => {
-    const { row } = await writeEntity(tx, { studentId, entityType: "assignment", op: "create", proposed: input, actor: "student", setAt: studentWrite.setAt(), toDto: async () => null });
+    const { row } = await writeEntity(tx, { studentId, entityType: "assignment", op: "create", proposed: input, ...student() });
     return oneAssignment(tx, studentId, row.id);
   });
 }
@@ -79,7 +89,7 @@ export async function updateAssignment(studentId: string, id: string, { expected
   await assertCourse(studentId, proposed.courseId);
   return db.transaction(async (tx) => {
     const { row } = await writeEntity(tx, {
-      studentId, entityType: "assignment", op: "update", entityId: id, proposed, expectedVersion, actor: "student", setAt: studentWrite.setAt(),
+      studentId, entityType: "assignment", op: "update", entityId: id, proposed, expectedVersion, ...student(),
       toDto: (r) => oneAssignment(tx, studentId, r.id),
     });
     return oneAssignment(tx, studentId, row.id);
@@ -89,7 +99,7 @@ export async function updateAssignment(studentId: string, id: string, { expected
 export async function deleteAssignment(studentId: string, id: string, expectedVersion: number) {
   // shortcut: deleting an Assignment the AI created also adds a suppression once that table exists (#12).
   await db.transaction((tx) =>
-    writeEntity(tx, { studentId, entityType: "assignment", op: "delete", entityId: id, expectedVersion, actor: "student", setAt: studentWrite.setAt(), toDto: (r) => oneAssignment(tx, studentId, r.id) }),
+    writeEntity(tx, { studentId, entityType: "assignment", op: "delete", entityId: id, expectedVersion, ...student(), toDto: (r) => oneAssignment(tx, studentId, r.id) }),
   );
   return null;
 }
@@ -105,8 +115,8 @@ export async function setAssignmentStatus(studentId: string, id: string, status:
     if (!row) throw notFound("Assignment");
     if (row.status !== status) {
       const submittedAt = status === "submitted" ? new Date() : null;
-      await tx.update(assignment).set({ status, submittedAt }).where(eq(assignment.id, id));
-      await tx.insert(entityVersion).values({
+      await tx.update(assignment).set({ status, submittedAt }).where(and(eq(assignment.id, id), eq(assignment.studentId, studentId)));
+      await recordHistory(tx, {
         studentId, entityType: "assignment", entityId: id, version: row.version, op: "status", actor: "student",
         before: { status: row.status, submittedAt: iso(row.submittedAt) }, after: { status, submittedAt: iso(submittedAt) },
       });
@@ -125,7 +135,7 @@ export async function listExams(studentId: string, q: { courseId?: string }) {
 export async function createExam(studentId: string, input: ExamCreate) {
   await assertCourse(studentId, input.courseId);
   return db.transaction(async (tx) => {
-    const { row } = await writeEntity(tx, { studentId, entityType: "exam", op: "create", proposed: input, actor: "student", setAt: studentWrite.setAt(), toDto: async () => null });
+    const { row } = await writeEntity(tx, { studentId, entityType: "exam", op: "create", proposed: input, ...student() });
     return oneExam(tx, studentId, row.id);
   });
 }
@@ -134,7 +144,7 @@ export async function updateExam(studentId: string, id: string, { expectedVersio
   await assertCourse(studentId, proposed.courseId);
   return db.transaction(async (tx) => {
     const { row } = await writeEntity(tx, {
-      studentId, entityType: "exam", op: "update", entityId: id, proposed, expectedVersion, actor: "student", setAt: studentWrite.setAt(),
+      studentId, entityType: "exam", op: "update", entityId: id, proposed, expectedVersion, ...student(),
       toDto: (r) => oneExam(tx, studentId, r.id),
     });
     // A partial edit can leave a time without a date; the schema only sees the fields sent. Throwing rolls back.
@@ -146,7 +156,7 @@ export async function updateExam(studentId: string, id: string, { expectedVersio
 
 export async function deleteExam(studentId: string, id: string, expectedVersion: number) {
   await db.transaction((tx) =>
-    writeEntity(tx, { studentId, entityType: "exam", op: "delete", entityId: id, expectedVersion, actor: "student", setAt: studentWrite.setAt(), toDto: (r) => oneExam(tx, studentId, r.id) }),
+    writeEntity(tx, { studentId, entityType: "exam", op: "delete", entityId: id, expectedVersion, ...student(), toDto: (r) => oneExam(tx, studentId, r.id) }),
   );
   return null;
 }
