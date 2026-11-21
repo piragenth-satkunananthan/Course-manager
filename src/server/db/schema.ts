@@ -259,3 +259,43 @@ export const sessionChange = pgTable(
     index("session_change_course_idx").on(t.courseId),
   ],
 );
+
+// Email and health (§3, #9).
+export const emailKind = pgEnum("email_kind", ["digest", "final_reminder", "alert", "password_reset", "account_deleted"]);
+export const emailStatus = pgEnum("email_status", ["sending", "sent", "failed", "skipped"]);
+
+/** Written before every provider call; its id is the Idempotency-Key, so a resend never duplicates. */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: id(),
+    studentId: studentId(),
+    kind: emailKind("kind").notNull(),
+    digestDate: date("digest_date", { mode: "string" }),
+    entityType: entityType("entity_type"),
+    entityId: uuid("entity_id"),
+    dueAt: timestamp("due_at", { withTimezone: true }), // the due instant a Final Reminder is for
+    subject: text("subject").notNull(),
+    status: emailStatus("status").notNull(),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    attempts: integer("attempts").default(0).notNull(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("email_log_one_digest_per_day").on(t.studentId, t.digestDate).where(sql`${t.kind} = 'digest'`),
+    uniqueIndex("email_log_one_final_reminder").on(t.entityType, t.entityId, t.dueAt).where(sql`${t.kind} = 'final_reminder'`),
+  ],
+);
+
+export const healthComponent = pgEnum("health_component", ["wa_socket", "ai", "scheduler", "email", "backup"]);
+
+/** Read by the banners and heartbeats (#10). One row per component. */
+export const healthSignal = pgTable("health_signal", {
+  component: healthComponent("component").primaryKey(),
+  lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  detail: text("detail"),
+});

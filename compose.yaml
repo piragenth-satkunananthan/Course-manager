@@ -56,6 +56,9 @@ services:
     environment:
       <<: *auth-env # create-student runs in this service and loads the auth config
       DATABASE_URL: *db-url
+      # Optional until set: without a key the scheduler waits and re-checks every 5 minutes.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Course-manager <onboarding@resend.dev>}
     # shortcut: no healthcheck until #9 gives the worker a health_signal to report.
     depends_on:
       postgres: { condition: service_healthy }

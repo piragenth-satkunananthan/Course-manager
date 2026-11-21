@@ -20,7 +20,9 @@ npm run create-student                               # prompts for email and pas
 npm run dev                                          # http://localhost:3000
 ```
 
-`npm run worker` starts the worker (#5: it only takes the single-instance lock).
+`npm run worker` starts the worker: it takes the single-instance lock and runs the scheduler every minute (Final Reminders, and the Daily Digest between 07:00 and 09:00 Sri Lanka time). Emails need `RESEND_API_KEY` and `EMAIL_FROM` in `.env`; with Resend's test sender (`onboarding@resend.dev`) they can only go to the address the Resend account is registered with.
+
+To send real emails once, at a chosen time (for example inside the digest window): `npx tsx scripts/run-scheduler.ts --at 2026-11-22T07:30:00+05:30`.
 
 ## Tests
 

@@ -1,10 +1,11 @@
 // Assignments and Exams, scoped to the Student (design files 42, 43). Writes go through writeEntity.
-import { and, asc, eq, gte, isNull, lte, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { assignment, course, exam } from "@/server/db/schema";
+import { assignment, course, exam, semester } from "@/server/db/schema";
 import { effectiveDueInstant } from "@/server/domain/deadlines";
 import { invalid, notFound } from "@/server/http/errors";
 import type { Assignment, AssignmentCreate, AssignmentUpdate } from "@/shared/schemas/assignment";
+import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Exam, ExamCreate, ExamUpdate } from "@/shared/schemas/exam";
 import { iso } from "./util";
 import { recordHistory, snapshot, writeEntity } from "./write-entity";
@@ -171,4 +172,25 @@ export async function listDeadlinesOn(studentId: string, date: string) {
     ...assignments.map((item) => ({ type: "assignment" as const, item })),
     ...exams.map((item) => ({ type: "exam" as const, item })),
   ].sort((a, b) => (a.item.dueAt ?? "~").localeCompare(b.item.dueAt ?? "~"));
+}
+
+/**
+ * Open Deadlines in Courses and Semesters that aren't archived: Assignments not submitted, and Exams (dated, or TBA
+ * when `includeTba`). Each carries its due instant and local date, for the dashboard, reminders and the digest.
+ */
+export async function loadOpenDeadlines(studentId: string, { examsFrom, includeTba }: { examsFrom?: string; includeTba: boolean }) {
+  const activeCourseIds = db
+    .select({ id: course.id })
+    .from(course)
+    .innerJoin(semester, eq(semester.id, course.semesterId))
+    .where(and(eq(course.studentId, studentId), isNull(course.archivedAt), isNull(semester.archivedAt)));
+  const examDate = examsFrom ? gte(exam.date, examsFrom) : undefined;
+  const [assignments, exams] = await Promise.all([
+    loadAssignments(db, studentId, and(inArray(assignment.courseId, activeCourseIds), ne(assignment.status, "submitted"))),
+    loadExams(db, studentId, and(inArray(exam.courseId, activeCourseIds), includeTba ? or(isNull(exam.date), examDate) : and(examDate, sql`${exam.date} is not null`))),
+  ]);
+  return [
+    ...assignments.map((a) => ({ id: a.id, localDate: a.dueDate as string | null, dueAt: new Date(a.dueAt) as Date | null, deadline: { type: "assignment" as const, item: a } as Deadline })),
+    ...exams.map((e) => ({ id: e.id, localDate: e.date, dueAt: e.dueAt ? new Date(e.dueAt) : null, deadline: { type: "exam" as const, item: e } as Deadline })),
+  ];
 }
