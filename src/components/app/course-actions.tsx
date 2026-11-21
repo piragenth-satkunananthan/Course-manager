@@ -2,7 +2,7 @@
 // The Course detail ⋯ menu: Edit, Archive, and Delete, which needs the code typed (design-system §5, §7.2).
 import { EllipsisVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { apiFetch } from "@/lib/api-fetch";
-import type { Course } from "@/shared/schemas/course";
+import { apiFetch, toastApiError } from "@/lib/api-fetch";
+import { Course } from "@/shared/schemas/course";
 import { CourseForm } from "./course-form";
 import { ResponsiveDialog } from "./responsive-dialog";
 
@@ -22,11 +22,13 @@ export function CourseActions({ course }: { course: Course }) {
   const [typed, setTyped] = useState("");
   const [deleteError, setDeleteError] = useState<string>();
   const close = () => (setDialog(null), setTyped(""), setDeleteError(undefined));
+  const summary = useRef<HTMLParagraphElement>(null);
+  useEffect(() => summary.current?.focus(), [deleteError]);
 
   async function archive() {
-    const res = await apiFetch(`/courses/${course.id}/archive`, { method: "POST" });
+    const res = await apiFetch(`/courses/${course.id}/archive`, { method: "POST", schema: Course });
     close();
-    if (!res.ok) return void toast.error(res.error.message);
+    if (!res.ok) return toastApiError(res.error);
     toast.success(`${course.code} archived`);
     router.refresh();
   }
@@ -81,6 +83,11 @@ export function CourseActions({ course }: { course: Course }) {
                 This deletes its Class Sessions, Assignments, Exams and Nicknames, and unlinks its WhatsApp group. It can&apos;t be undone. To keep its history, archive it instead.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {deleteError && (
+              <p ref={summary} tabIndex={-1} role="alert" className="rounded-sm bg-destructive-subtle p-3 text-sm font-medium text-destructive">
+                Couldn&apos;t delete: {deleteError}
+              </p>
+            )}
             <Field data-invalid={!!deleteError}>
               <FieldLabel htmlFor="confirmCode">Type {course.code} to confirm</FieldLabel>
               <Input

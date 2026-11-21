@@ -1,5 +1,6 @@
 // Every table lives here (design file 17). #5 adds Better Auth's tables; later tickets add the domain tables.
 import { sql } from "drizzle-orm";
+import { COURSE_COLOURS } from "@/shared/schemas/course";
 import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -100,7 +101,7 @@ export const semester = pgTable(
   ],
 );
 
-export const courseColour = pgEnum("course_colour", ["blue", "violet", "pink", "orange", "cyan", "olive", "slate"]);
+export const courseColour = pgEnum("course_colour", COURSE_COLOURS);
 
 export const course = pgTable(
   "course",

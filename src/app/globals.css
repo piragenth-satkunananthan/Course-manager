@@ -20,6 +20,7 @@
   --input: #8291a6;
   --ring: #0f766e;
   --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
   --destructive-subtle: #fef2f2;
   --warning: #b45309;
   --warning-subtle: #fffbeb;
@@ -74,6 +75,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-subtle: var(--destructive-subtle);
   --color-warning: var(--warning);
   --color-warning-subtle: var(--warning-subtle);

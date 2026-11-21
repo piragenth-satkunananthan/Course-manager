@@ -1,37 +1,29 @@
 "use client";
 // Settings → Semesters: list, create, set current, archive (design-system §7.6).
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Archive, CircleCheck, EllipsisVertical, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import * as z from "zod";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { apiFetch } from "@/lib/api-fetch";
+import { apiFetch, toastApiError } from "@/lib/api-fetch";
 import { formatDate } from "@/lib/format";
-import { type Semester, SemesterCreate } from "@/shared/schemas/semester";
-import { applyServerError, ErrorSummary, TextField } from "./form";
+import { Semester, SemesterCreate } from "@/shared/schemas/semester";
+import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } from "./form";
 import { ResponsiveDialog } from "./responsive-dialog";
 
 const range = (s: Semester) => `${formatDate(s.startDate, { weekday: false, year: true })} – ${formatDate(s.endDate, { weekday: false, year: true })}`;
 
 function SemesterForm({ onDone }: { onDone: () => void }) {
-  const form = useForm<z.input<typeof SemesterCreate>, unknown, z.output<typeof SemesterCreate>>({
-    shouldFocusError: false, // the error summary takes focus instead (design-system §3)
-    resolver: zodResolver(SemesterCreate),
-    mode: "onTouched",
-    defaultValues: { name: "", startDate: "", endDate: "" },
-  });
+  const form = useAppForm(SemesterCreate, { name: "", startDate: "", endDate: "" });
   const { isSubmitting, errors, submitCount } = form.formState;
 
-  async function onSubmit(values: z.output<typeof SemesterCreate>) {
-    const res = await apiFetch("/semesters", { method: "POST", body: values });
+  async function onSubmit(values: SemesterCreate) {
+    const res = await apiFetch("/semesters", { method: "POST", body: values, schema: Semester });
     if (!res.ok) return applyServerError(form, res.error);
     toast.success("Saved");
     onDone();
@@ -44,9 +36,9 @@ function SemesterForm({ onDone }: { onDone: () => void }) {
       <TextField control={form.control} name="startDate" label="Start date" type="date" required />
       <TextField control={form.control} name="endDate" label="End date" type="date" required help="Weekly classes repeat until this date" />
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting} className="max-md:w-full">
-          {isSubmitting ? "Saving…" : "Add Semester"}
-        </Button>
+        <SaveButton pending={isSubmitting} className="max-md:w-full">
+          Add Semester
+        </SaveButton>
       </div>
     </form>
   );
@@ -58,8 +50,8 @@ export function SemesterManager({ semesters }: { semesters: Semester[] }) {
   const [archiving, setArchiving] = useState<Semester | null>(null);
 
   async function act(path: string, done: string) {
-    const res = await apiFetch(path, { method: "POST" });
-    if (!res.ok) return void toast.error(res.error.message);
+    const res = await apiFetch(path, { method: "POST", schema: Semester });
+    if (!res.ok) return toastApiError(res.error);
     toast.success(done);
     router.refresh();
   }
@@ -124,6 +116,7 @@ export function SemesterManager({ semesters }: { semesters: Semester[] }) {
             <AlertDialogTitle>Archive {archiving?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               Its Courses leave the dashboard and stay available. Stored WhatsApp message text from this Semester is erased. This can&apos;t be undone.
+              {archiving?.isCurrent && " It's your current Semester: set another one as current afterwards."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -14,10 +14,10 @@ const lecturerName = z
   .nullish()
   .transform((v) => v || null);
 
-export const CourseCreate = z.strictObject({ semesterId: Id, code, name, lecturerName, colour: CourseColour });
-export type CourseCreate = z.input<typeof CourseCreate>;
+export const CourseCreate = z.strictObject({ semesterId: z.uuid({ error: "Choose a Semester" }), code, name, lecturerName, colour: CourseColour });
+export type CourseCreate = z.output<typeof CourseCreate>;
 export const CourseUpdate = z.strictObject({ code, name, lecturerName, colour: CourseColour }).partial();
-export type CourseUpdate = z.input<typeof CourseUpdate>;
+export type CourseUpdate = z.output<typeof CourseUpdate>;
 export const CourseListQuery = z.strictObject({ semesterId: Id.optional() });
 export const CourseDeleteQuery = z.strictObject({ confirmCode: z.string().default("") });
 
@@ -29,7 +29,7 @@ export const NicknameCreate = z.strictObject({
     .max(50, "Use at most 50 characters")
     .transform((n) => n.toLowerCase().replace(/\s+/g, " ")),
 });
-export type NicknameCreate = z.input<typeof NicknameCreate>;
+export type NicknameCreate = z.output<typeof NicknameCreate>;
 
 export const Nickname = z.object({ id: Id, nickname: z.string() });
 export type Nickname = z.infer<typeof Nickname>;

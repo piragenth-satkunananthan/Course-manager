@@ -1,27 +1,20 @@
 "use client";
 // Add and remove a Course's Nicknames (design-system §7.2): how people refer to it in WhatsApp, for the AI.
-import { zodResolver } from "@hookform/resolvers/zod";
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api-fetch";
-import { type Nickname, NicknameCreate } from "@/shared/schemas/course";
-import { applyServerError, ErrorSummary, TextField } from "./form";
+import { apiFetch, toastApiError } from "@/lib/api-fetch";
+import { Nickname, NicknameCreate } from "@/shared/schemas/course";
+import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } from "./form";
 
 export function NicknameEditor({ courseId, code, nicknames }: { courseId: string; code: string; nicknames: Nickname[] }) {
   const router = useRouter();
-  const form = useForm<z.input<typeof NicknameCreate>, unknown, z.output<typeof NicknameCreate>>({
-    shouldFocusError: false, // the error summary takes focus instead (design-system §3)
-    resolver: zodResolver(NicknameCreate),
-    defaultValues: { nickname: "" },
-  });
+  const form = useAppForm(NicknameCreate, { nickname: "" });
   const { isSubmitting, errors, submitCount } = form.formState;
 
-  async function add(values: z.output<typeof NicknameCreate>) {
-    const res = await apiFetch<Nickname>(`/courses/${courseId}/nicknames`, { method: "POST", body: values });
+  async function add(values: NicknameCreate) {
+    const res = await apiFetch(`/courses/${courseId}/nicknames`, { method: "POST", body: values, schema: Nickname });
     if (!res.ok) return applyServerError(form, res.error);
     form.reset();
     toast.success(`Added "${res.data.nickname}"`);
@@ -30,7 +23,7 @@ export function NicknameEditor({ courseId, code, nicknames }: { courseId: string
 
   async function remove(n: Nickname) {
     const res = await apiFetch(`/nicknames/${n.id}`, { method: "DELETE" });
-    if (!res.ok) return void toast.error(res.error.message);
+    if (!res.ok) return toastApiError(res.error);
     toast.success(`Removed "${n.nickname}"`);
     router.refresh();
   }
@@ -57,11 +50,11 @@ export function NicknameEditor({ courseId, code, nicknames }: { courseId: string
         <ErrorSummary errors={errors} submitCount={submitCount} labels={{ nickname: "Nickname" }} />
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <TextField control={form.control} name="nickname" label="Add a nickname" />
+            <TextField control={form.control} name="nickname" label="Add a nickname" required />
           </div>
-          <Button type="submit" variant="outline" disabled={isSubmitting}>
+          <SaveButton pending={isSubmitting} variant="outline">
             Add
-          </Button>
+          </SaveButton>
         </div>
       </form>
     </section>

@@ -1,5 +1,5 @@
 // Semesters, scoped to the Student (design file 38). Every query filters on studentId.
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { semester } from "@/server/db/schema";
 import { AppError, notFound } from "@/server/http/errors";
@@ -19,6 +19,10 @@ const toDto = (r: Row): Semester => ({
 
 const mine = (studentId: string, id: string) => and(eq(semester.studentId, studentId), eq(semester.id, id));
 
+// Serialises changes to which Semester is current, per Student, so two tabs can't race into the one-current index.
+const lockCurrent = (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], studentId: string) =>
+  tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"semester-current:" + studentId}))`);
+
 export async function listSemesters(studentId: string) {
   const rows = await db.select().from(semester).where(eq(semester.studentId, studentId)).orderBy(desc(semester.startDate), desc(semester.createdAt));
   return rows.map(toDto);
@@ -26,6 +30,7 @@ export async function listSemesters(studentId: string) {
 
 export async function createSemester(studentId: string, input: SemesterCreate) {
   return db.transaction(async (tx) => {
+    await lockCurrent(tx, studentId);
     // The first Semester becomes current, so a new account has somewhere to put its Courses.
     const [current] = await tx.select({ id: semester.id }).from(semester).where(and(eq(semester.studentId, studentId), eq(semester.isCurrent, true)));
     const [row] = await tx.insert(semester).values({ studentId, ...input, isCurrent: !current }).returning();
@@ -35,7 +40,8 @@ export async function createSemester(studentId: string, input: SemesterCreate) {
 
 export async function setCurrentSemester(studentId: string, id: string) {
   return db.transaction(async (tx) => {
-    const [row] = await tx.select().from(semester).where(mine(studentId, id)).for("update");
+    await lockCurrent(tx, studentId);
+    const [row] = await tx.select().from(semester).where(mine(studentId, id));
     if (!row) throw notFound("Semester");
     if (row.archivedAt) throw new AppError("VALIDATION", "An archived Semester can't be the current one");
     await tx.update(semester).set({ isCurrent: false }).where(and(eq(semester.studentId, studentId), ne(semester.id, id), eq(semester.isCurrent, true)));
@@ -46,7 +52,11 @@ export async function setCurrentSemester(studentId: string, id: string) {
 
 export async function archiveSemester(studentId: string, id: string) {
   // shortcut: #11 also erases this Semester's stored message text here (D1), and #12 expires its suppressions.
-  const [row] = await db.update(semester).set({ archivedAt: new Date(), isCurrent: false }).where(mine(studentId, id)).returning();
+  const [row] = await db
+    .update(semester)
+    .set({ archivedAt: sql`coalesce(${semester.archivedAt}, now())`, isCurrent: false }) // archiving twice keeps the first time
+    .where(mine(studentId, id))
+    .returning();
   if (!row) throw notFound("Semester");
   return toDto(row);
 }

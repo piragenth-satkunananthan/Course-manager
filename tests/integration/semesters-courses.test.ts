@@ -50,6 +50,21 @@ describe("Semesters", () => {
     expect(again.status).toBe(400);
   });
 
+  it("survives two tabs setting different Semesters current at the same moment", async () => {
+    const [x, y] = [await newSemester("X"), await newSemester("Y")];
+    const results = await Promise.all([x, y, x, y].map((s) => api(setCurrent.POST, "POST", `/semesters/${s.id}/set-current`, { params: { id: s.id } })));
+    expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+    const current = (await api(semesters.GET, "GET", "/semesters")).json.filter((s: { isCurrent: boolean }) => s.isCurrent);
+    expect(current).toHaveLength(1);
+  });
+
+  it("keeps the first archive time when archived twice", async () => {
+    const s = await newSemester("Twice");
+    const first = (await api(semesterArchive.POST, "POST", `/semesters/${s.id}/archive`, { params: { id: s.id } })).json.archivedAt;
+    const second = (await api(semesterArchive.POST, "POST", `/semesters/${s.id}/archive`, { params: { id: s.id } })).json.archivedAt;
+    expect(second).toBe(first);
+  });
+
   it("rejects an end date before the start date, naming the field", async () => {
     const res = await api(semesters.POST, "POST", "/semesters", { body: { ...sem, endDate: "2026-08-01" } });
     expect(res.status).toBe(400);

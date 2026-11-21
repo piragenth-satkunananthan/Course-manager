@@ -1,40 +1,34 @@
 "use client";
 // Add or edit a Course (design-system §7.2): code, name, lecturer, colour swatches, and the Semester when adding.
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Check } from "lucide-react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller } from "react-hook-form";
 import { toast } from "sonner";
-import * as z from "zod";
-import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { RadioGroup as RadioPrimitive } from "radix-ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api-fetch";
 import { COLOUR_BG, COLOUR_LABEL } from "@/lib/course-colours";
-import { type Course, COURSE_COLOURS, CourseCreate } from "@/shared/schemas/course";
+import { Course, COURSE_COLOURS, CourseCreate } from "@/shared/schemas/course";
 import type { Semester } from "@/shared/schemas/semester";
-import { applyServerError, ErrorSummary, TextField } from "./form";
+import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } from "./form";
 
-type Values = z.input<typeof CourseCreate>;
 const LABELS = { semesterId: "Semester", code: "Code", name: "Name", lecturerName: "Lecturer", colour: "Colour" };
 
 type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; onDone: (course: Course) => void };
 
 export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Props) {
-  const form = useForm<Values, unknown, z.output<typeof CourseCreate>>({
-    shouldFocusError: false, // the error summary takes focus instead (design-system §3)
-    resolver: zodResolver(CourseCreate),
-    mode: "onTouched",
-    defaultValues: course
+  const form = useAppForm(
+    CourseCreate,
+    course
       ? { semesterId: course.semesterId, code: course.code, name: course.name, lecturerName: course.lecturerName ?? "", colour: course.colour }
       : { semesterId: defaultSemesterId ?? "", code: "", name: "", lecturerName: "", colour: undefined },
-  });
+  );
   const { isSubmitting, errors, submitCount } = form.formState;
 
-  async function onSubmit({ semesterId, ...rest }: z.output<typeof CourseCreate>) {
+  async function onSubmit({ semesterId, ...rest }: CourseCreate) {
     const res = course
-      ? await apiFetch<Course>(`/courses/${course.id}`, { method: "PATCH", body: rest })
-      : await apiFetch<Course>("/courses", { method: "POST", body: { semesterId, ...rest } });
+      ? await apiFetch(`/courses/${course.id}`, { method: "PATCH", body: rest, schema: Course })
+      : await apiFetch("/courses", { method: "POST", body: { semesterId, ...rest }, schema: Course });
     if (!res.ok) return applyServerError(form, res.error);
     toast.success("Saved");
     onDone(res.data);
@@ -60,7 +54,7 @@ export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Pro
                   ))}
                 </SelectContent>
               </Select>
-              {fieldState.error && <FieldError id="semesterId-error" errors={[{ message: "Choose a Semester" }]} />}
+              {fieldState.error && <FieldError id="semesterId-error" errors={[fieldState.error]} />}
             </Field>
           )}
         />
@@ -88,7 +82,7 @@ export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Pro
                   value={c}
                   aria-label={COLOUR_LABEL[c]}
                   title={COLOUR_LABEL[c]}
-                  className={`flex size-11 items-center justify-center rounded-full text-white outline-offset-2 data-[state=checked]:ring-2 data-[state=checked]:ring-foreground data-[state=checked]:ring-offset-2 ${COLOUR_BG[c]}`}
+                  className={`flex size-11 items-center justify-center rounded-full text-primary-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring data-[state=checked]:ring-2 data-[state=checked]:ring-foreground data-[state=checked]:ring-offset-2 ${COLOUR_BG[c]}`}
                 >
                   <RadioPrimitive.Indicator>
                     <Check size={20} strokeWidth={2.5} aria-hidden="true" />
@@ -96,14 +90,14 @@ export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Pro
                 </RadioPrimitive.Item>
               ))}
             </RadioPrimitive.Root>
-            {fieldState.error && <FieldError id="colour-error" errors={[{ message: "Choose a colour" }]} />}
+            {fieldState.error && <FieldError id="colour-error" errors={[fieldState.error]} />}
           </FieldSet>
         )}
       />
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting} className="max-md:w-full">
-          {isSubmitting ? "Saving…" : course ? "Save" : "Add Course"}
-        </Button>
+        <SaveButton pending={isSubmitting} className="max-md:w-full">
+          {course ? "Save" : "Add Course"}
+        </SaveButton>
       </div>
     </form>
   );
