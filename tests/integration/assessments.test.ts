@@ -172,7 +172,7 @@ describe("the dashboard", () => {
     expect(d.overdue.map((x: { item: { id: string } }) => x.item.id)).toEqual([overdue.id]);
     expect(d.upcoming.map((x: { type: string; item: { id: string } }) => [x.type, x.item.id])).toEqual([["assignment", soon.id], ["exam", examSoon.id]]);
     expect(d.tbaExams.map((x: { id: string }) => x.id)).toEqual([tba.id]);
-    expect(d).toMatchObject({ todaySessions: [], highlightedChanges: [], recentAutoChanges: [], banners: [] });
+    expect(d).toMatchObject({ todaySessions: [], highlightedChanges: [], recentAutoChanges: [] }); // banners: tests/integration/health.test.ts
   });
 
   it("lists an Exam with a date but no time on its day, and drops archived Courses", async () => {

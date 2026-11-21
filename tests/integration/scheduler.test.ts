@@ -102,8 +102,8 @@ describe("Final Reminders", () => {
     failNext = 100;
     await runFinalReminders(at("16:00"));
     failNext = 0;
-    await runFinalReminders(at("17:01")); // past its due instant: given up
-    expect(sent).toHaveLength(1);
+    await runFinalReminders(at("17:01")); // past its due instant: given up, with an alert instead
+    expect(sent.map((s) => s.subject)).toEqual(["Due in 4 hours: Lab 4 report (CS2010)", "Course-manager needs you: a Final Reminder couldn't be sent"]);
   });
 });
 

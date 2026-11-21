@@ -1,9 +1,10 @@
-// The dashboard (design file 44). Auto Changes (#12) and banners (#10, #11) join later.
+// The dashboard (design file 44). Auto Changes join with #12.
 import { classifyForDashboard, type DeadlineInput } from "@/server/domain/deadlines";
 import { addDays, todayIn } from "@/server/domain/time";
 import type { Dashboard, Deadline } from "@/shared/schemas/dashboard";
 import type { Exam } from "@/shared/schemas/exam";
 import { loadOpenDeadlines } from "./assessments";
+import { getBanners } from "./health";
 import { getOccurrences } from "./timetable";
 
 type Item = DeadlineInput & { deadline: Deadline };
@@ -11,7 +12,11 @@ type Item = DeadlineInput & { deadline: Deadline };
 export async function getDashboard(studentId: string, now = new Date()): Promise<Dashboard> {
   const today = todayIn(now);
   // Exams dated before yesterday can't be upcoming.
-  const [open, todaySessions] = await Promise.all([loadOpenDeadlines(studentId, { examsFrom: addDays(today, -1), includeTba: true }), getOccurrences(studentId, today, today)]);
+  const [open, todaySessions, banners] = await Promise.all([
+    loadOpenDeadlines(studentId, { examsFrom: addDays(today, -1), includeTba: true }),
+    getOccurrences(studentId, today, today),
+    getBanners(now),
+  ]);
   const items: Item[] = open.map(({ deadline: d }): Item =>
     d.type === "assignment"
       ? { type: "assignment", id: d.item.id, dueDate: d.item.dueDate, dueTime: d.item.dueTime, status: d.item.status, deadline: d }
@@ -25,6 +30,6 @@ export async function getDashboard(studentId: string, now = new Date()): Promise
     tbaExams: c.tbaExams.map((i) => i.deadline.item as Exam),
     highlightedChanges: [],
     recentAutoChanges: [],
-    banners: [],
+    banners,
   };
 }

@@ -2,13 +2,14 @@
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { loadOpenDeadlines } from "@/server/data/assessments";
 import { db } from "@/server/db/client";
-import { entityVersion, user } from "@/server/db/schema";
+import { emailLog, entityVersion, user } from "@/server/db/schema";
 import { isDigestWindow, selectDigest } from "@/server/domain/digest";
 import { dueForFinalReminder } from "@/server/domain/reminders";
 import { todayIn } from "@/server/domain/time";
 import { digestEmail } from "@/server/email/templates/digest";
 import { finalReminderEmail } from "@/server/email/templates/final-reminder";
 import { formatDate } from "@/lib/format";
+import { raiseAlert } from "./alerts";
 import { claimAndSend, lastDigestAt, recordSkippedDigest } from "./claim";
 
 const origin = () => process.env.APP_ORIGIN ?? "";
@@ -24,6 +25,12 @@ export async function runFinalReminders(now: Date) {
         { to: s.email, ...finalReminderEmail(d.deadline, origin()) },
       );
     }
+    // A reminder still failed when its Deadline arrived: give up on it and alert (§10).
+    const [given] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(emailLog)
+      .where(and(eq(emailLog.studentId, s.id), eq(emailLog.kind, "final_reminder"), eq(emailLog.status, "failed"), sql`${emailLog.dueAt} <= ${now}`, sql`${emailLog.dueAt} > ${new Date(+now - 86_400_000)}`));
+    if (given && given.n > 0) await raiseAlert(s.id, "final_reminder_undeliverable", { count: given.n }, now);
   }
 }
 

@@ -1,6 +1,7 @@
 // One scheduler tick (every 60 s): each job runs on its own, so a failure in one never stops the other.
 import { healthSignal } from "@/server/db/schema";
 import { db } from "@/server/db/client";
+import { evaluateHealth, type Signals } from "@/server/domain/health";
 import { log } from "@/server/log";
 import { runDigest, runFinalReminders } from "./jobs";
 
@@ -15,6 +16,23 @@ export async function tick(now = new Date()) {
     }
   }
   await recordSchedulerHealth(failed.length ? `failed: ${failed.join(", ")}` : null, now);
+  await pingHeartbeats(now);
+}
+
+export async function readSignals(): Promise<Signals> {
+  const rows = await db.select().from(healthSignal);
+  return Object.fromEntries(rows.map((r) => [r.component, { lastOkAt: r.lastOkAt, lastErrorAt: r.lastErrorAt }]));
+}
+
+/** The healthchecks.io reminders check is pinged only while the scheduler and email are healthy (§10). It emails the Student when pings stop. */
+async function pingHeartbeats(now: Date) {
+  const url = process.env.HEALTHCHECK_REMINDERS_URL;
+  if (!url || !evaluateHealth(await readSignals(), now).pingReminders) return;
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  } catch (e) {
+    log.warn("heartbeat ping failed", { check: "reminders", error: e });
+  }
 }
 
 /** health_signal(scheduler): healthy only when every job ran (§8: a failed loop records the error). */

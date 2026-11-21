@@ -24,6 +24,9 @@ test("an empty account: empty states, layout, navigation and sign out", async ({
   await page.goto("/login");
   await expect(page).toHaveURL(/\/$/);
 
+  // No worker runs in these tests, so the health banner shows (design-system §6.10: an icon and one sentence).
+  await expect(page.getByRole("status").filter({ hasText: "Reminders may be delayed. We've been alerted." })).toBeVisible();
+
   // Empty states: each says what will appear and offers the action that fills it.
   await expect(page.getByText("Add your Courses and the Deadlines you already know about.")).toBeVisible();
   await page.goto("/courses");

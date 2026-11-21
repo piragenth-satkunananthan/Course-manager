@@ -299,3 +299,17 @@ export const healthSignal = pgTable("health_signal", {
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
   detail: text("detail"),
 });
+
+// Activity Log entries that aren't Auto Changes (§3). Alerts are de-duplicated by kind + payload.cause within 12 h.
+export const activityKind = pgEnum("activity_kind", ["ai_output_rejected", "ai_overflow", "alert", "stuck_messages", "file_too_large"]);
+export const activityEvent = pgTable(
+  "activity_event",
+  {
+    id: id(),
+    studentId: studentId(),
+    kind: activityKind("kind").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("activity_event_student_idx").on(t.studentId, t.createdAt)],
+);

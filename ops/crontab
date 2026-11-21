@@ -1,0 +1,3 @@
+# root's crontab on the VM (install: sudo crontab /opt/course-manager/ops/crontab). The VM clock is UTC:
+# 20:30 UTC is 02:00 Asia/Colombo.
+30 20 * * * /opt/course-manager/ops/backup.sh >> /var/log/course-manager-backup.log 2>&1
