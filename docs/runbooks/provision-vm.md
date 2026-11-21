@@ -26,21 +26,33 @@ az account show --query "{name:name, state:state, offer:id}" -o table
 
 ### 1.2 Choose names and a region
 
+Azure for Students subscriptions have an **"Allowed resource deployment regions"** policy. Check which regions yours allows:
+
+```bash
+az policy assignment list --query "[?displayName=='Allowed resource deployment regions'].parameters.listOfAllowedLocations.value" -o tsv
+```
+
+On 2026-11-21 this subscription allowed `koreacentral`, `indiasouthcentral`, `eastasia`, `uaenorth` and `centralindia`. **`southeastasia` is not allowed.** Central India (Pune) is the nearest allowed region to Sri Lanka.
+
 ```bash
 export RG=course-manager-rg
 export VM=course-manager-vm
-export LOC=southeastasia          # Singapore; alternatives: centralindia, southindia
+export LOC=centralindia
 export DNS_LABEL=coursemanager-$(openssl rand -hex 3)   # must be unique in the region
 echo "$DNS_LABEL"                 # write this down
 ```
 
-**Check that B1s is offered in the region:**
+**Check that B1s is offered in the region** (this command is fast):
 
 ```bash
-az vm list-skus --location "$LOC" --size Standard_B1s --query "[].{size:name, restrictions:restrictions[].reasonCode}" -o table
+az vm list-sizes --location "$LOC" --query "[?name=='Standard_B1s'].{name:name, cpu:numberOfCores, memMB:memoryInMB}" -o table
 ```
 
-**Expected:** one `Standard_B1s` row with no restriction. If it shows `NotAvailableForSubscription`, pick another `LOC` and repeat.
+**Expected:** one `Standard_B1s` row with 1 CPU and 1024 MB. `az vm list-skus` also works, but it can take minutes.
+
+**If `az vm create` fails:** on 2026-11-21 it failed in Central India with `SkuNotAvailable` ("Capacity Restrictions: Standard_B1s"). The CLI hid that message behind a `RuntimeError: The content for this response was already consumed`. Re-run with `--debug 2>&1 | grep -A3 "Exception Details"` to see the real error. The VM was then created in **`indiasouthcentral`**, with the resource group left in `centralindia` (a VM can be in a different region from its resource group). Pass `--location indiasouthcentral` to `az vm create`.
+
+**The VM as created (2026-11-21):** `course-manager-vm`, Standard_B1s, in `indiasouthcentral`, FQDN `coursemanager-4c82dd.indiasouthcentral.cloudapp.azure.com`.
 
 ### 1.3 Create an SSH key for this server only
 
