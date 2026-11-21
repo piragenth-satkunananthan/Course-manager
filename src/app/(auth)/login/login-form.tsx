@@ -57,7 +57,7 @@ export function LoginForm() {
             <ul>
               {(Object.keys(fieldErrors) as Field[]).map((f) => (
                 <li key={f}>
-                  <a href={`#${f}`} className="underline">{fieldErrors[f]}</a>
+                  <a href={`#${f}`} className="inline-flex min-h-11 items-center underline md:min-h-10">{fieldErrors[f]}</a>
                 </li>
               ))}
             </ul>

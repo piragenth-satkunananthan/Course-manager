@@ -68,7 +68,7 @@ export function ErrorSummary({ errors, labels, submitCount }: { errors: FieldErr
           <ul>
             {entries.map(([name, e]) => (
               <li key={name}>
-                <a href={`#${name}`} onClick={(e) => focusField(e, name)} className="underline">
+                <a href={`#${name}`} onClick={(e) => focusField(e, name)} className="inline-flex min-h-11 items-center underline md:min-h-10">
                   {labels[name] ?? name}: {String(e?.message)}
                 </a>
               </li>
