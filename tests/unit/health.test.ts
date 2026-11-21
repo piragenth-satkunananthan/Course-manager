@@ -5,10 +5,10 @@ const NOW = new Date("2026-11-20T10:00:00Z");
 const ago = (min: number) => new Date(+NOW - min * 60_000);
 
 describe("evaluateHealth", () => {
-  it("calls the scheduler healthy when it ticked in the last 3 minutes without a later error", () => {
+  it("calls the scheduler healthy when a full tick ran in the last 3 minutes; one failed tick doesn't trip it", () => {
     expect(evaluateHealth({ scheduler: { lastOkAt: ago(2), lastErrorAt: null } }, NOW).scheduler).toBe(true);
     expect(evaluateHealth({ scheduler: { lastOkAt: ago(4), lastErrorAt: null } }, NOW).scheduler).toBe(false);
-    expect(evaluateHealth({ scheduler: { lastOkAt: ago(2), lastErrorAt: ago(1) } }, NOW).scheduler).toBe(false);
+    expect(evaluateHealth({ scheduler: { lastOkAt: ago(2), lastErrorAt: ago(1) } }, NOW).scheduler).toBe(true);
     expect(evaluateHealth({}, NOW).scheduler).toBe(false);
   });
 

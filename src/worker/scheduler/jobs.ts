@@ -25,12 +25,13 @@ export async function runFinalReminders(now: Date) {
         { to: s.email, ...finalReminderEmail(d.deadline, origin()) },
       );
     }
-    // A reminder still failed when its Deadline arrived: give up on it and alert (§10).
-    const [given] = await db
+    // A reminder still failed when its Deadline arrived: give up on it and alert (§10). Failures from the last day count,
+    // so each is alerted at most twice (at its due instant and 12 hours later).
+    const [givenUp] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(emailLog)
       .where(and(eq(emailLog.studentId, s.id), eq(emailLog.kind, "final_reminder"), eq(emailLog.status, "failed"), sql`${emailLog.dueAt} <= ${now}`, sql`${emailLog.dueAt} > ${new Date(+now - 86_400_000)}`));
-    if (given && given.n > 0) await raiseAlert(s.id, "final_reminder_undeliverable", { count: given.n }, now);
+    if (givenUp && givenUp.n > 0) await raiseAlert(s.id, "final_reminder_undeliverable", { count: givenUp.n }, now);
   }
 }
 

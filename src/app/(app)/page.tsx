@@ -17,7 +17,7 @@ import type { Deadline } from "@/shared/schemas/dashboard";
 const localDate = (d: Deadline) => (d.type === "assignment" ? d.item.dueDate : d.item.date!);
 
 // The dashboard (design-system §7.1), fixed order: Overdue → Today → Due soon → TBA Exams.
-// Check these and Recent changes (#12), and banners (#10, #11) join later.
+// Check these and Recent changes join with #12; banners are in the (app) layout.
 export default async function DashboardPage() {
   const studentId = await requireStudentId();
   const [courses, dashboard] = await Promise.all([listCourseOptions(studentId), getDashboard(studentId)]);

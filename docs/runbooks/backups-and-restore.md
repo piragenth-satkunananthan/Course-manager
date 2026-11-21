@@ -11,6 +11,9 @@ On the laptop:
 ```bash
 export SA=cmbackups$(openssl rand -hex 3)        # storage account names are global and lowercase
 az storage account create -g "$RG" -n "$SA" -l "$LOC" --sku Standard_LRS --kind StorageV2 --min-tls-version TLS1_2 --allow-blob-public-access false -o table
+# Let your own account read and write blobs (the --auth-mode login commands below need it).
+az role assignment create --role "Storage Blob Data Contributor" --assignee "$(az ad signed-in-user show --query id -o tsv)" \
+  --scope "$(az storage account show -g "$RG" -n "$SA" --query id -o tsv)" -o table
 az storage container create --account-name "$SA" -n backups --auth-mode login -o table
 
 # Delete backups older than 7 days (design §14).
@@ -70,10 +73,11 @@ Within about 70 minutes, healthchecks.io emails that `reminders` is down, and th
 
 ## Part 2: monthly, download a backup (decision U9)
 
-Backups live in the same Azure subscription as the VM. Once a month, keep a copy off Azure:
+Backups live in the same Azure subscription as the VM. Once a month, keep a copy of the newest one off Azure:
 
 ```bash
-az storage blob download --account-name "$SA" -c backups -n "$(date -u +%F).dump.age" -f ~/course-manager-backups/$(date -u +%F).dump.age --auth-mode login
+LATEST=$(az storage blob list --account-name "$SA" -c backups --auth-mode login --query "sort_by([], &properties.lastModified)[-1].name" -o tsv)
+mkdir -p ~/course-manager-backups && az storage blob download --account-name "$SA" -c backups -n "$LATEST" -f ~/course-manager-backups/"$LATEST" --auth-mode login
 ```
 
 It stays encrypted; only `backup.agekey` opens it.
@@ -89,20 +93,20 @@ It stays encrypted; only `backup.agekey` opens it.
    age -d -i backup.agekey -o restore.dump <date>.dump.age
    ```
 2. **Prepare the VM.** On a rebuilt VM, follow `provision-vm.md` first and put the offline `DATA_ENCRYPTION_KEY` back into `/opt/course-manager/.env`, with the other secrets. Copy `restore.dump` to the VM: `scp restore.dump <vm>:`.
-3. **Restore into a fresh database:**
+3. **Restore into a fresh volume** (always: a newer schema left in place would clash with the next migrations):
    ```bash
    cd /opt/course-manager
    sudo docker compose stop web worker
-   sudo docker compose down postgres && sudo docker volume rm course-manager_pgdata   # only when replacing a damaged database
+   sudo docker compose rm -sf postgres && sudo docker volume rm course-manager_pgdata
    sudo docker compose up -d --wait postgres
-   sudo docker compose exec -T postgres pg_restore -U app -d course_manager --no-owner --clean --if-exists < ~/restore.dump
+   sudo docker compose exec -T postgres pg_restore -U app -d course_manager --no-owner < ~/restore.dump
    ```
-4. **Deploy the matching version.** Run the Deploy workflow with the SHA that was running when the backup was taken (`IMAGE_TAG` in the old `.env`, or the latest main). Migrations then bring the schema up to date.
-5. **Force a WhatsApp re-link** (from #11): restored signal keys are out of date, so clear them and pair again from Settings:
+4. **Force a WhatsApp re-link, before the worker starts** (from #11): restored signal keys are out of date, so clear them; you pair again from Settings afterwards.
    ```bash
    sudo docker compose exec -T postgres psql -U app -d course_manager -c "delete from wa_auth_key; update wa_session set creds_enc = null, status = 'unlinked';"
    ```
-6. **Check:** sign in, see your Courses and Deadlines, and wait for the next scheduler tick (the banner clears within a minute).
+5. **Deploy the matching version.** Run the Deploy workflow with the SHA that was running when the backup was taken (`IMAGE_TAG` in the old `.env`). Then deploy newer SHAs as usual; their migrations bring the schema up to date.
+6. **Check:** sign in, see your Courses and Deadlines, and wait for the next scheduler tick (the banner clears within a minute). Delete `restore.dump` and `~/restore.dump`: they're unencrypted.
 
 ## Restore-test log
 

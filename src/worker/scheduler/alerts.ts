@@ -23,13 +23,15 @@ export async function raiseAlert(studentId: string, cause: AlertCause, detail: R
       .select({ id: activityEvent.id })
       .from(activityEvent)
       .where(and(eq(activityEvent.studentId, studentId), eq(activityEvent.kind, "alert"), sql`${activityEvent.payload}->>'cause' = ${cause}`, gt(activityEvent.createdAt, new Date(+now - 12 * 3_600_000))));
-    if (recent) return false;
-    await tx.insert(activityEvent).values({ studentId, kind: "alert", payload: { cause, ...detail }, createdAt: now });
-    return true;
+    if (recent) return null;
+    const [row] = await tx.insert(activityEvent).values({ studentId, kind: "alert", payload: { cause, ...detail }, createdAt: now }).returning({ id: activityEvent.id });
+    return row!.id;
   });
   if (!raised) return false;
   const [s] = await db.select({ email: user.email }).from(user).where(eq(user.id, studentId));
   const { title, whatToDo } = CAUSES[cause];
-  if (s) await sendEmail(studentId, "alert", { to: s.email, ...alertEmail(title, whatToDo, process.env.APP_ORIGIN ?? "") });
+  const res = s ? await sendEmail(studentId, "alert", { to: s.email, ...alertEmail(title, whatToDo, process.env.APP_ORIGIN ?? "") }) : null;
+  // If the email didn't go out, forget this alert so the next tick tries again, instead of waiting 12 hours.
+  if (res && !res.ok) await db.delete(activityEvent).where(eq(activityEvent.id, raised));
   return true;
 }
