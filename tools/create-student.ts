@@ -5,7 +5,8 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { parseArgs } from "node:util";
 import { auth } from "@/server/auth";
-import { pool } from "@/server/db/client";
+import { db, pool } from "@/server/db/client";
+import { waSession } from "@/server/db/schema";
 
 export async function createStudent(email: string, password: string) {
   email = email.trim().toLowerCase();
@@ -22,6 +23,7 @@ export async function createStudent(email: string, password: string) {
     await ctx.internalAdapter.deleteUser(user.id); // don't leave a user without a password, which would block a retry
     throw e;
   }
+  await db.insert(waSession).values({ studentId: user.id }).onConflictDoNothing(); // the WhatsApp Link starts unlinked
   return user;
 }
 

@@ -15,7 +15,7 @@ export async function getDashboard(studentId: string, now = new Date()): Promise
   const [open, todaySessions, banners] = await Promise.all([
     loadOpenDeadlines(studentId, { examsFrom: addDays(today, -1), includeTba: true }),
     getOccurrences(studentId, today, today),
-    getBanners(now),
+    getBanners(studentId, now),
   ]);
   const items: Item[] = open.map(({ deadline: d }): Item =>
     d.type === "assignment"

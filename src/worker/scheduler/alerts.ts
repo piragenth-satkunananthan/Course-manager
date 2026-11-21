@@ -7,6 +7,18 @@ import { sendEmail } from "@/server/email/resend";
 import { alertEmail } from "@/server/email/templates/alert";
 
 const CAUSES = {
+  whatsapp_logged_out: {
+    title: "WhatsApp logged the app out",
+    whatToDo: "New announcements aren't being read. Open Settings → WhatsApp and link it again with a pairing code. If it keeps happening, check WhatsApp → Linked devices on your phone.",
+  },
+  whatsapp_replaced: {
+    title: "another copy of the app connected to WhatsApp",
+    whatToDo: "This copy stopped reading WhatsApp so the two don't fight. If you didn't start another one, unlink and link again from Settings.",
+  },
+  whatsapp_mismatch: {
+    title: "WhatsApp refused the connection",
+    whatToDo: "WhatsApp reported a multi-device mismatch. Unlink from Settings, then link again with a pairing code.",
+  },
   final_reminder_undeliverable: {
     title: "a Final Reminder couldn't be sent",
     whatToDo: "A reminder email failed until its Deadline passed. Check the dashboard for what's due, and check the Resend key and account.",

@@ -4,8 +4,7 @@ import { getBanners } from "@/server/data/health";
 import { requireStudentId } from "@/server/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  await requireStudentId();
-  const banners = await getBanners();
+  const banners = await getBanners(await requireStudentId());
   return (
     <>
       <NavSidebar />

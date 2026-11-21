@@ -1,7 +1,7 @@
 // Every table lives here (design file 17). #5 adds Better Auth's tables; later tickets add the domain tables.
 import { sql } from "drizzle-orm";
 import { COURSE_COLOURS } from "@/shared/schemas/course";
-import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, customType, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, time, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 const updatedAt = () =>
@@ -312,4 +312,89 @@ export const activityEvent = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("activity_event_student_idx").on(t.studentId, t.createdAt)],
+);
+
+// The WhatsApp Link and the inbox (§3, #11).
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+export const waStatus = pgEnum("wa_status", ["unlinked", "pairing", "connected", "logged_out", "error"]);
+
+/** One per Student. The *_requested_at columns are how the web app asks the worker to act (§8, request poller). */
+export const waSession = pgTable("wa_session", {
+  studentId: text("student_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  credsEnc: bytea("creds_enc"), // Baileys credentials, encrypted (§12)
+  status: waStatus("status").default("unlinked").notNull(),
+  pairingPhone: text("pairing_phone"),
+  pairingCode: text("pairing_code"),
+  pairingRequestedAt: timestamp("pairing_requested_at", { withTimezone: true }),
+  unlinkRequestedAt: timestamp("unlink_requested_at", { withTimezone: true }),
+  groupsReloadRequestedAt: timestamp("groups_reload_requested_at", { withTimezone: true }),
+  lastConnectedAt: timestamp("last_connected_at", { withTimezone: true }),
+  disconnectedAt: timestamp("disconnected_at", { withTimezone: true }), // for the banner's "since"
+  lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  lastError: text("last_error"),
+});
+
+/** Baileys signal keys, encrypted. Replaces Baileys' file-based demo store. */
+export const waAuthKey = pgTable(
+  "wa_auth_key",
+  {
+    studentId: studentId(),
+    keyType: text("key_type").notNull(),
+    keyId: text("key_id").notNull(),
+    valueEnc: bytea("value_enc").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.studentId, t.keyType, t.keyId] })],
+);
+
+export const waGroup = pgTable(
+  "wa_group",
+  {
+    id: id(),
+    studentId: studentId(),
+    waJid: text("wa_jid").notNull(),
+    subject: text("subject").notNull(),
+    // A Course Group links to one Course; the Class Group links to the Semester. Deleting either unlinks it.
+    linkedCourseId: uuid("linked_course_id").references(() => course.id, { onDelete: "set null" }),
+    linkedSemesterId: uuid("linked_semester_id").references(() => semester.id, { onDelete: "set null" }),
+    linkedAt: timestamp("linked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("wa_group_jid_unique").on(t.studentId, t.waJid),
+    check("wa_group_one_link_chk", sql`${t.linkedCourseId} is null or ${t.linkedSemesterId} is null`),
+  ],
+);
+
+export const inboxKind = pgEnum("inbox_kind", ["text", "edit", "revoke", "other"]);
+export const inboxStatus = pgEnum("inbox_status", ["pending", "processing", "done"]);
+export const inboxDecision = pgEnum("inbox_decision", ["ignored", "question", "applied", "unknown_course", "possibly_missed", "rejected", "superseded"]);
+
+/** Every message from a linked group. Text is encrypted and kept until its Semester is archived (D1). */
+export const inboxMessage = pgTable(
+  "inbox_message",
+  {
+    id: id(),
+    studentId: studentId(),
+    waGroupId: uuid("wa_group_id").notNull().references(() => waGroup.id, { onDelete: "cascade" }),
+    semesterId: uuid("semester_id").references(() => semester.id, { onDelete: "set null" }), // the Semester when it arrived
+    waMessageId: text("wa_message_id").notNull(), // originals: WhatsApp's id; "<id>:edit:<epoch>"; "<id>:revoke"
+    kind: inboxKind("kind").notNull(),
+    editOf: uuid("edit_of").references((): AnyPgColumn => inboxMessage.id, { onDelete: "set null" }),
+    senderName: text("sender_name"),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull(), // an edit's own time
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    textEnc: bytea("text_enc"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    possiblyMissed: boolean("possibly_missed").default(false).notNull(),
+    status: inboxStatus("status").default("pending").notNull(),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    batchId: uuid("batch_id"), // FK with ai_batch (#12)
+    decision: inboxDecision("decision"),
+    decisionReason: text("decision_reason"),
+  },
+  (t) => [
+    uniqueIndex("inbox_message_unique").on(t.studentId, t.waGroupId, t.waMessageId),
+    index("inbox_message_pending_idx").on(t.status, t.waGroupId),
+  ],
 );

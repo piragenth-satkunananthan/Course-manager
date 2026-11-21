@@ -86,7 +86,7 @@ export async function deleteCourse(studentId: string, id: string, confirmCode: s
   const [row] = await db.select({ code: course.code }).from(course).where(mine(studentId, id));
   if (!row) throw notFound("Course");
   if (confirmCode.trim().toLowerCase() !== row.code.toLowerCase()) throw invalid("confirmCode", `Type ${row.code} to confirm`);
-  // shortcut: #11 also unlinks the Course's WhatsApp group here, once wa_group exists.
+  // Its WhatsApp group is unlinked by the foreign key (on delete set null).
   await db.delete(course).where(mine(studentId, id));
   return null;
 }

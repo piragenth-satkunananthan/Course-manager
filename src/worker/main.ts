@@ -1,7 +1,13 @@
-// The worker (design §8): takes the single-instance lock, then starts its loops. #9 adds the scheduler;
-// the WhatsApp Link and AI loops arrive with #11 and #12.
+// The worker (design §8): takes the single-instance lock, then starts its loops independently: the scheduler,
+// the WhatsApp Link with its request poller, and (#12) the AI processor. A failed startup check stops only its loop.
 import { Client } from "pg";
+import { loadKey } from "@/server/crypto";
+import { db } from "@/server/db/client";
+import { healthSignal, user, waSession } from "@/server/db/schema";
+import { startPoller } from "./poller";
 import { recordSchedulerHealth, tick } from "./scheduler/tick";
+import { Ingest } from "./whatsapp/ingest";
+import { WhatsAppLink } from "./whatsapp/link";
 
 const log = (level: string, msg: string, extra: object = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...extra }));
 
@@ -22,7 +28,9 @@ lock.on("error", (e) => lockLost(e.message));
 lock.on("end", () => lockLost("connection closed"));
 log("info", "worker started");
 
+let whatsapp: WhatsAppLink | null = null;
 const stop = async () => {
+  whatsapp?.stop();
   lock.removeAllListeners("end");
   await lock.end();
   process.exit(0);
@@ -45,3 +53,27 @@ function startScheduler() {
   setInterval(run, 60_000);
 }
 startScheduler();
+
+// WhatsApp loop. Startup check: the encryption key loads and there is exactly one Student (v1, design file 58).
+async function startWhatsApp() {
+  try {
+    const key = loadKey();
+    const students = await db.select({ id: user.id }).from(user);
+    if (students.length !== 1) throw new Error(`expected exactly one Student, found ${students.length}`);
+    const studentId = students[0]!.id;
+    await db.insert(waSession).values({ studentId }).onConflictDoNothing();
+    const ingest = new Ingest(studentId, key);
+    await ingest.reloadGroups();
+    whatsapp = new WhatsAppLink(studentId, key, ingest);
+    await whatsapp.start();
+    await startPoller(studentId, whatsapp, ingest);
+    log("info", "whatsapp loop started");
+  } catch (e) {
+    const detail = (e as Error).message;
+    log("error", "whatsapp loop not started; checking again in 5 minutes", { error: detail });
+    const now = new Date();
+    await db.insert(healthSignal).values({ component: "wa_socket", lastErrorAt: now, detail }).onConflictDoUpdate({ target: healthSignal.component, set: { lastErrorAt: now, detail } }).catch(() => {});
+    setTimeout(startWhatsApp, 5 * 60_000);
+  }
+}
+void startWhatsApp();

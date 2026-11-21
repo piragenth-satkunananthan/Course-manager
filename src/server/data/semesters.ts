@@ -1,7 +1,7 @@
 // Semesters, scoped to the Student (design file 38). Every query filters on studentId.
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { semester } from "@/server/db/schema";
+import { inboxMessage, semester } from "@/server/db/schema";
 import { AppError, notFound } from "@/server/http/errors";
 import type { Semester, SemesterCreate } from "@/shared/schemas/semester";
 import { iso } from "./util";
@@ -51,12 +51,14 @@ export async function setCurrentSemester(studentId: string, id: string) {
 }
 
 export async function archiveSemester(studentId: string, id: string) {
-  // shortcut: #11 also erases this Semester's stored message text here (D1), and #12 expires its suppressions.
+  // shortcut: #12 also expires this Semester's suppressions here.
   const [row] = await db
     .update(semester)
     .set({ archivedAt: sql`coalesce(${semester.archivedAt}, now())`, isCurrent: false }) // archiving twice keeps the first time
     .where(mine(studentId, id))
     .returning();
   if (!row) throw notFound("Semester");
+  // D1: message text is kept only until its Semester is archived; the decision rows stay.
+  await db.update(inboxMessage).set({ textEnc: null }).where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.semesterId, id)));
   return toDto(row);
 }
