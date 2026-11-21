@@ -1,6 +1,6 @@
 // Seam: weekly classes and the day list in a browser, at phone and desktop sizes (#8).
 import { expect, test } from "@playwright/test";
-import { seedCourse, signIn } from "./helpers";
+import { auditLayout, seedCourse, signIn } from "./helpers";
 
 const weekday = (date: string) => ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1; // ISO 1–7
 
@@ -23,6 +23,8 @@ test("add a weekly class, cancel one week of it, reschedule it instead, and move
   await form.getByLabel("End (required)").fill("09:00");
   await form.getByRole("button", { name: "Save class" }).click();
   await expect(form.getByLabel("End (required)")).toHaveAccessibleDescription("The end time must be after the start time");
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeFocused();
+  expect((await auditLayout(page, info.project.name === "phone" ? 44 : 40)).small).toEqual([]);
   await form.getByLabel("End (required)").fill("12:00");
   await form.getByLabel("Location").fill("Hall B2");
   await form.getByRole("button", { name: "Save class" }).click();
@@ -37,8 +39,9 @@ test("add a weekly class, cancel one week of it, reschedule it instead, and move
   await page.getByRole("link", { name: "Previous day" }).click();
   await expect(page).toHaveURL(new RegExp(`date=${day}`));
 
-  // Cancel this week's class
+  // Cancel this week's class (the sheet passes the layout audit too)
   await row.getByRole("button").first().click();
+  expect((await auditLayout(page, info.project.name === "phone" ? 44 : 40)).small).toEqual([]);
   await page.getByRole("button", { name: "Cancel this class" }).click();
   await expect(row).toContainText("Cancelled");
 
@@ -46,6 +49,10 @@ test("add a weekly class, cancel one week of it, reschedule it instead, and move
   await row.getByRole("button").first().click();
   await page.getByRole("button", { name: "Reschedule instead" }).click();
   const r = page.getByRole("dialog", { name: `Reschedule ${code} Lecture` });
+  // Validation: an end before the start is refused inline
+  await r.getByLabel("End (required)").fill("09:00");
+  await r.getByRole("button", { name: "Save" }).click();
+  await expect(r.getByLabel("End (required)")).toHaveAccessibleDescription("The end time must be after the start time");
   await r.getByLabel("Start (required)").fill("14:00");
   await r.getByLabel("End (required)").fill("16:00");
   await r.getByRole("button", { name: "Save" }).click();

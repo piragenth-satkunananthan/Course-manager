@@ -23,6 +23,8 @@ export async function seedCourse(page: Page, code: string) {
  * least `min` px (44 on phones, 40 from md). Inline links in a sentence and hidden form mirrors are exempt.
  */
 export async function auditLayout(page: Page, min: number) {
+  // Measure the settled layout: a dialog mid zoom-in reads 5% small.
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
   return page.evaluate((min) => {
     const visible = (el: Element) => {
       const b = el.getBoundingClientRect();
