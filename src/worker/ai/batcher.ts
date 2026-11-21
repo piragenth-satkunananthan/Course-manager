@@ -1,11 +1,11 @@
 // The AI processor (design §8, file 64): picks batches per group, builds the context, calls the AI, validates, and
 // applies everything in one transaction. Message text is decrypted only in memory and never logged.
-import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { applyOperations } from "@/server/ai/apply-operations";
 import { type AiContext, buildContext, type ContextAdapter } from "@/server/ai/context";
 import { REPEATS, SUPERSEDED, validateOutput } from "@/server/ai/validate";
 import { decrypt } from "@/server/crypto";
-import { db } from "@/server/db/client";
+import { db, type Tx } from "@/server/db/client";
 import { activityEvent, aiBatch, assignment, course, courseNickname, exam, inboxMessage, semester, suppression, user, waGroup } from "@/server/db/schema";
 import { addDays, localToInstant, todayIn } from "@/server/domain/time";
 import { log } from "@/server/log";
@@ -19,6 +19,7 @@ const OLDEST_MS = 5 * 60_000;
 const STALE_MS = 10 * 60_000;
 const MAX_BATCH = 30;
 const BACKOFF_MIN = [1, 5, 15, 60]; // then hourly
+const PREVIEW = new Error("preview only: rolled back");
 // Deletes (revoke rows) never go to the AI: processDeletes handles them.
 const BATCHABLE = inArray(inboxMessage.kind, ["text", "edit"]);
 
@@ -63,7 +64,7 @@ export async function claimBatch(studentId: string, groupId: string, now: Date) 
 }
 
 /** The context from Postgres (design §9). The current Semester and its Courses that aren't archived. */
-function pgAdapter(studentId: string, groupId: string, batchIds: string[], key: Buffer, now: Date): ContextAdapter {
+function pgAdapter(db: Tx, studentId: string, groupId: string, batchIds: string[], key: Buffer, now: Date): ContextAdapter {
   const currentSemester = async () =>
     (await db.select().from(semester).where(and(eq(semester.studentId, studentId), eq(semester.isCurrent, true), isNull(semester.archivedAt))))[0];
   const courseIds = async () => {
@@ -126,9 +127,21 @@ function pgAdapter(studentId: string, groupId: string, batchIds: string[], key: 
 /** Runs one claimed batch end to end. Returns what happened, for logs and tests. */
 export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: Date): Promise<"applied" | "rejected" | "retry"> {
   const [batch] = await db.select().from(aiBatch).where(eq(aiBatch.id, batchId));
-  const rows = await db.select().from(inboxMessage).where(eq(inboxMessage.batchId, batchId)).orderBy(asc(inboxMessage.sentAt));
-  // An edit first withdraws what its original did, so the AI reads the edit against the earlier state (design §9).
-  await undoEditedOriginals(batch!.studentId, rows.filter((r) => r.kind === "edit"));
+  const claimed = await db.select().from(inboxMessage).where(eq(inboxMessage.batchId, batchId)).orderBy(asc(inboxMessage.sentAt));
+  // A message deleted after it was claimed (say, before a crash) never reaches the AI, nor do edits of it.
+  const revokedIds = new Set(claimed.filter((r) => r.revokedAt).map((r) => r.id));
+  const editOfIds = claimed.flatMap((r) => (r.editOf ? [r.editOf] : []));
+  if (editOfIds.length)
+    for (const o of await db.select({ id: inboxMessage.id }).from(inboxMessage).where(and(inArray(inboxMessage.id, editOfIds), isNotNull(inboxMessage.revokedAt)))) revokedIds.add(o.id);
+  const skipped = claimed.filter((r) => revokedIds.has(r.id) || (r.editOf && revokedIds.has(r.editOf)));
+  if (skipped.length)
+    await db.update(inboxMessage).set({ status: "done", decision: "ignored", decisionReason: "deleted before it was read", processingStartedAt: null }).where(inArray(inboxMessage.id, skipped.map((r) => r.id)));
+  const rows = claimed.filter((r) => !skipped.includes(r));
+  if (!rows.length) {
+    await db.update(aiBatch).set({ status: "applied", finishedAt: new Date() }).where(eq(aiBatch.id, batchId));
+    return "applied";
+  }
+  const edits = rows.filter((r) => r.kind === "edit");
   const originals = rows.filter((r) => r.editOf).map((r) => r.editOf!);
   const originalText = new Map(
     originals.length ? (await db.select().from(inboxMessage).where(inArray(inboxMessage.id, originals))).map((o) => [o.id, o.textEnc ? decrypt(o.textEnc, key) : ""]) : [],
@@ -142,11 +155,22 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     text: r.textEnc ? decrypt(r.textEnc, key) : "",
     editOf: r.editOf ? { id: r.editOf, text: originalText.get(r.editOf) ?? "" } : null,
   }));
-  const ctx = await buildContext(pgAdapter(batch!.studentId, batch!.waGroupId, rows.map((r) => r.id), key, now), {
-    now,
-    linkedTo: group?.linkedCourseId ? { courseId: group.linkedCourseId } : { semester: true },
-    messages,
-  });
+  // An edit first withdraws what its original did, so the AI reads it against the earlier state (design §9). That
+  // Undo is only previewed here and rolled back; it commits with the batch's apply, so a rejected batch loses nothing.
+  let ctx!: AiContext;
+  await db
+    .transaction(async (tx) => {
+      await undoEditedOriginals(tx, batch!.studentId, edits);
+      ctx = await buildContext(pgAdapter(tx, batch!.studentId, batch!.waGroupId, rows.map((r) => r.id), key, now), {
+        now,
+        linkedTo: group?.linkedCourseId ? { courseId: group.linkedCourseId } : { semester: true },
+        messages,
+      });
+      throw PREVIEW;
+    })
+    .catch((e) => {
+      if (e !== PREVIEW) throw e;
+    });
 
   let tokens = { input: 0, output: 0 };
   const call = async (chat: Parameters<AiClient["complete"]>[0]) => {
@@ -181,6 +205,7 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     const superseded = new Set(dropped.filter((d) => d.reason === SUPERSEDED).flatMap((d) => d.messageIds));
     const flagged = new Set([...dropped.filter((d) => !handled(d.reason)).flatMap((d) => d.messageIds), ...overflow.flatMap((o) => o.sourceMessageIds)]);
     await db.transaction(async (tx) => {
+      await undoEditedOriginals(tx, batch!.studentId, edits);
       await applyOperations(tx, { studentId: batch!.studentId, batchId, operations: valid, sentAt: new Map(rows.map((r) => [r.id, r.sentAt])), modelId: ai.model, promptVersion: PROMPT_VERSION });
       for (const r of rows) {
         const d = superseded.has(r.id)

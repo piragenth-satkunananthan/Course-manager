@@ -88,6 +88,28 @@ describe("an edited message", () => {
   });
 });
 
+describe("safety", () => {
+  it("keeps the original's change when the edit's batch is rejected", async () => {
+    await post("M1", "Lab 11 due 10th Dec", t0 + 10);
+    await aiTick(ai(() => [{ op: "create_assignment", courseId, title: "Lab 11", dueDate: "2026-12-10" }]), key, later());
+    await edit("M1", "Lab 11 due 11th Dec", t0 + 20);
+    const broken: AiClient = { model: "fake", complete: async () => ({ content: "not json", inputTokens: 1, outputTokens: 1 }) };
+    await aiTick(broken, key, later());
+    expect(await list()).toMatchObject([{ title: "Lab 11", dueDate: "2026-12-10" }]);
+    expect((await pool.query("select undone_at from auto_change")).rows).toEqual([{ undone_at: null }]);
+  });
+
+  it("never sends the AI a message deleted while its batch was stuck", async () => {
+    await post("M1", "Lab 12 due 12th Dec", t0 + 10);
+    await pool.query("update inbox_message set status = 'processing', processing_started_at = now() - interval '20 minutes'");
+    await remove("M1");
+    await aiTick(ai(() => [{ op: "create_assignment", courseId, title: "Lab 12", dueDate: "2026-12-12" }]), key, later());
+    await aiTick(ai(() => [{ op: "create_assignment", courseId, title: "Lab 12", dueDate: "2026-12-12" }]), key, later());
+    expect(seen).toHaveLength(0);
+    expect(await list()).toEqual([]);
+  });
+});
+
 describe("a deleted message", () => {
   it("withdraws its change, with no AI call", async () => {
     await post("M1", "Lab 6 due 5th Dec", t0 + 10);

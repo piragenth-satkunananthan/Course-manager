@@ -2,12 +2,11 @@
 // Optimistic locking, "most recently sent wins" per field, no-op skipping, a version bump, and a history row.
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
-import type { db } from "@/server/db/client";
+import type { Tx } from "@/server/db/client";
 import { assignment, entityVersion, exam, sessionChange } from "@/server/db/schema";
 import { planFieldUpdate } from "@/server/domain/versioning";
 import { AppError, notFound } from "@/server/http/errors";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Actor = "ai" | "student" | "system";
 type VersionedTable = PgTable & { id: PgColumn; studentId: PgColumn; deletedAt: PgColumn; version: PgColumn };
 

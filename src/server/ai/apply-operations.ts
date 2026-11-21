@@ -2,14 +2,13 @@
 // (actor ai, setAt = its source message's sent time), then an Auto Change with its summary, risk and sources.
 // A write that changes nothing makes no Auto Change. Shared by the worker and (#14) Unknown Course resolution.
 import { and, eq } from "drizzle-orm";
-import type { db } from "@/server/db/client";
+import type { Tx } from "@/server/db/client";
 import { assignment, autoChange, autoChangeSource, entityVersion, exam } from "@/server/db/schema";
 import { riskOf } from "@/server/domain/auto-change";
 import { formatDate } from "@/lib/format";
 import { snapshot, writeEntity } from "@/server/data/write-entity";
 import type { Operation } from "@/shared/schemas/ai-ops";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type When = { date: string | null; time: string | null };
 const when = (d: string | null | undefined, t: string | null | undefined): string => (d ? `${formatDate(d)}${t ? `, ${t}` : ""}` : "date TBA");
 

@@ -1,7 +1,7 @@
 // The Activity Log and Undo (design file 46). Source message text is decrypted here for display only.
 import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, type SQL } from "drizzle-orm";
 import { decrypt, loadKey } from "@/server/crypto";
-import { db } from "@/server/db/client";
+import { db, type Tx } from "@/server/db/client";
 import { activityEvent, assignment, autoChange, autoChangeSource, entityVersion, exam, inboxMessage, suppression, waGroup } from "@/server/db/schema";
 import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
 import { AppError, notFound } from "@/server/http/errors";
@@ -10,7 +10,6 @@ import { iso } from "./util";
 import { writeEntity } from "./write-entity";
 
 type Change = typeof autoChange.$inferSelect;
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const TABLES = { assignment, exam } as const;
 
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
@@ -91,7 +90,7 @@ export async function undoChange(tx: Tx, c: Change, actor: "student" | "system")
 
   const restore: Record<string, unknown> = c.op === "create" ? { deletedAt: new Date() } : c.op === "delete" ? { deletedAt: null } : { ...v.before };
   await writeEntity(tx, { studentId: c.studentId, entityType: c.entityType, op: "undo", entityId: c.entityId, restore, restoreFieldSetAt: v.beforeFieldSetAt, actor, setAt: new Date().toISOString() });
-  await tx.update(autoChange).set({ undoneAt: new Date() }).where(eq(autoChange.id, c.id));
+  await tx.update(autoChange).set({ undoneAt: new Date() }).where(and(eq(autoChange.studentId, c.studentId), eq(autoChange.id, c.id)));
   if (c.op === "create" && actor === "student") {
     const after = v.after as { courseId: string; title: string; dueDate?: string; date?: string | null };
     await tx.insert(suppression).values({ studentId: c.studentId, courseId: after.courseId, entityType: c.entityType, titleKey: titleKey(after.title), dueDate: (c.entityType === "assignment" ? after.dueDate : after.date) ?? null });
