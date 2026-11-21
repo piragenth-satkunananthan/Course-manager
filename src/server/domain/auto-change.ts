@@ -1,5 +1,4 @@
 // Auto Change rules (design §3): the Undo rule, risk, and how titles are matched.
-import { addDays } from "./time";
 
 /** Titles match ignoring case, punctuation and spacing ("Lab 4 report" = "lab-4  Report"). */
 export const titleKey = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -26,4 +25,3 @@ export function riskOf(op: "create" | "update" | "delete", before: { date: strin
 }
 
 export const HIGHLIGHT_DAYS = 7;
-export const highlightCutoff = (today: string) => addDays(today, -HIGHLIGHT_DAYS);

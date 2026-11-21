@@ -3,11 +3,11 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { applyOperations } from "@/server/ai/apply-operations";
 import { type AiContext, buildContext, type ContextAdapter } from "@/server/ai/context";
-import { validateOutput } from "@/server/ai/validate";
+import { REPEATS, SUPERSEDED, validateOutput } from "@/server/ai/validate";
 import { decrypt } from "@/server/crypto";
 import { db } from "@/server/db/client";
 import { activityEvent, aiBatch, assignment, course, courseNickname, exam, inboxMessage, semester, suppression, user, waGroup } from "@/server/db/schema";
-import { addDays, todayIn } from "@/server/domain/time";
+import { addDays, localToInstant, todayIn } from "@/server/domain/time";
 import { log } from "@/server/log";
 import { raiseAlert } from "../scheduler/alerts";
 import { type AiClient, AiFatalError, AiRetryableError } from "./nim-client";
@@ -92,8 +92,8 @@ function pgAdapter(studentId: string, groupId: string, batchIds: string[], key: 
         db
           .select()
           .from(assignment)
-          .where(and(inArray(assignment.courseId, ids), isNull(assignment.deletedAt), or(ne(assignment.status, "submitted"), gte(assignment.submittedAt, new Date(`${recent}T00:00:00Z`))))),
-        db.select().from(exam).where(and(inArray(exam.courseId, ids), isNull(exam.deletedAt))),
+          .where(and(inArray(assignment.courseId, ids), isNull(assignment.deletedAt), or(ne(assignment.status, "submitted"), gte(assignment.submittedAt, localToInstant(recent, "00:00"))))),
+        db.select().from(exam).where(and(inArray(exam.courseId, ids), isNull(exam.deletedAt), or(isNull(exam.date), gte(exam.date, todayIn(now))))),
       ]);
       return {
         assignments: as.map((a) => ({ id: a.id, courseId: a.courseId, title: a.title, dueDate: a.dueDate, dueTime: hhmm(a.dueTime), status: a.status })),
@@ -163,7 +163,9 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
       const error = result.error;
       await db.transaction(async (tx) => {
         await tx.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
-        await tx.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_output_rejected", payload: { batchId, messageIds: ids, error: error.slice(0, 500) } });
+        // The validation error can quote the AI output, and so message text: it isn't stored (design §10).
+        await tx.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_output_rejected", payload: { batchId, messageIds: ids } });
+        log.warn("ai output rejected", { batchId, errorLength: error.length });
         await tx.update(aiBatch).set({ ...finished, status: "rejected", error: "output failed validation twice" }).where(eq(aiBatch.id, batchId));
       });
       return "rejected";
@@ -171,12 +173,15 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
 
     const { decisions, valid, dropped, overflow } = result;
     // Possibly Missed: operations that couldn't be applied. A repeat or a dismissed item was handled, not missed.
-    const handled = (reason: string) => reason.startsWith("repeats") || reason.startsWith("superseded");
+    const handled = (reason: string) => reason === REPEATS || reason === SUPERSEDED;
+    const superseded = new Set(dropped.filter((d) => d.reason === SUPERSEDED).flatMap((d) => d.messageIds));
     const flagged = new Set([...dropped.filter((d) => !handled(d.reason)).flatMap((d) => d.messageIds), ...overflow.flatMap((o) => o.sourceMessageIds)]);
     await db.transaction(async (tx) => {
       await applyOperations(tx, { studentId: batch!.studentId, batchId, operations: valid, sentAt: new Map(rows.map((r) => [r.id, r.sentAt])), modelId: ai.model, promptVersion: PROMPT_VERSION });
       for (const r of rows) {
-        const d = decisions.get(r.id) ?? { decision: "ignored" as const, reason: "no decision returned" };
+        const d = superseded.has(r.id)
+          ? { decision: "superseded" as const, reason: SUPERSEDED }
+          : (decisions.get(r.id) ?? { decision: "ignored" as const, reason: "no decision returned" });
         await tx
           .update(inboxMessage)
           .set({ status: "done", decision: d.decision, decisionReason: d.reason.slice(0, 300), possiblyMissed: flagged.has(r.id), processingStartedAt: null })
@@ -188,6 +193,14 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     if (overflow.length) await raiseAlert(batch!.studentId, "ai_overflow", { batchId, notApplied: overflow.length }, now);
     return "applied";
   } catch (e) {
+    if (!(e instanceof AiFatalError || e instanceof AiRetryableError)) {
+      // Not the AI: applying failed and rolled back. Retrying would fail the same way, so flag the messages.
+      await db.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
+      await db.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_output_rejected", payload: { batchId, messageIds: ids } });
+      await db.update(aiBatch).set({ status: "failed", finishedAt: new Date(), error: (e as Error).message.slice(0, 300) }).where(eq(aiBatch.id, batchId));
+      log.error("applying ai output failed", { batchId, error: (e as Error).message });
+      return "rejected";
+    }
     // An AI outage never marks messages dead: back to pending, retried later (design §8). A fatal error also stops the loop.
     const attempts = rows[0]?.attempts ?? 0;
     const waitMin = e instanceof AiFatalError ? 0 : (BACKOFF_MIN[attempts] ?? 60);
@@ -196,7 +209,7 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
       .set({ status: "pending", processingStartedAt: null, attempts: e instanceof AiFatalError ? attempts : attempts + 1, nextAttemptAt: new Date(+now + waitMin * 60_000) })
       .where(inArray(inboxMessage.id, ids));
     await db.update(aiBatch).set({ status: "failed", finishedAt: new Date(), error: (e as Error).message.slice(0, 300) }).where(eq(aiBatch.id, batchId));
-    if (e instanceof AiFatalError || !(e instanceof AiRetryableError)) throw e;
+    if (e instanceof AiFatalError) throw e;
     log.warn("ai call failed; will retry", { batchId, attempts: attempts + 1, error: (e as Error).message });
     return "retry";
   }

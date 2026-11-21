@@ -91,6 +91,7 @@ describe("Undo", () => {
     expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual([]);
     await announce("reminder: lab 6 due 5th", () => ({ op: "create_assignment", courseId, title: "lab 6", dueDate: "2026-12-05" }));
     expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual([]);
+    expect((await pool.query("select decision, possibly_missed from inbox_message order by received_at desc limit 1")).rows).toEqual([{ decision: "superseded", possibly_missed: false }]);
   });
 
   it("restores a cancelled item", async () => {

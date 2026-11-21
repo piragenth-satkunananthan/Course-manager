@@ -9,6 +9,9 @@ import type { AiContext } from "./context";
 export const MAX_OPERATIONS = 10;
 type Decision = { decision: z.infer<typeof opsV1>["messages"][number]["decision"]; reason: string };
 export type Dropped = { op: Operation; reason: string; messageIds: string[] };
+// Dropped because the item was already handled: not Possibly Missed.
+export const SUPERSEDED = "superseded: the Student dismissed this before";
+export const REPEATS = "repeats an existing item";
 export type Validated =
   | { ok: false; error: string }
   | { ok: true; decisions: Map<string, Decision>; valid: Operation[]; dropped: Dropped[]; overflow: Operation[]; unknownCourses: z.infer<typeof opsV1>["unknownCourses"] };
@@ -47,9 +50,9 @@ export function validateOutput(raw: string, ctx: AiContext): Validated {
         if (!inSemester(date, !isA)) return "date outside the Semester";
         const type = isA ? "assignment" : "exam";
         if (ctx.suppressions.some((s) => s.entityType === type && s.courseId === op.courseId && titleKey(s.title) === titleKey(op.title) && s.dueDate === (date ?? null)))
-          return "superseded: the Student dismissed this before";
+          return SUPERSEDED;
         const existing = isA ? ctx.assignments : ctx.exams;
-        if (existing.some(same(type, op.courseId, op.title, date))) return "repeats an existing item";
+        if (existing.some(same(type, op.courseId, op.title, date))) return REPEATS;
         return null;
       }
       case "update_assignment":

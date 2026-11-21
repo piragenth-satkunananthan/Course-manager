@@ -24,7 +24,15 @@ export async function applyOperations(
   let applied = 0;
   for (const op of a.operations.filter(isAssessmentOp)) {
     // The message's time decides "most recently sent wins"; for several sources, the latest.
-    const setAt = new Date(Math.max(...op.sourceMessageIds.map((id) => +(a.sentAt.get(id) ?? 0)))).toISOString();
+    const setAt = new Date(
+      Math.max(
+        ...op.sourceMessageIds.map((id) => {
+          const t = a.sentAt.get(id);
+          if (!t) throw new Error("operation source isn't in the batch"); // validation drops these; never write with a 1970 time
+          return +t;
+        }),
+      ),
+    ).toISOString();
     const base = { studentId: a.studentId, actor: "ai" as const, setAt };
     const isA = op.op.endsWith("_assignment");
     const entityType = isA ? ("assignment" as const) : ("exam" as const);

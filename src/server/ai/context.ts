@@ -1,10 +1,10 @@
 // The context sent to the AI for one batch (design §9, file 64). buildContext is pure over a small adapter, so the
 // worker passes Postgres and scripts/ai-eval.ts passes fixtures. Timetable occurrences join with #16.
-import { instantToLocal } from "@/server/domain/time";
+import { instantToLocal, APP_TIME_ZONE } from "@/server/domain/time";
 
 export type AiContext = {
   now: string; // local Asia/Colombo date-time, "YYYY-MM-DD HH:mm"
-  timeZone: "Asia/Colombo";
+  timeZone: typeof APP_TIME_ZONE;
   semester: { id: string; startDate: string; endDate: string } | null;
   linkedTo: { courseId: string } | { semester: true };
   courses: { id: string; code: string; name: string; nicknames: string[] }[];
@@ -38,7 +38,7 @@ export async function buildContext(adapter: ContextAdapter, batch: { now: Date; 
   const local = instantToLocal(batch.now);
   return {
     now: `${local.date} ${local.time}`,
-    timeZone: "Asia/Colombo",
+    timeZone: APP_TIME_ZONE,
     semester,
     linkedTo: batch.linkedTo,
     courses,

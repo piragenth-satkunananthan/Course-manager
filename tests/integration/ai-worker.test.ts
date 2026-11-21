@@ -141,6 +141,18 @@ describe("validation and volume", () => {
 });
 
 describe("failures and crashes", () => {
+  it("flags the batch, rather than retrying forever, when applying fails", async () => {
+    const item = (await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 9", dueDate: "2026-11-27" } })).json;
+    await say("lab 9 moved to the 28th");
+    await say("unrelated", new Date(Date.now() + 1000));
+    const fake = fakeAi((ctx) => ops(ctx, [{ op: "update_assignment", assignmentId: item.id, fields: { dueDate: "2026-11-28" }, sourceMessageIds: [ctx.messages[0]!.id] }]));
+    // The Student deletes it while the AI is working, so the write fails after validation.
+    const ai: AiClient = { model: fake.model, complete: async (chat) => (await pool.query("update assignment set deleted_at = now() where id = $1", [item.id]), fake.complete(chat)) };
+    await aiTick(ai, key, later());
+    expect(await inbox()).toMatchObject([{ status: "done", decision: "rejected", possibly_missed: true }, { status: "done", decision: "rejected" }]);
+    expect(await changes()).toEqual([]);
+  });
+
   it("puts messages back to pending after an AI outage, with a backoff", async () => {
     await say("Lab due Friday");
     const down: AiClient = { model: "fake", complete: async () => Promise.reject(new AiRetryableError("NIM 503")) };

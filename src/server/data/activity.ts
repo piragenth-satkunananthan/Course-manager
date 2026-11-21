@@ -3,7 +3,7 @@ import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, type SQL } from "drizz
 import { decrypt, loadKey } from "@/server/crypto";
 import { db } from "@/server/db/client";
 import { activityEvent, assignment, autoChange, autoChangeSource, entityVersion, exam, inboxMessage, suppression, waGroup } from "@/server/db/schema";
-import { canUndo, titleKey } from "@/server/domain/auto-change";
+import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
 import { AppError, notFound } from "@/server/http/errors";
 import type { ActivityItem, AutoChangeItem } from "@/shared/schemas/activity";
 import { iso } from "./util";
@@ -16,16 +16,17 @@ const TABLES = { assignment, exam } as const;
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
 async function undoState(x: typeof db | Tx, c: Change) {
   const table = TABLES[c.entityType as keyof typeof TABLES];
-  const [row] = table ? await x.select({ version: table.version }).from(table).where(eq(table.id, c.entityId)) : [];
+  const [row] = table ? await x.select({ version: table.version }).from(table).where(and(eq(table.studentId, c.studentId), eq(table.id, c.entityId))) : [];
   const [next] = await x
     .select({ actor: entityVersion.actor })
     .from(entityVersion)
-    .where(and(eq(entityVersion.entityType, c.entityType), eq(entityVersion.entityId, c.entityId), gt(entityVersion.version, c.afterVersion)))
+    .where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.entityType, c.entityType), eq(entityVersion.entityId, c.entityId), gt(entityVersion.version, c.afterVersion)))
     .orderBy(entityVersion.version)
     .limit(1);
   return canUndo(c, row?.version ?? -1, next?.actor ?? null);
 }
 
+// shortcut: two queries per change for its Undo state; fine at one Student's volume, batch them if pages get slow.
 async function toItems(changes: Change[]): Promise<AutoChangeItem[]> {
   if (!changes.length) return [];
   const key = loadKey();
@@ -54,13 +55,14 @@ export const listAutoChanges = async (studentId: string, where?: SQL) =>
 /** The dashboard's Check these (risky, not undone, 7 days; U3) and Recent changes (48 hours). */
 export async function dashboardChanges(studentId: string, now: Date) {
   const [highlighted, recent] = await Promise.all([
-    listAutoChanges(studentId, and(ne(autoChange.risk, "normal"), gte(autoChange.createdAt, new Date(+now - 7 * 86_400_000)), isNull(autoChange.undoneAt))),
+    listAutoChanges(studentId, and(ne(autoChange.risk, "normal"), gte(autoChange.createdAt, new Date(+now - HIGHLIGHT_DAYS * 86_400_000)), isNull(autoChange.undoneAt))),
     listAutoChanges(studentId, gte(autoChange.createdAt, new Date(+now - 48 * 3_600_000))),
   ]);
   return { highlightedChanges: highlighted, recentAutoChanges: recent };
 }
 
 const PAGE = 50;
+// shortcut: the cursor is a timestamp, so rows sharing the boundary microsecond could be skipped; add an id tiebreak if seen.
 export async function listActivity(studentId: string, cursor?: string): Promise<{ items: ActivityItem[]; nextCursor: string | null }> {
   const before = cursor ? new Date(cursor) : null;
   const [changes, events] = await Promise.all([
