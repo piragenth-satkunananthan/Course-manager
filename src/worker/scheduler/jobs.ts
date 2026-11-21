@@ -1,5 +1,5 @@
 // The scheduler's jobs (design file 65). Each takes `now`, so tests can drive them with an injected clock.
-import { and, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { loadOpenDeadlines } from "@/server/data/assessments";
 import { db } from "@/server/db/client";
 import { entityVersion, user } from "@/server/db/schema";
@@ -35,13 +35,14 @@ export async function runDigest(now: Date) {
     const open = await loadOpenDeadlines(s.id, { examsFrom: today, includeTba: false });
     // Added or moved since the last digest: creates, and edits or undos that touched a due date or time. Before the
     // first digest, everything still open is new.
-    const since = (await lastDigestAt(s.id)) ?? new Date(0);
+    const since = (await lastDigestAt(s.id, today)) ?? new Date(0);
     const changed = open.length
       ? await db
           .selectDistinct({ id: entityVersion.entityId })
           .from(entityVersion)
           .where(
             and(
+              eq(entityVersion.studentId, s.id),
               inArray(entityVersion.entityId, open.map((d) => d.id)),
               gt(entityVersion.createdAt, since),
               sql`(${entityVersion.op} = 'create' or (${entityVersion.op} in ('update', 'undo') and ${entityVersion.after} ?| array['dueDate','dueTime','date','startTime']))`,

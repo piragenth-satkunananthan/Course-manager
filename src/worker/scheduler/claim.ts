@@ -18,7 +18,7 @@ export async function claimAndSend(key: Key, msg: Message) {
   const where =
     key.kind === "digest"
       ? and(eq(emailLog.studentId, key.studentId), eq(emailLog.kind, "digest"), eq(emailLog.digestDate, key.digestDate!))
-      : and(eq(emailLog.kind, "final_reminder"), eq(emailLog.entityType, key.entityType!), eq(emailLog.entityId, key.entityId!), eq(emailLog.dueAt, key.dueAt!));
+      : and(eq(emailLog.studentId, key.studentId), eq(emailLog.kind, "final_reminder"), eq(emailLog.entityType, key.entityType!), eq(emailLog.entityId, key.entityId!), eq(emailLog.dueAt, key.dueAt!));
   const [existing] = await db.select({ id: emailLog.id }).from(emailLog).where(where);
   if (existing && (await reclaim(existing.id))) return deliver(existing.id, msg);
   return null; // already sent, being sent, or skipped
@@ -28,8 +28,12 @@ export async function claimAndSend(key: Key, msg: Message) {
 export const recordSkippedDigest = (studentId: string, digestDate: string) =>
   db.insert(emailLog).values({ studentId, kind: "digest", digestDate, subject: "(nothing to report)", status: "skipped" }).onConflictDoNothing();
 
-export async function lastDigestAt(studentId: string) {
+/** When the previous day's digest went out (or was skipped). Today's own attempts don't count, so a retry keeps its content. */
+export async function lastDigestAt(studentId: string, today: string) {
   // Raw max() comes back as text, not a Date.
-  const [row] = await db.select({ at: sql<string | null>`max(${emailLog.createdAt})` }).from(emailLog).where(and(eq(emailLog.studentId, studentId), eq(emailLog.kind, "digest")));
+  const [row] = await db
+    .select({ at: sql<string | null>`max(${emailLog.createdAt})` })
+    .from(emailLog)
+    .where(and(eq(emailLog.studentId, studentId), eq(emailLog.kind, "digest"), sql`${emailLog.status} in ('sent', 'skipped')`, sql`${emailLog.digestDate} < ${today}`));
   return row?.at ? new Date(row.at) : null;
 }

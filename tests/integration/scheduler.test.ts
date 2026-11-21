@@ -64,7 +64,7 @@ describe("Final Reminders", () => {
     expect(sent).toMatchObject([{ to: ["student@example.com"], subject: "Due in 4 hours: Lab 4 report (CS2010)" }]);
     const [row] = (await pool.query("select id, status from email_log")).rows;
     expect(row).toMatchObject({ status: "sent" });
-    expect(sent[0]!.idempotencyKey).toBe(row.id);
+    expect(sent[0]!.idempotencyKey).toBe(`${row.id}:1`);
     await runFinalReminders(at("13:00"));
     expect(sent).toHaveLength(1);
   });
@@ -118,10 +118,21 @@ describe("the Daily Digest", () => {
 
     await runDigest(at("07:30"));
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.text).toMatch(/Due soon\n- Assignment: CS2010 · Today · Fri 15 Jan, 16:30\n- Assignment: CS2010 · Day after · Sun 17 Jan, time not announced/);
+    expect(sent[0]!.text).toMatch(/Due soon\nFri 15 Jan\n- Assignment: CS2010 · Today · Fri 15 Jan, 16:30\nSun 17 Jan\n- Assignment: CS2010 · Day after · Sun 17 Jan, time not announced/);
     expect(sent[0]!.text).toMatch(/Added or moved\n(- .*\n)*- Assignment: CS2010 · Next week/);
     await runDigest(at("08:30"));
     expect(sent).toHaveLength(1);
+  });
+
+  it("keeps its Added or moved items when a failed send is retried, with a new idempotency key", async () => {
+    await newAssignment({ title: "Fresh", dueDate: "2027-01-26" });
+    failNext = 1;
+    await runDigest(at("07:00"));
+    expect(sent).toHaveLength(0);
+    await runDigest(at("07:01"));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toContain("Fresh");
+    expect(sent[0]!.idempotencyKey).toMatch(/:2$/);
   });
 
   it("sends only one under concurrent ticks", async () => {
