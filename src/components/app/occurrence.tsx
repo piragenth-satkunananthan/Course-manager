@@ -18,9 +18,6 @@ import { KIND_ICON } from "./weekly-classes";
 
 const title = (o: Occurrence) => `${o.courseCode} ${SESSION_KIND_LABEL[o.kind]}`;
 
-/** A list key that stays unique when a class is moved onto a day that has its own occurrence of that class. */
-export const occurrenceKey = (o: Occurrence) => `${o.classSessionId ?? "extra"}-${o.sessionChangeId ?? "weekly"}-${o.date}`;
-
 /**
  * Saves a change for this class. With no change yet it creates one; if another arrived meanwhile (409 with
  * existingId), it edits that one instead (AC: "the UI edits the existing change"). An existing change is PATCHed.
