@@ -771,7 +771,7 @@ Every change is logged and can be undone, singly or by batch. Risky ones are hig
   - **Backups:** encrypted with `age` to a public key. The private key is kept off the VM, by the Student.
 - **Web hardening:**
   - CSRF: `withStudent()` rejects any request other than GET from another Origin, and Better Auth checks Origin on its own endpoints. Cookies are also SameSite=Lax.
-  - Headers: a Content-Security-Policy with a per-request nonce, generated in `src/middleware.ts` because a nonce can't be set statically in `next.config.ts`. Also `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`.
+  - Headers: a Content-Security-Policy with a per-request nonce for scripts, generated in `src/proxy.ts` (Next.js 16's name for `middleware.ts`) because a nonce can't be set statically in `next.config.ts`. Styles allow `'unsafe-inline'`: Radix and sonner set inline styles, and nonce-only styles caused 21 violations in normal use (decided by the product owner on 2026-11-21). Also `X-Frame-Options: DENY` and `Referrer-Policy: same-origin`.
 - **Input validation:** zod checks happen at every place data enters the system: forms and actions, AI output, and Baileys events.
 - **Privacy:**
   - Chats that aren't linked are dropped inside Baileys and never decrypted (§8; decision U10).
