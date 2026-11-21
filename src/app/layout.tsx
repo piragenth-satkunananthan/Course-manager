@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { connection } from "next/server";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap", variable: "--font-jakarta" });
@@ -12,7 +13,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   await connection(); // render per request, so Next.js applies the CSP nonce from src/proxy.ts
   return (
     <html lang="en" className={jakarta.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

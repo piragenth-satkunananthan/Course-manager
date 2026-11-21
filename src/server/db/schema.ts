@@ -1,5 +1,6 @@
 // Every table lives here (design file 17). #5 adds Better Auth's tables; later tickets add the domain tables.
-import { bigint, boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 const updatedAt = () =>
@@ -72,3 +73,63 @@ export const rateLimit = pgTable("rate_limit", {
   count: integer("count").notNull(),
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
+
+// Semesters and Courses (§3, #6).
+const id = () => uuid("id").primaryKey().defaultRandom();
+const studentId = () => text("student_id").notNull().references(() => user.id, { onDelete: "cascade" });
+
+export const semester = pgTable(
+  "semester",
+  {
+    id: id(),
+    studentId: studentId(),
+    name: text("name").notNull(),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }).notNull(),
+    isCurrent: boolean("is_current").default(false).notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    // The AI may extend end_date (#16), so the row is versioned like every AI-writable item.
+    version: integer("version").default(1).notNull(),
+    fieldSetAt: jsonb("field_set_at").$type<Record<string, string>>().default({}).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("semester_one_current").on(t.studentId).where(sql`${t.isCurrent}`),
+    check("semester_dates_chk", sql`${t.endDate} >= ${t.startDate}`),
+  ],
+);
+
+export const courseColour = pgEnum("course_colour", ["blue", "violet", "pink", "orange", "cyan", "olive", "slate"]);
+
+export const course = pgTable(
+  "course",
+  {
+    id: id(),
+    studentId: studentId(),
+    semesterId: uuid("semester_id").notNull().references(() => semester.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    lecturerName: text("lecturer_name"),
+    colour: courseColour("colour").notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("course_code_unique").on(t.studentId, t.semesterId, sql`lower(${t.code})`)],
+);
+
+export const nicknameSource = pgEnum("nickname_source", ["manual", "unknown_course"]);
+
+export const courseNickname = pgTable(
+  "course_nickname",
+  {
+    id: id(),
+    studentId: studentId(),
+    courseId: uuid("course_id").notNull().references(() => course.id, { onDelete: "cascade" }),
+    nickname: text("nickname").notNull(), // stored lowercase
+    source: nicknameSource("source").default("manual").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("course_nickname_unique").on(t.studentId, t.courseId, t.nickname)],
+);

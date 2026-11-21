@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth } from "@/server/auth";
 import { pool } from "@/server/db/client";
 import { createStudent } from "../../tools/create-student";
+import { resetData } from "./api";
 
 const ORIGIN = process.env.APP_ORIGIN!;
 const EMAIL = "student@example.com";
@@ -20,6 +21,7 @@ const signIn = (ip: string, password = PASSWORD, extra: Record<string, string> =
   post("/sign-in/email", { email: EMAIL, password }, { "x-real-ip": ip, ...extra });
 
 beforeAll(async () => {
+  await resetData();
   await createStudent(EMAIL, PASSWORD);
 });
 afterAll(() => pool.end());

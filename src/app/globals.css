@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is([data-theme="dark"] *));
 
 /* Semantic tokens from docs/design-system.md §2.1 and §9. Components use these only, never raw hex or palette classes. */
 :root {
@@ -22,6 +26,21 @@
   --success: #15803d;
   --success-subtle: #f0fdf4;
   --radius: 10px;
+  /* Course identification colours (§2.1): only as a bar, a dot or a chip border, always next to the code. */
+  --course-blue: #1d4ed8;
+  --course-violet: #6d28d9;
+  --course-pink: #be185d;
+  --course-orange: #c2410c;
+  --course-cyan: #0e7490;
+  --course-olive: #4d7c0f;
+  --course-slate: #475569;
+  /* Names shadcn/ui components use, mapped onto the palette above. */
+  --popover: var(--card);
+  --popover-foreground: var(--card-foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--muted);
+  --accent-foreground: var(--foreground);
 }
 
 /* Dark values (§2.1), reserved for M2: defined now so components never assume a light background; nothing sets data-theme yet. */
@@ -60,6 +79,19 @@
   --color-warning-subtle: var(--warning-subtle);
   --color-success: var(--success);
   --color-success-subtle: var(--success-subtle);
+  --color-course-blue: var(--course-blue);
+  --color-course-violet: var(--course-violet);
+  --color-course-pink: var(--course-pink);
+  --color-course-orange: var(--course-orange);
+  --color-course-cyan: var(--course-cyan);
+  --color-course-olive: var(--course-olive);
+  --color-course-slate: var(--course-slate);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --radius-sm: 6px;
   --radius-md: var(--radius);
   --radius-lg: 14px;
@@ -73,6 +105,9 @@
 }
 
 @layer base {
+  * {
+    @apply border-border;
+  }
   body {
     @apply bg-background text-foreground font-sans text-base antialiased;
   }

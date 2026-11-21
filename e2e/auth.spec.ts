@@ -1,13 +1,6 @@
 // Seam: the real app in a browser, at phone and desktop sizes (#5).
-import { expect, test, type Page } from "@playwright/test";
-import { STUDENT } from "./global-setup";
-
-async function signIn(page: Page, password = STUDENT.password) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(STUDENT.email);
-  await page.getByLabel("Password (required)").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
+import { expect, test } from "@playwright/test";
+import { signIn } from "./helpers";
 
 test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
   await page.goto("/");

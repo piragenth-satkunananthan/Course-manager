@@ -1,10 +1,8 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { NavBottom, NavSidebar } from "@/components/app/nav";
-import { auth } from "@/server/auth";
+import { requireStudentId } from "@/server/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  if (!(await auth.api.getSession({ headers: await headers() }))) redirect("/login");
+  await requireStudentId();
   return (
     <>
       <NavSidebar />

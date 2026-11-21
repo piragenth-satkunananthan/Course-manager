@@ -7,7 +7,8 @@ export function proxy(request: NextRequest) {
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    // Radix and sonner set inline styles; a nonce would disable 'unsafe-inline', so styles allow it. Scripts stay nonce-only.
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     "font-src 'self'",
     "connect-src 'self'",
