@@ -1,6 +1,6 @@
 "use client";
 // One class on one day (design-system §6.2) and its sheet (§7.4): cancel, reschedule, or edit or remove a change.
-import { ArrowRightLeft, Ban, CirclePlus, Plus } from "lucide-react";
+import { ArrowRightLeft, Ban, CircleDot, CirclePlus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +17,9 @@ import { ResponsiveDialog } from "./responsive-dialog";
 import { KIND_ICON } from "./weekly-classes";
 
 const title = (o: Occurrence) => `${o.courseCode} ${SESSION_KIND_LABEL[o.kind]}`;
+
+/** A list key that stays unique when a class is moved onto a day that has its own occurrence of that class. */
+export const occurrenceKey = (o: Occurrence) => `${o.classSessionId ?? "extra"}-${o.sessionChangeId ?? "weekly"}-${o.date}`;
 
 /**
  * Saves a change for this class. With no change yet it creates one; if another arrived meanwhile (409 with
@@ -99,7 +102,9 @@ export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
           </span>
           {o.location && <span className="block text-sm text-muted-foreground">{o.location}</span>}
           <span className="mt-1 flex flex-wrap gap-1">
-            {now && <Badge className="bg-primary text-primary-foreground">Now</Badge>}
+            {now && (
+              <Badge className="bg-primary text-primary-foreground"><CircleDot aria-hidden="true" />Now</Badge>
+            )}
             {o.status === "cancelled" && (
               <Badge className="bg-muted text-muted-foreground"><Ban aria-hidden="true" />Cancelled</Badge>
             )}

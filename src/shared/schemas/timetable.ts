@@ -59,7 +59,9 @@ export const Occurrence = z.object({
   originalDate: z.string().nullable(), originalStartTime: z.string().nullable(), sessionChangeId: Id.nullable(), sessionChangeVersion: z.number().int().nullable(),
 });
 export type Occurrence = z.infer<typeof Occurrence>;
-export const TimetableQuery = z.strictObject({ week: IsoDate });
+export const TimetableQuery = z.strictObject({
+  week: IsoDate.refine((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 1, "The week starts on a Monday"),
+});
 
 // ---- Form shapes (the browser builds the POST/PATCH bodies from these) ----
 export const RescheduleForm = z

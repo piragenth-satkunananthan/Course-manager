@@ -78,6 +78,13 @@ describe("Session Changes", () => {
     expect(res).toMatchObject({ status: 400, json: { error: { code: "VALIDATION" } } });
   });
 
+  it("refuse an edit that moves a change outside the Semester", async () => {
+    const c = (await post({ kind: "cancel", classSessionId: lectureId, date: "2026-11-26" })).json;
+    const res = await a(change.PATCH, "PATCH", `/session-changes/${c.id}`, { params: { id: c.id }, body: { expectedVersion: 1, kind: "reschedule", newDate: "2026-12-03", newStart: "10:00", newEnd: "12:00" } });
+    expect(res).toMatchObject({ status: 400, json: { error: { fieldErrors: { newDate: expect.any(String) } } } });
+    await a(change.DELETE, "DELETE", `/session-changes/${c.id}`, { params: { id: c.id }, query: { expectedVersion: "1" } });
+  });
+
   it("refuse a date that isn't one of the class's occurrences", async () => {
     const res = await post({ kind: "cancel", classSessionId: lectureId, date: "2026-11-11" }); // a Wednesday
     expect(res.json.error.fieldErrors.date).toBeTruthy();

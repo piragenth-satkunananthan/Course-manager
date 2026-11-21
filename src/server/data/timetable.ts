@@ -70,17 +70,39 @@ const toChange = (r: typeof sessionChange.$inferSelect): SessionChange => ({
   id: r.id, courseId: r.courseId, classSessionId: r.classSessionId, kind: r.kind, sessionKind: r.sessionKind, originalDate: r.originalDate,
   newDate: r.newDate, newStartTime: hhmm(r.newStartTime), newEndTime: hhmm(r.newEndTime), newLocation: r.newLocation, version: r.version,
 });
-const oneChange = async (dbOrTx: DbOrTx, id: string) => toChange((await dbOrTx.select().from(sessionChange).where(eq(sessionChange.id, id)))[0]!);
+const oneChange = async (dbOrTx: DbOrTx, studentId: string, id: string) =>
+  toChange((await dbOrTx.select().from(sessionChange).where(and(eq(sessionChange.studentId, studentId), eq(sessionChange.id, id))))[0]!);
 
-async function activeChangeFor(dbOrTx: DbOrTx, studentId: string, classSessionId: string, date: string) {
+/** The active cancel or reschedule for one occurrence, if any. The AI applier (#16) uses it to update instead of duplicating (§9). */
+export async function activeChangeFor(dbOrTx: DbOrTx, studentId: string, classSessionId: string, date: string) {
   const [row] = await dbOrTx
     .select()
     .from(sessionChange)
     .where(and(eq(sessionChange.studentId, studentId), eq(sessionChange.classSessionId, classSessionId), eq(sessionChange.originalDate, date), isNull(sessionChange.deletedAt)));
   return row;
 }
-const alreadyChanged = (row: typeof sessionChange.$inferSelect) =>
-  new AppError("CONFLICT", "This class already has a change. Edit that one instead.", { existingId: row.id, current: toChange(row) });
+const alreadyChanged = (row: typeof sessionChange.$inferSelect | undefined) =>
+  row
+    ? new AppError("CONFLICT", "This class already has a change. Edit that one instead.", { existingId: row.id, current: toChange(row) })
+    : new AppError("CONFLICT", "This class just changed. Reload and try again.");
+
+/**
+ * The rules a Session Change must meet after any write, by anyone: Student edits here, and the AI applier (#16)
+ * after its writeEntity calls. Throwing inside the transaction rolls the write back.
+ */
+export async function checkSessionChange(tx: DbOrTx, studentId: string, row: Record<string, unknown>) {
+  const after = snapshot("session_change", row) as Record<string, string | null>;
+  if (!after.classSessionId !== (after.kind === "extra")) throw invalid("kind", "An extra session can't become a change to a weekly class, or the other way round");
+  if (after.kind === "cancel") return;
+  if (!after.newDate || !after.newStartTime || !after.newEndTime) throw invalid("newDate", "Give the new date, start and end time");
+  if (after.newEndTime <= after.newStartTime) throw invalid("newEnd", "The end time must be after the start time");
+  const [sem] = await tx
+    .select({ start: semester.startDate, end: semester.endDate })
+    .from(course)
+    .innerJoin(semester, eq(semester.id, course.semesterId))
+    .where(and(eq(course.studentId, studentId), eq(course.id, after.courseId!)));
+  if (!sem || after.newDate < sem.start || after.newDate > sem.end) throw invalid("newDate", OUTSIDE_SEMESTER);
+}
 
 const student = () => ({ actor: "student" as const, setAt: new Date().toISOString() });
 
@@ -111,11 +133,11 @@ export async function createSessionChange(studentId: string, input: SessionChang
         if (existing) throw alreadyChanged(existing);
       }
       const { row } = await writeEntity(tx, { studentId, entityType: "session_change", op: "create", proposed, ...student() });
-      return oneChange(tx, row.id);
+      return oneChange(tx, studentId, row.id);
     });
   } catch (e) {
     // Two creates at once: the partial unique index stops the second; answer it like the check above.
-    if (input.kind !== "extra" && isUniqueViolation(e, "session_change_one_active")) throw alreadyChanged((await activeChangeFor(db, studentId, input.classSessionId, input.date))!);
+    if (input.kind !== "extra" && isUniqueViolation(e, "session_change_one_active")) throw alreadyChanged(await activeChangeFor(db, studentId, input.classSessionId, input.date));
     throw e;
   }
 }
@@ -123,22 +145,15 @@ export async function createSessionChange(studentId: string, input: SessionChang
 export async function updateSessionChange(studentId: string, id: string, { expectedVersion, kind, newDate, newStart, newEnd, newLocation }: SessionChangeUpdate) {
   return db.transaction(async (tx) => {
     const proposed = { kind, newDate, newStartTime: newStart, newEndTime: newEnd, newLocation };
-    const { row } = await writeEntity(tx, { studentId, entityType: "session_change", op: "update", entityId: id, proposed, expectedVersion, ...student(), toDto: async (r) => oneChange(tx, r.id) });
-    // Checked on the result, since a PATCH sends only some fields. Throwing rolls the write back.
-    const after = snapshot("session_change", row) as Record<string, string | null>;
-    const wasExtra = !after.classSessionId;
-    if (wasExtra !== (after.kind === "extra")) throw invalid("kind", "An extra session can't become a change to a weekly class, or the other way round");
-    if (after.kind !== "cancel") {
-      if (!after.newDate || !after.newStartTime || !after.newEndTime) throw invalid("newDate", "Give the new date, start and end time");
-      if (after.newEndTime <= after.newStartTime) throw invalid("newEnd", "The end time must be after the start time");
-    }
-    return oneChange(tx, row.id);
+    const { row } = await writeEntity(tx, { studentId, entityType: "session_change", op: "update", entityId: id, proposed, expectedVersion, ...student(), toDto: async (r) => oneChange(tx, studentId, r.id) });
+    await checkSessionChange(tx, studentId, row); // on the result, since a PATCH sends only some fields
+    return oneChange(tx, studentId, row.id);
   });
 }
 
 export async function deleteSessionChange(studentId: string, id: string, expectedVersion: number) {
   await db.transaction((tx) =>
-    writeEntity(tx, { studentId, entityType: "session_change", op: "delete", entityId: id, expectedVersion, ...student(), toDto: async (r) => oneChange(tx, r.id) }),
+    writeEntity(tx, { studentId, entityType: "session_change", op: "delete", entityId: id, expectedVersion, ...student(), toDto: async (r) => oneChange(tx, studentId, r.id) }),
   );
   return null;
 }

@@ -36,6 +36,18 @@ describe("expandOccurrences", () => {
   });
 });
 
+describe("expandOccurrences, edge cases", () => {
+  it("drops a reschedule whose original date isn't one of the class's days", () => {
+    const changes = [change({ id: "x", kind: "reschedule", originalDate: "2026-11-11", newDate: "2026-11-13", newStartTime: "10:00", newEndTime: "12:00" })];
+    expect(expandOccurrences([lecture], changes, { from: "2026-11-09", to: "2026-11-15" }).map(brief)).toEqual(["2026-11-12 10:00 lec normal"]);
+  });
+
+  it("shows both when a class is moved onto a day that has its own occurrence", () => {
+    const changes = [change({ id: "x", kind: "reschedule", originalDate: "2026-11-05", newDate: "2026-11-12", newStartTime: "14:00", newEndTime: "16:00" })];
+    expect(expandOccurrences([lecture], changes, { from: "2026-11-12", to: "2026-11-12" }).map(brief)).toEqual(["2026-11-12 10:00 lec normal", "2026-11-12 14:00 lec rescheduled"]);
+  });
+});
+
 describe("isHappeningNow", () => {
   const occ = expandOccurrences([lecture], [], { from: "2026-11-05", to: "2026-11-05" })[0]!;
   it("is true between start and end in Colombo", () => {

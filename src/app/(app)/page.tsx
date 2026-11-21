@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AddMenu } from "@/components/app/add-menu";
 import { DeadlineItem } from "@/components/app/deadline-item";
 import { EmptyState } from "@/components/app/empty-state";
-import { SessionItem } from "@/components/app/occurrence";
+import { occurrenceKey, SessionItem } from "@/components/app/occurrence";
 import { Button } from "@/components/ui/button";
 import { dayLabel, formatDate } from "@/lib/format";
 import { listCourseOptions } from "@/server/data/courses";
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="mt-2 space-y-2" aria-label="Today's classes">
             {dashboard.todaySessions.map((o) => (
-              <SessionItem key={`${o.classSessionId ?? o.sessionChangeId}-${o.date}`} o={o} now={isHappeningNow(o, new Date())} />
+              <SessionItem key={occurrenceKey(o)} o={o} now={isHappeningNow(o, new Date())} />
             ))}
           </ul>
         )}

@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, CalendarX } from "lucide-react";
 import Link from "next/link";
 import { DeadlineItem } from "@/components/app/deadline-item";
 import { EmptyState } from "@/components/app/empty-state";
-import { AddExtraClass, SessionItem } from "@/components/app/occurrence";
+import { AddExtraClass, occurrenceKey, SessionItem } from "@/components/app/occurrence";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { listDeadlinesOn } from "@/server/data/assessments";
@@ -50,7 +50,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
         ) : (
           <ul className="space-y-2">
             {occurrences.map((o) => (
-              <SessionItem key={`${o.classSessionId ?? o.sessionChangeId}-${o.date}`} o={o} now={isHappeningNow(o, now)} />
+              <SessionItem key={occurrenceKey(o)} o={o} now={isHappeningNow(o, now)} />
             ))}
           </ul>
         )}
