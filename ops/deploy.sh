@@ -7,11 +7,16 @@ cd /opt/course-manager
 
 # Record the tag in .env so every later `docker compose` command resolves the same images.
 sed -i '/^IMAGE_TAG=/d' .env && echo "IMAGE_TAG=$SHA" >> .env
-set -a; . ./.env; set +a
+# Read only what this script needs; .env is Compose syntax, so it is never sourced by the shell.
+env_value() { grep -m1 "^$1=" .env | cut -d= -f2-; }
+APP_HOST="$(env_value APP_HOST)"
+BACKUP_AGE_RECIPIENT="$(env_value BACKUP_AGE_RECIPIENT)"
+: "${APP_HOST:?APP_HOST missing from .env}" "${BACKUP_AGE_RECIPIENT:?BACKUP_AGE_RECIPIENT missing from .env}"
 
-# 1. Encrypted pre-deploy dump, keeping the last 3 (skipped on the very first deploy, when there's no database yet).
+# 1. Encrypted pre-deploy dump, keeping the last 3. Skipped only on the very first deploy, when no database volume exists yet.
 mkdir -p backups
-if [ -n "$(docker compose ps -q --status running postgres)" ]; then
+if docker volume inspect course-manager_pgdata >/dev/null 2>&1; then
+  docker compose up -d --wait postgres
   docker compose exec -T postgres pg_dump -U app -d course_manager -Fc | age -r "$BACKUP_AGE_RECIPIENT" > "backups/predeploy-$SHA.dump.age"
   ls -1t backups/predeploy-*.dump.age | tail -n +4 | xargs -r rm --
 fi

@@ -14,8 +14,14 @@ export async function createStudent(email: string, password: string) {
   const ctx = await auth.$context;
   if ((await ctx.adapter.count({ model: "user" })) > 0) throw new Error("A Student account already exists; v1 has one Student");
   // internalAdapter is the path Better Auth's own admin createUser uses; disableSignUp doesn't block it.
+  const hash = await ctx.password.hash(password);
   const user = await ctx.internalAdapter.createUser({ email, name: "Student", emailVerified: true }, { method: "admin" });
-  await ctx.internalAdapter.linkAccount({ userId: user.id, providerId: "credential", accountId: user.id, password: await ctx.password.hash(password) });
+  try {
+    await ctx.internalAdapter.linkAccount({ userId: user.id, providerId: "credential", accountId: user.id, password: hash });
+  } catch (e) {
+    await ctx.internalAdapter.deleteUser(user.id); // don't leave a user without a password, which would block a retry
+    throw e;
+  }
   return user;
 }
 

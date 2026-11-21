@@ -5,7 +5,7 @@ import { STUDENT } from "./global-setup";
 async function signIn(page: Page, password = STUDENT.password) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(STUDENT.email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Password (required)").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
@@ -18,6 +18,14 @@ test("signed out, the dashboard redirects to sign-in", async ({ page }) => {
 test("a wrong password shows an error", async ({ page }) => {
   await signIn(page, "not the right password");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText("Email or password is incorrect");
+});
+
+test("an empty form shows an error under each field and a focused summary", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toBeFocused();
+  await expect(page.getByLabel("Email (required)")).toHaveAccessibleDescription("Enter your email");
+  await expect(page.getByLabel("Password (required)")).toHaveAccessibleDescription("Enter your password");
 });
 
 test("the Student signs in and sees the empty dashboard with the right navigation", async ({ page }, info) => {

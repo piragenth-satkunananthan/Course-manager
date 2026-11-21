@@ -1,8 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { TEST_DATABASE_URL } from "./tests/test-db";
 
 const PORT = 3100;
 export const E2E_ENV = {
-  DATABASE_URL: process.env.DATABASE_URL_TEST ?? "postgres://app:app@127.0.0.1:5432/course_manager_test",
+  DATABASE_URL: TEST_DATABASE_URL,
   APP_ORIGIN: `http://localhost:${PORT}`,
   BETTER_AUTH_URL: `http://localhost:${PORT}`,
   BETTER_AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-0000",

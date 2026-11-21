@@ -9,7 +9,12 @@ try {
 } catch (e) {
   out = e.stdout; // npm audit exits non-zero when it finds anything
 }
-const vulns = Object.values(JSON.parse(out).vulnerabilities ?? {});
+const report = JSON.parse(out);
+if (report.error || !report.vulnerabilities) {
+  console.error(`npm audit could not run: ${report.error?.summary ?? "no vulnerabilities field in its output"}`);
+  process.exit(1);
+}
+const vulns = Object.values(report.vulnerabilities);
 const today = new Date().toISOString().slice(0, 10);
 const allowed = new Map(JSON.parse(readFileSync("audit-allowlist.json", "utf8")).map((a) => [a.name, a]));
 

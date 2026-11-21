@@ -14,7 +14,7 @@ export default function DashboardPage() {
             Add Course
           </Link>
           <Link href="/settings#whatsapp" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-semibold md:min-h-10">
-            <LinkIcon size={16} aria-hidden="true" />
+            <LinkIcon size={20} strokeWidth={1.75} aria-hidden="true" />
             Link WhatsApp
           </Link>
         </div>

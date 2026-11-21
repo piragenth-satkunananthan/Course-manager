@@ -5,7 +5,12 @@ x-logging: &logging
   driver: json-file
   options: { max-size: 10m, max-file: "3" }
 x-image: &worker-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-worker:${IMAGE_TAG:?set IMAGE_TAG}
+x-web-image: &web-image ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-web:${IMAGE_TAG:?set IMAGE_TAG}
 x-db-url: &db-url postgres://app:${POSTGRES_PASSWORD:?}@postgres:5432/course_manager
+x-auth-env: &auth-env
+  APP_ORIGIN: ${APP_ORIGIN:?}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
 
 services:
   caddy:
@@ -18,18 +23,20 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
     mem_limit: 48m
     oom_score_adj: 0
     restart: unless-stopped
     logging: *logging
 
   web:
-    image: ${IMAGE_REPO:-ghcr.io/piragenth-satkunananthan/course-manager}-web:${IMAGE_TAG:?set IMAGE_TAG}
+    image: *web-image
     environment:
+      <<: *auth-env
       DATABASE_URL: *db-url
-      APP_ORIGIN: ${APP_ORIGIN:?}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
@@ -47,11 +54,9 @@ services:
   worker:
     image: *worker-image
     environment:
+      <<: *auth-env # create-student runs in this service and loads the auth config
       DATABASE_URL: *db-url
-      # create-student runs in this service and loads the auth config.
-      APP_ORIGIN: ${APP_ORIGIN:?}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+    # shortcut: no healthcheck until #9 gives the worker a health_signal to report.
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }

@@ -1,4 +1,5 @@
 # Local development and tests: Postgres only, with a dev and a test database (design file 76).
+name: course-manager-dev
 services:
   postgres:
     image: postgres:16-alpine
