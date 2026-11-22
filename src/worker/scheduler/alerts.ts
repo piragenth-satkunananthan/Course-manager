@@ -28,8 +28,12 @@ const CAUSES = {
     whatToDo: "The AI applied the first 10 changes and flagged the rest. Check the Activity Log for what was applied and what wasn't.",
   },
   ai_auth: {
-    title: "the AI service refused the key",
-    whatToDo: "Auto Changes have stopped; messages are queued. Check NIM_API_KEY and NIM_MODEL in the server's .env.",
+    title: "the AI service refused the key or the model",
+    whatToDo: "Auto Changes have stopped; messages are queued. Check NIM_API_KEY and NIM_MODEL in the server's .env (the key may be refused, or the model no longer offered). The AI checks again every 5 minutes.",
+  },
+  ai_outage: {
+    title: "the AI service has been failing for over an hour",
+    whatToDo: "NVIDIA NIM keeps timing out or refusing (busy or down). Auto Changes are delayed; messages are queued and retried every hour, and nothing is lost. If it lasts, check NIM's status page.",
   },
   final_reminder_undeliverable: {
     title: "a Final Reminder couldn't be sent",

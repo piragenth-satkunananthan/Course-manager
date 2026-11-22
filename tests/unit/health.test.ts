@@ -26,4 +26,27 @@ describe("evaluateHealth", () => {
     const mailDown = evaluateHealth({ scheduler: { lastOkAt: ago(1), lastErrorAt: null }, email: { lastOkAt: null, lastErrorAt: ago(1) } }, NOW);
     expect(mailDown.pingReminders).toBe(false);
   });
+
+  describe("the AI and the capture check (#15)", () => {
+    const base = { scheduler: { lastOkAt: ago(1), lastErrorAt: null }, wa_socket: { lastOkAt: ago(5), lastErrorAt: null }, ai: { lastOkAt: ago(1), lastErrorAt: null } };
+    const ai = (oldestWaitingMs: number | null, paused = false) => ({ oldestWaitingMs, paused });
+
+    it("pings capture while WhatsApp and the AI are healthy; a message waiting over 30 minutes or a stopped AI loop stops it", () => {
+      expect(evaluateHealth(base, NOW, ai(29 * 60_000)).pingCapture).toBe(true);
+      expect(evaluateHealth(base, NOW, ai(31 * 60_000)).pingCapture).toBe(false);
+      expect(evaluateHealth({ ...base, ai: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(null)).pingCapture).toBe(false);
+      expect(evaluateHealth({ ...base, wa_socket: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(null)).pingCapture).toBe(false);
+    });
+
+    it("stays healthy while paused, however long messages wait, and shows the paused banner instead of the AI one", () => {
+      const paused = evaluateHealth({ ...base, ai: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(5 * 3_600_000, true));
+      expect(paused).toMatchObject({ pingCapture: true, banners: [{ kind: "auto_changes_paused" }] });
+    });
+
+    it("shows the AI banner when the AI is unhealthy, after the worker banner, at most two", () => {
+      expect(evaluateHealth(base, NOW, ai(31 * 60_000)).banners).toEqual([{ kind: "ai_unavailable", since: ago(31).toISOString() }]);
+      const stale = { ...base, scheduler: { lastOkAt: ago(10), lastErrorAt: null } };
+      expect(evaluateHealth(stale, NOW, ai(31 * 60_000)).banners.map((b) => b.kind)).toEqual(["worker_unhealthy", "ai_unavailable"]);
+    });
+  });
 });

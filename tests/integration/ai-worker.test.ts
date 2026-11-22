@@ -9,7 +9,7 @@ import type { AiContext } from "@/server/ai/context";
 import { loadKey } from "@/server/crypto";
 import { pool } from "@/server/db/client";
 import { aiTick, claimBatch, resetStale } from "../../src/worker/ai/batcher";
-import { type AiClient, AiRetryableError } from "../../src/worker/ai/nim-client";
+import { type AiClient, AiFatalError, AiRetryableError } from "../../src/worker/ai/nim-client";
 import { Ingest } from "../../src/worker/whatsapp/ingest";
 import { client, resetData, seedStudent } from "./api";
 
@@ -233,5 +233,52 @@ describe("Possibly Missed and Unknown Courses (#14)", () => {
     await say("ENG essay due 28th");
     await aiTick(unknown("ENG"), key, later());
     expect(await mentions()).toMatchObject([{ status: "ignored", ops: 2 }]);
+  });
+});
+
+describe("pause, outages and limits (#15)", () => {
+  const alerts = async () => (await pool.query("select payload->>'cause' as cause from activity_event where kind = 'alert' order by created_at")).rows.map((r) => r.cause);
+  const down: AiClient = { model: "fake", complete: async () => Promise.reject(new AiRetryableError("NIM 503")) };
+
+  it("while paused, messages queue and the AI isn't called; resuming processes them", async () => {
+    await pool.query("update \"user\" set auto_changes_paused = true");
+    await say("Lab due Friday");
+    const ai = fakeAi((ctx) => ops(ctx, [create(ctx)]));
+    await aiTick(ai, key, later(10));
+    expect(ai.calls).toBe(0);
+    expect(await inbox()).toMatchObject([{ status: "pending", attempts: 0 }]);
+    await pool.query("update \"user\" set auto_changes_paused = false");
+    await aiTick(ai, key, later(11));
+    expect(await inbox()).toMatchObject([{ status: "done", decision: "applied" }]);
+  });
+
+  it("backs off 1, 5, 15 and 60 minutes, then hourly; never marks a message dead; alerts once after an hour of failures", async () => {
+    await say("Lab due Friday");
+    let t = later();
+    const waits: number[] = [];
+    const seen: string[][] = [];
+    for (let i = 0; i < 6; i++) {
+      await aiTick(down, key, t);
+      const [m] = (await pool.query("select next_attempt_at from inbox_message")).rows;
+      waits.push(Math.round((+m.next_attempt_at - +t) / 60_000));
+      seen.push(await alerts());
+      t = new Date(+m.next_attempt_at + 1000);
+    }
+    expect(waits).toEqual([1, 5, 15, 60, 60, 60]);
+    expect(await inbox()).toMatchObject([{ status: "pending", attempts: 6 }]);
+    // Failures began about 3 minutes after the message: no alert until they've gone on for an hour, then only one.
+    expect(seen.map((a) => a.length)).toEqual([0, 0, 0, 0, 1, 1]);
+    expect(seen[5]).toEqual(["ai_outage"]);
+
+    const ai = fakeAi((ctx) => ops(ctx, []));
+    await aiTick(ai, key, t);
+    expect(await inbox()).toMatchObject([{ status: "done", decision: "applied" }]);
+  });
+
+  it("a fatal error (key refused, model gone) leaves the messages untouched and stops the tick", async () => {
+    await say("Lab due Friday");
+    const refused: AiClient = { model: "fake", complete: async () => Promise.reject(new AiFatalError("NIM refused the key (401)")) };
+    await expect(aiTick(refused, key, later())).rejects.toBeInstanceOf(AiFatalError);
+    expect(await inbox()).toMatchObject([{ status: "pending", attempts: 0, possibly_missed: false }]);
   });
 });

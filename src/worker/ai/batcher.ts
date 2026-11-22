@@ -20,6 +20,7 @@ const OLDEST_MS = 5 * 60_000;
 const STALE_MS = 10 * 60_000;
 const MAX_BATCH = 30;
 const BACKOFF_MIN = [1, 5, 15, 60]; // then hourly
+const OUTAGE_ALERT_MS = 60 * 60_000;
 const PREVIEW = new Error("preview only: rolled back");
 // Deletes (revoke rows) never go to the AI: processDeletes handles them.
 const BATCHABLE = inArray(inboxMessage.kind, ["text", "edit"]);
@@ -212,6 +213,9 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     await db.update(aiBatch).set({ status: "failed", finishedAt: new Date(), error: (e as Error).message.slice(0, 300) }).where(eq(aiBatch.id, batchId));
     if (e instanceof AiFatalError) throw e;
     log.warn("ai call failed; will retry", { batchId, attempts: attempts + 1, error: (e as Error).message });
+    // Failing for over an hour (design §10): measured from the oldest message, which has waited since about the first failure.
+    const oldest = Math.min(...rows.map((r) => +r.receivedAt));
+    if (+now - oldest > OUTAGE_ALERT_MS) await raiseAlert(batch!.studentId, "ai_outage", { attempts: attempts + 1 }, now);
     return "retry";
   }
 }
