@@ -4,7 +4,7 @@
 
 - **Run dates:** _from … to …_
 - **Baileys version tested:** `baileys@7.0.0-rc14`, the npm name the official WhiskeySockets repo publishes (same code as `@whiskeysockets/baileys`) _(update if changed)_
-- **Chosen NIM model id:** `nvidia/nemotron-3-ultra-550b-a55b` (prompt `2026-11-22.2`, JSON mode via `response_format`). Synthetic cases only: 24/24 and 23/24 on 2026-11-22 (the miss: a chatter question marked "ignored"; every deadline case passed both times) (14/14 with prompt `2026-11-21.3` on 2026-11-21). `nemotron-3.5-lightning-30b-a3b` scored 5/14 (mostly invalid JSON); `mistral-large-4` and `kimi-k3.1-pro` timed out at 60 s. No held-out real-message set yet: the M0 collection week was skipped.
+- **Chosen NIM model id:** `nvidia/nemotron-3-ultra-550b-a55b` (prompt `2026-11-22.7`, JSON mode via `response_format`). Synthetic cases only: 30/30 twice on 2026-11-22, with the six timetable cases of #16 (prompt `2026-11-22.2`: 24/24 and 23/24 the same day) (14/14 with prompt `2026-11-21.3` on 2026-11-21). `nemotron-3.5-lightning-30b-a3b` scored 5/14 (mostly invalid JSON); `mistral-large-4` and `kimi-k3.1-pro` timed out at 60 s. No held-out real-message set yet: the M0 collection week was skipped.
 
 ## Checklist (design §15)
 
