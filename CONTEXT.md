@@ -68,12 +68,12 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - The AI reads each message with the date it was sent and the group's recent messages, so it can work out relative dates ("tomorrow") and treat corrections as updates to an earlier change. It understands Sri Lankan time formats ("4.30"). It uses the Student's Session Group to decide whether a group-specific message applies.
 - Before creating anything, the AI matches existing items, using Course codes, names and Nicknames, so a repeated announcement never makes a duplicate.
 - The AI applies changes directly as Auto Changes: Session Changes, Assignments, Exams and Semester extensions, always inside Courses the Student already has. It never creates Courses.
-- A message about an Unknown Course goes into the Activity Log with three actions: "Add course", "Add as Nickname of…" and "Ignore". After Ignore, that name isn't logged again.
+- A message about an Unknown Course goes into the Activity Log with three actions: "Add course", "Nickname of…" and "Ignore". Adding or mapping applies the changes the messages asked for, as undoable Auto Changes. After Ignore, that name isn't logged again.
 - Every Auto Change appears in the Activity Log with the message that caused it and an Undo button. Undo is disabled once the Student has edited that item by hand. A later message still overrides a manual edit.
 - Edited messages are processed again. A deleted message undoes its Auto Change, unless the Student has edited that item since.
 - Messages are sent to the AI in batches: one call per group every few minutes.
 - PDF and Office files posted in a linked Course Group are saved as Attachments on that Course's "From WhatsApp" Note. Duplicates (same file contents) are skipped. Files over 20 MB are listed in the Activity Log, not saved. Images and video are not saved.
-- The text of every message from a linked group is kept, encrypted, until its Semester is archived, then erased. Messages that look like a deadline but caused no change are flagged "Possibly missed" in the Activity Log.
+- The text of every message from a linked group is kept, encrypted, until its Semester is archived, then erased. Messages that look like a deadline but caused no change are flagged "Possibly missed" in the Activity Log, with "Add Assignment", "Add Exam" and "Dismiss".
 - The AI runs on NVIDIA NIM. The product owner has confirmed that classmates and lecturers accept their messages being processed this way. The Class Representative pins a notice in each linked group saying messages are kept until the end of the Semester.
 - **Gate (run in M0):** before Auto Changes go live, the AI must handle a test set of about 50 real messages from the product owner's groups correctly. The set includes times like "4.30", relative dates, Session Group messages, duplicate announcements, mixed English, and deletions.
 

@@ -129,7 +129,7 @@ A change the AI made to the Student's data because of a group message. It can be
 _Avoid_: Suggestion, suggested change, update
 
 **Possibly Missed**:
-A group message that looks like it announces a Deadline but caused no Auto Change.
+A group message that looks like it announces a Deadline but caused no Auto Change. The Student adds the Assignment or Exam from it, or dismisses it.
 _Avoid_: Flagged message, suspicious message
 
 **Activity Log**:

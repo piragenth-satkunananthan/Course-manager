@@ -19,7 +19,6 @@ const when = (iso: string) => {
 export function AutoChangeItem({ item }: { item: Item }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const [expanded, setExpanded] = useState(false);
 
   async function undo() {
     setPending(true);
@@ -46,22 +45,7 @@ export function AutoChangeItem({ item }: { item: Item }) {
         {item.undoneAt && <Badge variant="secondary" className="text-muted-foreground"><CircleCheck aria-hidden="true" />Undone</Badge>}
       </div>
       {item.sources.map((s, i) => (
-        <div key={i} className="mt-2 text-sm">
-          <p className="text-muted-foreground">
-            From {s.groupSubject}
-            {s.senderName ? ` · ${s.senderName}` : ""} · {when(s.sentAt)}
-          </p>
-          {s.text && (
-            <>
-              <blockquote className={`mt-1 border-l-2 border-border pl-2 ${expanded ? "" : "line-clamp-2"}`}>&ldquo;{s.text}&rdquo;</blockquote>
-              {s.text.length > 120 && (
-                <button type="button" onClick={() => setExpanded(!expanded)} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline md:min-h-10">
-                  {expanded ? "Show less" : "Show more"}
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <SourceMessage key={i} message={s} />
       ))}
       {!item.undoneAt && (
         <div className="mt-2 flex flex-col items-end gap-1">
@@ -75,5 +59,28 @@ export function AutoChangeItem({ item }: { item: Item }) {
         </div>
       )}
     </li>
+  );
+}
+
+/** A WhatsApp message in the Activity Log: group, sender, time, and its text clamped to two lines with Show more. */
+export function SourceMessage({ message: s }: { message: Item["sources"][number] }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-2 text-sm">
+      <p className="text-muted-foreground">
+        From {s.groupSubject}
+        {s.senderName ? ` · ${s.senderName}` : ""} · {when(s.sentAt)}
+      </p>
+      {s.text && (
+        <>
+          <blockquote className={`mt-1 border-l-2 border-border pl-2 ${expanded ? "" : "line-clamp-2"}`}>&ldquo;{s.text}&rdquo;</blockquote>
+          {s.text.length > 120 && (
+            <button type="button" onClick={() => setExpanded(!expanded)} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline md:min-h-10">
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </>
+      )}
+    </div>
   );
 }

@@ -1,9 +1,10 @@
 // The scheduler's jobs (design file 65). Each takes `now`, so tests can drive them with an injected clock.
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { decrypt, loadKey } from "@/server/crypto";
 import { loadOpenDeadlines } from "@/server/data/assessments";
 import { db } from "@/server/db/client";
-import { emailLog, entityVersion, user } from "@/server/db/schema";
-import { isDigestWindow, selectDigest } from "@/server/domain/digest";
+import { autoChange, emailLog, entityVersion, inboxMessage, unknownCourseMention, user, waGroup } from "@/server/db/schema";
+import { type CheckTheseInput, isDigestWindow, selectDigest } from "@/server/domain/digest";
 import { dueForFinalReminder } from "@/server/domain/reminders";
 import { todayIn } from "@/server/domain/time";
 import { digestEmail } from "@/server/email/templates/digest";
@@ -13,7 +14,28 @@ import { raiseAlert } from "./alerts";
 import { claimAndSend, lastDigestAt, recordSkippedDigest } from "./claim";
 
 const origin = () => process.env.APP_ORIGIN ?? "";
-const students = () => db.select({ id: user.id, email: user.email }).from(user);
+const students = () => db.select({ id: user.id, email: user.email, paused: user.autoChangesPaused }).from(user);
+
+/** Check these (#14): risky changes not undone and Possibly Missed messages since the last digest, and every open Unknown Course. */
+async function loadCheckThese(studentId: string, since: Date, paused: boolean): Promise<CheckTheseInput> {
+  const key = loadKey();
+  const [riskyChanges, missed, unknownCourses] = await Promise.all([
+    db
+      .select({ summary: autoChange.summary, risk: autoChange.risk })
+      .from(autoChange)
+      .where(and(eq(autoChange.studentId, studentId), ne(autoChange.risk, "normal"), isNull(autoChange.undoneAt), gt(autoChange.createdAt, since)))
+      .orderBy(autoChange.createdAt),
+    db
+      .select({ senderName: inboxMessage.senderName, groupSubject: waGroup.subject, textEnc: inboxMessage.textEnc })
+      .from(inboxMessage)
+      .innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId))
+      .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.possiblyMissed, true), isNull(inboxMessage.revokedAt), gt(inboxMessage.receivedAt, since)))
+      .orderBy(inboxMessage.sentAt),
+    db.select({ name: unknownCourseMention.name }).from(unknownCourseMention).where(and(eq(unknownCourseMention.studentId, studentId), eq(unknownCourseMention.status, "open"))).orderBy(unknownCourseMention.createdAt),
+  ]);
+  const possiblyMissed = missed.map((m) => ({ senderName: m.senderName, groupSubject: m.groupSubject, text: m.textEnc ? decrypt(m.textEnc, key) : null }));
+  return { riskyChanges, possiblyMissed, unknownCourses, paused };
+}
 
 /** Open Deadlines due in the next 4 hours with no reminder logged for their current due instant (a moved one gets a new one). */
 export async function runFinalReminders(now: Date) {
@@ -57,12 +79,12 @@ export async function runDigest(now: Date) {
             ),
           )
       : [];
-    const sections = selectDigest(open, new Set(changed.map((c) => c.id)), today);
+    const sections = selectDigest(open, new Set(changed.map((c) => c.id)), today, await loadCheckThese(s.id, since, s.paused));
     if (!sections) {
       await recordSkippedDigest(s.id, today);
       continue;
     }
-    const email = digestEmail({ dueSoon: sections.dueSoon.map((d) => d.deadline), addedOrMoved: sections.addedOrMoved.map((d) => d.deadline) }, formatDate(today), origin());
+    const email = digestEmail({ dueSoon: sections.dueSoon.map((d) => d.deadline), addedOrMoved: sections.addedOrMoved.map((d) => d.deadline), checkThese: sections.checkThese }, formatDate(today), origin());
     await claimAndSend({ studentId: s.id, kind: "digest", digestDate: today }, { to: s.email, ...email });
   }
 }

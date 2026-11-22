@@ -10,11 +10,11 @@ import { Assignment, AssignmentCreate } from "@/shared/schemas/assignment";
 import { Exam, ExamCreate } from "@/shared/schemas/exam";
 import { applyServerError, CheckboxField, CourseField, type CourseOption, ErrorSummary, SaveButton, TextAreaField, TextField, useAppForm } from "./form";
 
-const assignmentValues = (a?: Assignment): z.input<typeof AssignmentCreate> => ({
+const assignmentValues = (a?: Partial<Assignment>): z.input<typeof AssignmentCreate> => ({
   courseId: a?.courseId ?? "", title: a?.title ?? "", dueDate: a?.dueDate ?? "", dueTime: a?.dueTime ?? "",
   submitWhere: a?.submitWhere ?? "", isGroupWork: a?.isGroupWork ?? false, description: a?.description ?? "",
 });
-const examValues = (e?: Exam): z.input<typeof ExamCreate> => ({
+const examValues = (e?: Partial<Exam>): z.input<typeof ExamCreate> => ({
   courseId: e?.courseId ?? "", title: e?.title ?? "", kindLabel: e?.kindLabel ?? "", date: e?.date ?? "",
   startTime: e?.startTime ?? "", location: e?.location ?? "", topics: e?.topics ?? "",
 });
@@ -42,10 +42,11 @@ function useSave<Dto extends { id: string; version: number }>(path: string, sche
   };
 }
 
-type FormProps<Dto> = { courses: CourseOption[]; existing?: Dto; onDone: (saved: Dto) => void };
+/** `initial` pre-fills a new one, for example from a Possibly Missed message. */
+type FormProps<Dto> = { courses: CourseOption[]; existing?: Dto; initial?: Partial<Dto>; onDone: (saved: Dto) => void };
 
-export function AssignmentForm({ courses, existing, onDone }: FormProps<Assignment>) {
-  const form = useAppForm(AssignmentCreate, assignmentValues(existing));
+export function AssignmentForm({ courses, existing, initial, onDone }: FormProps<Assignment>) {
+  const form = useAppForm(AssignmentCreate, assignmentValues(existing ?? initial));
   const save = useSave("/assignments", Assignment, existing, (a) => form.reset(assignmentValues(a)));
   const { isSubmitting, errors, submitCount } = form.formState;
 
@@ -72,8 +73,8 @@ export function AssignmentForm({ courses, existing, onDone }: FormProps<Assignme
   );
 }
 
-export function ExamForm({ courses, existing, onDone }: FormProps<Exam>) {
-  const form = useAppForm(ExamCreate, examValues(existing));
+export function ExamForm({ courses, existing, initial, onDone }: FormProps<Exam>) {
+  const form = useAppForm(ExamCreate, examValues(existing ?? initial));
   const save = useSave("/exams", Exam, existing, (e) => form.reset(examValues(e)));
   const { isSubmitting, errors, submitCount } = form.formState;
 

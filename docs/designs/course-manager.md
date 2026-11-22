@@ -297,7 +297,7 @@ The **effective due instant** is:
 | `entity_version` | `entity_type`, `entity_id`, `version`, `op` (`create`, `update`, `delete`, `undo` or `status`), `before jsonb`, `after jsonb`, `before_field_set_at jsonb`, `actor`, `auto_change_id`, `created_at` | One row for every write to an AI-writable table, by anyone. `actor` is `ai`, `student`, or `system` (an Undo the worker triggers because a message was edited or deleted). |
 | `auto_change` | `batch_id`, `entity_type`, `entity_id`, `op`, `after_version`, `summary` (for example "Lab 4 report due Fri 20 Nov, 23:59"), `risk` (`normal`, `moved_later` or `cancelled`), `undone_at`, `model_id`, `prompt_version` | One row per change the AI applied. It powers the Activity Log. |
 | `auto_change_source` | `auto_change_id`, `inbox_message_id` | Which messages caused which changes (many to many). |
-| `unknown_course_mention` | `name_key`, `first_message_id`, `pending_ops jsonb` (an array), `status` (`open`, `added`, `mapped` or `ignored`) | Unique `(student_id, name_key)`. A repeat mention while the entry is `open` **appends** its operations to `pending_ops`. An `ignored` row stops the name from being logged again. |
+| `unknown_course_mention` | `name`, `name_key`, `first_message_id`, `pending_ops jsonb` (an array of `{batchId, op}`), `status` (`open`, `added`, `mapped` or `ignored`), `course_id`, `resolved_at` | Unique `(student_id, name_key)`. A repeat mention while the entry is `open` **appends** its operations to `pending_ops`; one after `added` or `mapped` opens it again with the new operations. An `ignored` row stops the name from being logged again. |
 | `activity_event` | `kind` (`ai_output_rejected`, `ai_overflow`, `alert`, `stuck_messages`, `file_too_large`, `change_kept`), `payload jsonb` (`cause`, message ids, counts, rejected operations with their reasons), `created_at` | Activity Log entries that aren't Auto Changes, Unknown Courses or Possibly Missed messages. Alerts are de-duplicated by `kind` plus `payload.cause` within 12 hours. |
 
 **The Undo rule.** Undo is allowed only if `auto_change.undone_at` is null **and** the entity's current `version` equals `auto_change.after_version`. In other words, nothing that changes `version` has touched the item since: no edit by the Student and no later Auto Change. A status change doesn't count.
@@ -435,7 +435,7 @@ The main ones:
 | `Exam` | `id, courseId, courseCode, title, kindLabel, date, startTime, location, topics, dueAt, source, version` |
 | `Deadline` | `{type: "assignment"\|"exam", item: Assignment\|Exam}` |
 | `AutoChangeItem` | `id, createdAt, summary, risk, undoneAt, entityType, entityId, canUndo, undoBlockedReason, sources[{senderName, sentAt, text}]` |
-| `ActivityItem` | `{type: "auto_change", ...AutoChangeItem}` \| `{type: "unknown_course", id, name, status, firstMessage}` \| `{type: "possibly_missed", inboxMessageId, senderName, sentAt, text}` \| `{type: "event", id, kind, payload, createdAt}` |
+| `ActivityItem` | `{type: "auto_change", ...AutoChangeItem}` \| `{type: "unknown_course", id, name, status, operations, firstMessage, createdAt}` \| `{type: "possibly_missed", inboxMessageId, senderName, sentAt, text, groupSubject, reason, courseId, createdAt}` (`reason` is the AI's when it decided `possibly_missed`; `courseId` is the group's Course) \| `{type: "event", id, kind, payload, createdAt}` |
 | `Banner` | `{kind: "whatsapp_disconnected"\|"worker_unhealthy"\|"auto_changes_paused"\|"ai_unavailable", since}` |
 | `CalendarMonth` | `month ("YYYY-MM"), days: [{date, occurrences: Occurrence[], deadlines: Deadline[]}]`. It covers every day in the 6 displayed weeks, including the padding days from the months either side. |
 | `Dashboard` | `overdue: Deadline[], todaySessions: Occurrence[], upcoming: Deadline[], tbaExams: Exam[], highlightedChanges: AutoChangeItem[], recentAutoChanges: AutoChangeItem[], banners: Banner[]` | **Every PATCH or DELETE on an item the AI can change requires `expectedVersion`**: in the body for PATCH, in the query for DELETE. This is optimistic locking: the student and the AI may both change the same item, and neither may silently overwrite the other.
@@ -468,7 +468,8 @@ The main ones:
 | `GET /api/v1/activity?cursor=` | none | Auto Changes, Unknown Courses, Possibly Missed messages, rejected AI output, alerts; newest first, 50 per page |
 | `POST /api/v1/auto-changes/:id/undo` | none | the restored entity, or 409 `UNDO_BLOCKED` |
 | `POST /api/v1/ai-batches/:id/undo` | none | `{undone[], skipped[{autoChangeId, reason}]}` |
-| `POST /api/v1/unknown-courses/:id/resolve` | `{action:"add", course:{code,name,colour}}` or `{action:"nickname", courseId}` or `{action:"ignore"}` | applied operations |
+| `POST /api/v1/unknown-courses/:id/resolve` | `{action:"add", code, name, colour, lecturerName?, practicalOfCourseId?}` or `{action:"nickname", courseId}` or `{action:"ignore"}` | `{applied, possiblyMissed, course}`; 409 once resolved |
+| `POST /api/v1/possibly-missed/:inboxMessageId/dismiss` | none | 204; the message leaves the Activity Log and the digest |
 | `GET /api/v1/whatsapp` | none | `{status, pairingCode?, lastError?, lastEventAt, groups[{id, subject, linkedCourseId?, linkedSemesterId?}]}`, polled every 2 s while pairing |
 | `POST /api/v1/whatsapp/pairing` · `DELETE /api/v1/whatsapp` | `{phone}` (digits with country code) · none | status · 204 (logs out and wipes the session) |
 | `PUT /api/v1/whatsapp/groups/:id/link` · `DELETE /api/v1/whatsapp/groups/:id/link` | `{courseId}` or `{semesterId}` · none | group · 204 |
@@ -688,7 +689,7 @@ A write that changes nothing (§3) produces no Auto Change. Changes that move a 
 - the batch's output was rejected;
 - it is a Session Group message (U11).
 
-Possibly Missed messages show in the Activity Log with their text and an "Add Assignment" or "Add Exam" button, which opens a pre-filled form. They also appear in the digest's "Check these" section.
+Possibly Missed messages show in the Activity Log with their text and "Add Assignment" and "Add Exam" buttons, which open a form pre-filled with the group's Course (and, for an Assignment, the message as its description). A message whose reason is "<code> has no Practical Course" also offers "Add Practical Course", with "Practical of" set. Adding from the message, or Dismiss, removes it from the list. They also appear in the digest's "Check these" section (those since the last digest).
 
 **Prompt injection:** messages are data inside the prompt, never instructions. Validation limits what a malicious or misleading message can do:
 
@@ -1514,9 +1515,9 @@ Every file M0 and M1 create or change is listed below with what it holds and why
     - **`undoAutoChange`:** `canUndo`, then `writeEntity` with `op = undo` and `actor = student`, then sets `undone_at`.
     - **`undoBatch`:** goes through the batch's changes newest `auto_change` first, and reports which ones it skipped and why.
     - **`resolveUnknownCourse`:**
-      - "add" creates the Course in the **current** Semester.
+      - "add" creates the Course in the **current** Semester, and adds `name_key` as its Nickname (`source = unknown_course`) when it differs from the code and the name, so the next message using it is understood.
       - "nickname" adds `name_key` as a Nickname of the chosen Course, with `source = unknown_course`.
-      - Both then fill `courseId` into every operation in `pending_ops`, re-run `validate.ts` against a freshly built context, and apply the valid ones through the shared `applyOperations()` (file 64a). That uses `actor = ai`, `setAt` = each operation's source message `sent_at`, and the original `batch_id`, and writes full `auto_change` rows, so the results can be undone.
+      - Both then fill `courseId` into every operation in `pending_ops`, re-run `validate.ts` one operation at a time against a freshly built context (so a repeat of one just applied counts as a repeat), and apply the valid ones through the shared `applyOperations()` (file 64a). That uses `actor = ai`, `setAt` = each operation's source message `sent_at`, and the original `batch_id`, and writes full `auto_change` rows, so the results can be undone.
       - Operations whose ids are no longer valid become Possibly Missed.
       - "ignore" sets the status.
 

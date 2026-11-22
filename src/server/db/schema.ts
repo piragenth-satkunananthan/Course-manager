@@ -467,3 +467,23 @@ export const suppression = pgTable(
   },
   (t) => [index("suppression_course_idx").on(t.courseId)],
 );
+
+// Unknown Courses (§3, #14): one per name a message used for a course that isn't in the context. A repeat while open
+// appends its operations; "ignored" stops the name being logged. Each operation keeps its batch, for the Auto Change.
+export const unknownCourseStatus = pgEnum("unknown_course_status", ["open", "added", "mapped", "ignored"]);
+export const unknownCourseMention = pgTable(
+  "unknown_course_mention",
+  {
+    id: id(),
+    studentId: studentId(),
+    name: text("name").notNull(), // as first written
+    nameKey: text("name_key").notNull(), // lowercase, spaces collapsed
+    firstMessageId: uuid("first_message_id").references(() => inboxMessage.id, { onDelete: "set null" }),
+    pendingOps: jsonb("pending_ops").$type<{ batchId: string; op: Record<string, unknown> }[]>().default([]).notNull(),
+    status: unknownCourseStatus("status").default("open").notNull(),
+    courseId: uuid("course_id").references(() => course.id, { onDelete: "set null" }), // what it was resolved to
+    createdAt: createdAt(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("unknown_course_mention_unique").on(t.studentId, t.nameKey)],
+);

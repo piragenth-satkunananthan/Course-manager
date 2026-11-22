@@ -6,6 +6,8 @@ import * as assignments from "@/app/api/v1/assignments/route";
 import * as undo from "@/app/api/v1/auto-changes/[id]/undo/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as dashboard from "@/app/api/v1/dashboard/route";
+import * as dismiss from "@/app/api/v1/possibly-missed/[id]/dismiss/route";
+import * as resolve from "@/app/api/v1/unknown-courses/[id]/resolve/route";
 import * as semesters from "@/app/api/v1/semesters/route";
 import type { AiContext } from "@/server/ai/context";
 import { loadKey } from "@/server/crypto";
@@ -20,6 +22,7 @@ const key = loadKey(); // the same key the API uses to show source messages
 let a: ReturnType<typeof client>;
 let b: ReturnType<typeof client>;
 let courseId: string;
+let semesterId: string;
 let ingest: Ingest;
 let seq = 0;
 
@@ -46,7 +49,7 @@ beforeEach(async () => {
   const me = await seedStudent("a@example.com");
   a = client(me.cookie);
   b = client((await seedStudent("b@example.com")).cookie);
-  const semesterId = (await a(semesters.POST, "POST", "/semesters", { body: { name: "S", startDate: "2026-08-03", endDate: "2026-12-18" } })).json.id;
+  semesterId = (await a(semesters.POST, "POST", "/semesters", { body: { name: "S", startDate: "2026-08-03", endDate: "2026-12-18" } })).json.id;
   courseId = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "CS2010", name: "DS", colour: "blue" } })).json.id;
   await pool.query("insert into wa_group (student_id, wa_jid, subject, linked_course_id) values ($1, $2, 'CS2010 group', $3)", [me.id, GROUP, courseId]);
   ingest = new Ingest(me.id, key);
@@ -120,5 +123,75 @@ describe("the dashboard", () => {
     expect(d.recentAutoChanges).toHaveLength(1);
     await a(undo.POST, "POST", `/auto-changes/${d.highlightedChanges[0].id}/undo`, { params: { id: d.highlightedChanges[0].id } });
     expect((await a(dashboard.GET, "GET", "/dashboard")).json.highlightedChanges).toEqual([]);
+  });
+});
+
+/** One message, and the AI's whole reply to it. */
+async function process(text: string, reply: (id: string) => object) {
+  await ingest.handle("messages.upsert", {
+    type: "notify",
+    messages: [{ key: { remoteJid: GROUP, id: `M${++seq}`, fromMe: false }, messageTimestamp: Math.floor(Date.now() / 1000) + 5, pushName: "Kasun", message: { conversation: text } }],
+  });
+  const fake: AiClient = { model: "fake/model", complete: async (chat) => ({ content: JSON.stringify(reply((JSON.parse(chat[1]!.content) as AiContext).messages[0]!.id)), inputTokens: 1, outputTokens: 1 }) };
+  await aiTick(fake, key, later());
+}
+
+describe("Possibly Missed (#14)", () => {
+  it("lists the message with its group, reason and Course; Dismiss removes it, only for its Student", async () => {
+    await process("practical report due 27th", (id) => ({ messages: [{ id, decision: "possibly_missed", reason: "CS2010 has no Practical Course" }], operations: [], unknownCourses: [] }));
+    const [item] = await feed();
+    expect(item).toMatchObject({ type: "possibly_missed", senderName: "Kasun", groupSubject: "CS2010 group", text: "practical report due 27th", reason: "CS2010 has no Practical Course", courseId });
+    const path = `/possibly-missed/${item.inboxMessageId}/dismiss`;
+    expect((await b(dismiss.POST, "POST", path, { params: { id: item.inboxMessageId } })).status).toBe(404);
+    expect((await a(dismiss.POST, "POST", path, { params: { id: item.inboxMessageId } })).status).toBe(204);
+    expect(await feed()).toEqual([]);
+  });
+});
+
+describe("Unknown Courses (#14)", () => {
+  const essay = (id: string, o: object = {}) => ({ op: "create_assignment", courseId: null, title: "Essay", dueDate: "2026-11-27", sourceMessageIds: [id], ...o });
+  const mention = (name: string, proposed: (id: string) => object[]) => (id: string) => ({
+    messages: [{ id, decision: "unknown_course", reason: "not a known course" }],
+    operations: [],
+    unknownCourses: [{ name, messageIds: [id], proposedOperations: proposed(id) }],
+  });
+  const openEntry = async () => (await feed()).find((i: { type: string }) => i.type === "unknown_course");
+  const post = (client: typeof a, id: string, body: object) => client(resolve.POST, "POST", `/unknown-courses/${id}/resolve`, { params: { id }, body });
+
+  it("is listed with its first message; Add course creates it in the current Semester, with the name as a Nickname, and applies the operations as undoable Auto Changes", async () => {
+    await process("ENG essay due 27th", mention("ENG", (id) => [essay(id)]));
+    const entry = await openEntry();
+    expect(entry).toMatchObject({ name: "ENG", status: "open", operations: 1, firstMessage: { senderName: "Kasun", text: "ENG essay due 27th", groupSubject: "CS2010 group" } });
+
+    expect((await post(b, entry.id, { action: "ignore" })).status).toBe(404);
+    const res = await post(a, entry.id, { action: "add", code: "EN1010", name: "English", colour: "pink" });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ applied: 1, possiblyMissed: 0, course: { code: "EN1010", semesterId, nicknames: [{ nickname: "eng" }] } });
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toMatchObject([{ title: "Essay", courseCode: "EN1010", source: "ai" }]);
+    expect(await feed()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "auto_change", summary: "Essay: due Fri 27 Nov", canUndo: true }), expect.objectContaining({ type: "unknown_course", status: "added" })]),
+    );
+    expect((await post(a, entry.id, { action: "ignore" })).status).toBe(409);
+  });
+
+  it("Nickname of… maps it to a Course, applies a repeat once, and flags an operation that no longer passes validation", async () => {
+    await process("ds2 essay due 27th", mention("DS2", (id) => [essay(id), essay(id, { title: "Report", dueDate: "2027-03-01" })]));
+    await process("ds2 essay reminder", mention("DS2", (id) => [essay(id)]));
+    const entry = await openEntry();
+    expect(entry).toMatchObject({ operations: 3 });
+    const res = await post(a, entry.id, { action: "nickname", courseId });
+    expect(res.json).toMatchObject({ applied: 1, possiblyMissed: 1 });
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toMatchObject([{ title: "Essay", courseCode: "CS2010" }]);
+    expect((await pool.query("select nickname, source from course_nickname")).rows).toEqual([{ nickname: "ds2", source: "unknown_course" }]);
+    expect((await feed()).filter((i: { type: string }) => i.type === "possibly_missed")).toMatchObject([{ text: "ds2 essay due 27th" }]);
+  });
+
+  it("Ignore applies nothing and stops the name being logged", async () => {
+    await process("ENG essay due 27th", mention("ENG", (id) => [essay(id)]));
+    const entry = await openEntry();
+    expect((await post(a, entry.id, { action: "ignore" })).json).toMatchObject({ applied: 0, possiblyMissed: 0 });
+    await process("ENG essay due 28th", mention("ENG", (id) => [essay(id)]));
+    expect((await feed()).filter((i: { type: string }) => i.type === "unknown_course")).toMatchObject([{ status: "ignored", operations: 1 }]);
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual([]);
   });
 });

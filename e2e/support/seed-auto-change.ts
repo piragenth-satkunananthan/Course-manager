@@ -1,5 +1,7 @@
 // Makes a real Auto Change for end-to-end tests: a message in a linked group, processed by the real AI batch with a
-// fake AI that creates one Assignment. Usage: tsx e2e/support/seed-auto-change.ts <email> <courseId> <title> <dueDate>
+// fake AI that creates one Assignment. Usage: tsx e2e/support/seed-auto-change.ts <email> <courseId> <title> <dueDate> [mode]
+// Mode "missed": the AI calls the message possibly missed (no Practical Course). Mode "unknown": `title` is an
+// Unknown Course, with one proposed Assignment (#14).
 import { eq } from "drizzle-orm";
 import { loadKey } from "@/server/crypto";
 import { db, pool } from "@/server/db/client";
@@ -7,7 +9,7 @@ import { course, semester, user, waGroup } from "@/server/db/schema";
 import { aiTick } from "../../src/worker/ai/batcher";
 import { Ingest } from "../../src/worker/whatsapp/ingest";
 
-const [email, courseId, title, dueDate] = process.argv.slice(2) as [string, string, string, string];
+const [email, courseId, title, dueDate, mode = "create"] = process.argv.slice(2) as [string, string, string, string, string?];
 const key = loadKey();
 const [u] = await db.select({ id: user.id }).from(user).where(eq(user.email, email));
 // The AI only sees the current Semester's Courses, so make this Course's Semester current.
@@ -28,7 +30,14 @@ await aiTick(
     complete: async (chat) => {
       const ctx = JSON.parse(chat[1]!.content) as { messages: { id: string }[] };
       const ids = ctx.messages.map((m) => m.id);
-      return { content: JSON.stringify({ messages: ids.map((id) => ({ id, decision: "applied", reason: "e2e" })), operations: [{ op: "create_assignment", courseId, title, dueDate, sourceMessageIds: ids }], unknownCourses: [] }), inputTokens: 1, outputTokens: 1 };
+      const assignment = { op: "create_assignment", courseId, title, dueDate, sourceMessageIds: ids };
+      const reply =
+        mode === "missed"
+          ? { messages: ids.map((id) => ({ id, decision: "possibly_missed", reason: "This Course has no Practical Course" })), operations: [], unknownCourses: [] }
+          : mode === "unknown"
+            ? { messages: ids.map((id) => ({ id, decision: "unknown_course", reason: "e2e" })), operations: [], unknownCourses: [{ name: title, messageIds: ids, proposedOperations: [{ ...assignment, courseId: null, title: `${title} essay` }] }] }
+            : { messages: ids.map((id) => ({ id, decision: "applied", reason: "e2e" })), operations: [assignment], unknownCourses: [] };
+      return { content: JSON.stringify(reply), inputTokens: 1, outputTokens: 1 };
     },
   },
   key,
