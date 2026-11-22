@@ -4,6 +4,7 @@ import { BookOpen, CalendarCheck, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { groupDeadlines } from "@/lib/deadline-groups";
+import { type ListKind, type ListStatus, listHref } from "@/lib/deadline-list-href";
 import { addDays, todayIn } from "@/server/domain/time";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import { AddMenu } from "./add-menu";
@@ -13,16 +14,6 @@ import { EmptyState } from "./empty-state";
 import type { CourseOption } from "./form";
 import { Segmented } from "./segmented";
 
-export type ListKind = "assignments" | "exams";
-export type Status = "todo" | "submitted";
-
-/** The list's URL with these filters; the defaults (To do, all Courses) are left out. */
-export const listHref = (kind: ListKind, f: { status?: Status; course?: string | null }) => {
-  const q = new URLSearchParams();
-  if (kind === "assignments" && f.status === "submitted") q.set("status", "submitted");
-  if (f.course) q.set("course", f.course);
-  return `/${kind}${q.size ? `?${q}` : ""}`;
-};
 
 const GROUPS = [
   ["overdue", "Overdue"],
@@ -32,15 +23,14 @@ const GROUPS = [
   ["earlier", "Earlier"],
 ] as const;
 
-type Props = { kind: ListKind; status: Status; course: string | null; courses: CourseOption[]; items: Deadline[] };
+type Props = { kind: ListKind; status: ListStatus; course: string | null; courses: CourseOption[]; items: Deadline[] };
 
 export function DeadlineList({ kind, status, course, courses, items }: Props) {
   const now = new Date();
   const today = todayIn(now);
   const groups = groupDeadlines(items, now, today);
-  const courseName = courses.find((c) => c.id === course)?.code;
+  const courseCode = courses.find((c) => c.id === course)?.code;
   const noun = kind === "assignments" ? (status === "submitted" ? "submitted Assignments" : "Assignments to do") : "Exams";
-  const hrefFor = Object.fromEntries([["all", listHref(kind, { status })], ...courses.map((c) => [c.id, listHref(kind, { status, course: c.id })])]);
 
   return (
     <>
@@ -67,7 +57,7 @@ export function DeadlineList({ kind, status, course, courses, items }: Props) {
             ]}
           />
         )}
-        {courses.length > 0 && <CourseFilter courses={courses} value={course} hrefFor={hrefFor} />}
+        {courses.length > 0 && <CourseFilter courses={courses} value={course} kind={kind} status={status} />}
       </div>
 
       {courses.length === 0 ? (
@@ -75,15 +65,15 @@ export function DeadlineList({ kind, status, course, courses, items }: Props) {
           No Courses yet. Assignments and Exams belong to a Course, so add one first.
         </EmptyState>
       ) : items.length === 0 ? (
-        <EmptyState icon={kind === "exams" ? CalendarCheck : ListChecks} action={status === "todo" && <AddMenu courses={courses} />}>
-          {course ? `No ${noun} for ${courseName}.` : `No ${noun}.`}{" "}
-          {status === "submitted" ? "Assignments you mark Submitted show here." : "New ones from your WhatsApp groups, or ones you add, show here."}
+        <EmptyState icon={kind === "exams" ? CalendarCheck : ListChecks}>
+          {course ? `No ${noun} for ${courseCode}.` : `No ${noun}.`}{" "}
+          {status === "submitted" ? "Assignments you mark Submitted show here." : "New ones from your WhatsApp groups, or ones you add with Add, show here."}
         </EmptyState>
       ) : (
         GROUPS.map(([key, title]) =>
           groups[key].length ? (
             <section key={key} aria-labelledby={`group-${key}`} className="mt-6">
-              <h2 id={`group-${key}`} className={`text-title font-semibold ${key === "overdue" ? "text-destructive" : ""}`}>
+              <h2 id={`group-${key}`} className={`sticky top-0 z-10 bg-background py-1 text-title font-semibold ${key === "overdue" ? "text-destructive" : ""}`}>
                 {title} <span className="text-muted-foreground">({groups[key].length})</span>
               </h2>
               <ul className="mt-2 space-y-2">

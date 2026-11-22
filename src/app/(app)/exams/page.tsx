@@ -1,4 +1,5 @@
-import { type ListKind, DeadlineList } from "@/components/app/deadline-list";
+import { DeadlineList } from "@/components/app/deadline-list";
+import type { ListKind } from "@/lib/deadline-list-href";
 import { loadDeadlineList } from "@/server/data/deadline-list";
 import { requireStudentId } from "@/server/session";
 

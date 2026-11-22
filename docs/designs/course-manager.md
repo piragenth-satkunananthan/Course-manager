@@ -902,6 +902,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. It is blocked, with the reason, when the class has another change now, or when classes in the weeks an extension added were changed since. |
 | U17 | (2026-11-22, product owner) Changing the password in Settings signs out every other device (`revokeOtherSessions`), as a reset does. |
 | U18 | (2026-11-22, product owner) In the week grid every class block is at least 40 px tall (the desktop tap target), so a class under 50 minutes looks a little longer than it is; its times are written on it. Keyboard use is Tab, Enter and Escape; no arrow keys inside the grid. |
+| U19 | (2026-11-22, product owner) The Deadlines lists group items as Overdue, This week (today until Sunday), Later, Date TBA (Exams with no date) and Earlier (submitted Assignments and Exams already held). Unticking Submitted restores the status the Assignment had before it was submitted (To do or In progress), from its history. |
 
 ## Risks and Mitigations
 

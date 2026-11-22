@@ -78,6 +78,18 @@ describe("Assignments", () => {
     expect(back.json).toMatchObject({ status: "in_progress", submittedAt: null });
   });
 
+  it("unticking Submitted restores the status it had before it was submitted (#21)", async () => {
+    const item = await newAssignment();
+    const put = (status: string) => a(assignmentStatus.PUT, "PUT", `/assignments/${item.id}/status`, { params: { id: item.id }, body: { status } });
+    await put("in_progress");
+    await put("submitted");
+    expect((await put("unsubmitted")).json).toMatchObject({ status: "in_progress", submittedAt: null });
+    await put("todo");
+    await put("submitted");
+    expect((await put("unsubmitted")).json).toMatchObject({ status: "todo" });
+    expect((await put("unsubmitted")).json).toMatchObject({ status: "todo" }); // not submitted: nothing to undo
+  });
+
   it("soft-deletes with the current version, and refuses a stale one", async () => {
     const item = await newAssignment();
     const stale = await a(assignment.DELETE, "DELETE", `/assignments/${item.id}`, { params: { id: item.id }, query: { expectedVersion: "7" } });

@@ -39,4 +39,10 @@ describe("groupDeadlines", () => {
     expect(ids(g.tba)).toEqual(["tba"]);
     expect(g.overdue).toEqual([]);
   });
+
+  it("sorts an untimed Exam at 23:59 Colombo of its day, against timed ones by instant", () => {
+    const untimed = { type: "exam", item: { id: "untimed", date: "2026-11-20", dueAt: null } } as unknown as Deadline;
+    const early = { type: "exam", item: { id: "next-morning", date: "2026-11-21", dueAt: "2026-11-20T21:30:00.000Z" } } as unknown as Deadline; // 03:00 on the 21st
+    expect(ids(groupDeadlines([early, untimed], NOW, TODAY).thisWeek)).toEqual(["untimed", "next-morning"]);
+  });
 });
