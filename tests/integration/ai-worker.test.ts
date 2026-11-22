@@ -1,20 +1,25 @@
 // Seam: the worker's AI processor against a real Postgres, with a fake AI client returning canned ops.v1 output (#12).
-import { randomBytes } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as assignmentStatus from "@/app/api/v1/assignments/[id]/status/route";
 import * as assignments from "@/app/api/v1/assignments/route";
 import * as courses from "@/app/api/v1/courses/route";
+import * as undo from "@/app/api/v1/auto-changes/[id]/undo/route";
+import * as classSessions from "@/app/api/v1/courses/[id]/class-sessions/route";
+import * as sessionChangeRoute from "@/app/api/v1/session-changes/[id]/route";
+import * as sessionChanges from "@/app/api/v1/session-changes/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import * as timetable from "@/app/api/v1/timetable/route";
 import type { AiContext } from "@/server/ai/context";
 import { loadKey } from "@/server/crypto";
 import { pool } from "@/server/db/client";
+import { addDays, todayIn, weekdayOf } from "@/server/domain/time";
 import { aiTick, claimBatch, resetStale } from "../../src/worker/ai/batcher";
 import { type AiClient, AiFatalError, AiRetryableError } from "../../src/worker/ai/nim-client";
 import { Ingest } from "../../src/worker/whatsapp/ingest";
 import { client, resetData, seedStudent } from "./api";
 
 const GROUP = "120363000000000001@g.us";
-const key = loadKey(randomBytes(32).toString("base64"));
+const key = loadKey(); // the API's key too: Undo's response shows the source messages
 let a: ReturnType<typeof client>;
 let studentId: string;
 let courseId: string;
@@ -153,7 +158,7 @@ describe("validation and volume", () => {
 });
 
 describe("failures and crashes", () => {
-  it("flags the batch, rather than retrying forever, when applying fails", async () => {
+  it("drops and flags an operation whose item went away meanwhile; the batch's other messages are done as decided", async () => {
     const item = (await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 9", dueDate: "2026-11-27" } })).json;
     await say("lab 9 moved to the 28th");
     await say("unrelated", new Date(Date.now() + 1000));
@@ -161,7 +166,7 @@ describe("failures and crashes", () => {
     // The Student deletes it while the AI is working, so the write fails after validation.
     const ai: AiClient = { model: fake.model, complete: async (chat) => (await pool.query("update assignment set deleted_at = now() where id = $1", [item.id]), fake.complete(chat)) };
     await aiTick(ai, key, later());
-    expect(await inbox()).toMatchObject([{ status: "done", decision: "rejected", possibly_missed: true }, { status: "done", decision: "rejected" }]);
+    expect(await inbox()).toMatchObject([{ status: "done", decision: "applied", possibly_missed: true }, { status: "done", decision: "applied", possibly_missed: false }]);
     expect(await changes()).toEqual([]);
   });
 
@@ -295,5 +300,134 @@ describe("pause, outages and limits (#15)", () => {
     const refused: AiClient = { model: "fake", complete: async () => Promise.reject(new AiFatalError("NIM refused the key (401)")) };
     await expect(aiTick(refused, key, later())).rejects.toBeInstanceOf(AiFatalError);
     expect(await inbox()).toMatchObject([{ status: "pending", attempts: 0, possibly_missed: false }]);
+  });
+});
+
+describe("the timetable and the Semester (#16)", () => {
+  const today = todayIn(new Date());
+  const day = addDays(today, 2); // a class two days from now
+  const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
+  let sessionId: string;
+  beforeEach(async () => {
+    sessionId = (await a(classSessions.POST, "POST", `/courses/${courseId}/class-sessions`, { params: { id: courseId }, body: { kind: "lecture", weekday: weekdayOf(day), startTime: "08:00", endTime: "10:00", location: "Hall A" } })).json.id;
+  });
+  const week = async (d = day) => (await a(timetable.GET, "GET", "/timetable", { query: { week: monday(d) } })).json as { date: string; status: string; startTime: string; location: string | null; classSessionId: string | null }[];
+  const on = async (d = day) => (await week(d)).filter((o) => o.date === d || (o.classSessionId === sessionId && o.status === "rescheduled"));
+  const active = async () => (await pool.query("select kind from session_change where deleted_at is null")).rows.map((r) => r.kind);
+  const run = (make: (ctx: AiContext) => object[]) => aiTick(fakeAi((ctx) => ops(ctx, make(ctx).map((o) => ({ ...o, sourceMessageIds: [ctx.messages[0]!.id] })))), key, later());
+  const lastChange = async () => (await pool.query("select id, summary, risk, entity_type from auto_change order by created_at desc limit 1")).rows[0];
+  // Each message a second after the last: "most recently sent wins" needs them in order.
+  let clock = Date.now();
+  const tell = (text: string) => say(text, new Date((clock += 1000)));
+
+  it("the AI sees the coming classes; a cancellation is applied, risky, and can be undone", async () => {
+    await tell("Tuesday's DS lecture is cancelled");
+    let seen: AiContext | undefined;
+    await aiTick(fakeAi((ctx) => ((seen = ctx), ops(ctx, [{ op: "cancel_occurrence", classSessionId: sessionId, date: day, sourceMessageIds: [ctx.messages[0]!.id] }]))), key, later());
+    expect(seen?.occurrences).toContainEqual({ classSessionId: sessionId, courseId, kind: "lecture", date: day, start: "08:00", end: "10:00", location: "Hall A", status: "normal", originalDate: null, sessionChangeId: null });
+    expect(await on()).toMatchObject([{ status: "cancelled" }]);
+    const change = await lastChange();
+    expect(change).toMatchObject({ risk: "cancelled", entity_type: "session_change", summary: expect.stringMatching(/^CS2010 lecture .+ cancelled$/) });
+    expect((await a(undo.POST, "POST", `/auto-changes/${change.id}/undo`, { params: { id: change.id } })).status).toBe(200);
+    expect(await on()).toMatchObject([{ status: "normal" }]);
+  });
+
+  it("a reschedule, then its correction, updates the same change; \"back on\" removes it", async () => {
+    await tell("Tuesday's lecture moved to 3pm");
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    expect(await on()).toMatchObject([{ status: "rescheduled", startTime: "15:00", location: "Hall A" }]);
+    // The AI may name the occurrence again instead of the change: still one change, never two.
+    await tell("sorry, 4pm not 3pm");
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "16:00", newEnd: "18:00" }]);
+    expect(await active()).toEqual(["reschedule"]);
+    expect(await on()).toMatchObject([{ status: "rescheduled", startTime: "16:00" }]);
+    expect((await lastChange()).risk).toBe("normal");
+
+    await tell("come to mac lab instead");
+    await run((ctx) => [{ op: "update_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "rescheduled")!.sessionChangeId, fields: { newLocation: "Mac Lab" } }]);
+    expect(await on()).toMatchObject([{ startTime: "16:00", location: "Mac Lab" }]);
+
+    await tell("the lecture is back on at the usual time");
+    await run((ctx) => [{ op: "remove_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "rescheduled")!.sessionChangeId }]);
+    expect(await active()).toEqual([]);
+    expect(await on()).toMatchObject([{ status: "normal", startTime: "08:00" }]);
+  });
+
+  it("cancelling an occurrence that was rescheduled turns that change into a cancellation", async () => {
+    await tell("moved to 3pm");
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    await tell("actually it's cancelled");
+    await run(() => [{ op: "cancel_occurrence", classSessionId: sessionId, date: day }]);
+    expect(await active()).toEqual(["cancel"]);
+    expect(await on()).toMatchObject([{ status: "cancelled" }]);
+    expect((await lastChange()).risk).toBe("cancelled");
+  });
+
+  it("adds an extra session; removing it is a risky cancellation", async () => {
+    const sat = addDays(day, 3);
+    await tell("extra lab on Saturday 9am");
+    await run(() => [{ op: "add_extra_session", courseId, kind: "lab", date: sat, start: "09:00", end: "11:00", location: "Mac Lab" }]);
+    expect((await week(sat)).filter((o) => o.status === "extra")).toMatchObject([{ date: sat, startTime: "09:00", location: "Mac Lab" }]);
+    expect((await lastChange()).summary).toMatch(/^Extra CS2010 lab .+, 09:00–11:00, Mac Lab$/);
+    await tell("no extra lab after all");
+    await run((ctx) => [{ op: "remove_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "extra")!.sessionChangeId }]);
+    expect((await week(sat)).filter((o) => o.status === "extra")).toEqual([]);
+    expect((await lastChange()).risk).toBe("cancelled");
+  });
+
+  it("drops only the operation that breaks a rule when applied; the rest of the batch still applies", async () => {
+    const t0 = Date.now();
+    await say("moved to 3pm", new Date(t0 - 3000));
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    // The Student shortens it now; then an older message arrives saying 4pm to 6pm. Its start wins (newer than the
+    // AI's 3pm) but its end loses (older than the Student's edit): 16:00 to 15:30 can't be kept.
+    const [c] = (await pool.query("select id, version from session_change")).rows;
+    await a(sessionChangeRoute.PATCH, "PATCH", `/session-changes/${c.id}`, { params: { id: c.id }, body: { expectedVersion: c.version, newEnd: "15:30" } });
+    await say("4pm to 6pm; lab 6 due Friday", new Date(t0 - 2000));
+    await aiTick(
+      fakeAi((ctx) => ops(ctx, [
+        { op: "update_session_change", sessionChangeId: c.id, fields: { newStart: "16:00", newEnd: "18:00" }, sourceMessageIds: [ctx.messages[0]!.id] },
+        create(ctx, { title: "Lab 6" }),
+      ])),
+      key,
+      later(),
+    );
+    expect(await on()).toMatchObject([{ startTime: "15:00" }]);
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toMatchObject([{ title: "Lab 6" }]);
+    expect((await inbox()).at(-1)).toMatchObject({ status: "done", possibly_missed: true });
+  });
+
+  it("a change turned into a cancellation keeps no new time; Undo of \"back on\" is blocked once the class has another change", async () => {
+    await tell("moved to 3pm");
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    await tell("no, it's cancelled");
+    await run((ctx) => [{ op: "update_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "rescheduled")!.sessionChangeId, fields: { kind: "cancelled" } }]);
+    expect((await pool.query("select kind, new_date, new_start_time from session_change")).rows).toEqual([{ kind: "cancel", new_date: null, new_start_time: null }]);
+
+    await tell("it's back on");
+    await run((ctx) => [{ op: "remove_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "cancelled")!.sessionChangeId }]);
+    const backOn = await lastChange();
+    await tell("cancelled again, sorry");
+    await run(() => [{ op: "cancel_occurrence", classSessionId: sessionId, date: day }]);
+    const res = await a(undo.POST, "POST", `/auto-changes/${backOn.id}/undo`, { params: { id: backOn.id } });
+    expect(res).toMatchObject({ status: 409, json: { error: { message: "This class has another change now" } } });
+  });
+
+  it("extends the Semester: weekly classes continue, a due date in the new weeks applies in the same batch, and Undo restores the end", async () => {
+    const newEnd = "2027-01-15";
+    await tell("semester extended by 4 weeks; final report due 2027-01-08");
+    await run((ctx) => [{ op: "extend_semester", semesterId: ctx.semester!.id, newEndDate: newEnd }, create(ctx, { title: "Final report", dueDate: "2027-01-08" })]);
+    expect((await a(semesters.GET, "GET", "/semesters")).json).toMatchObject([{ endDate: newEnd }]);
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toMatchObject([{ title: "Final report", dueDate: "2027-01-08" }]);
+    expect((await week("2027-01-11")).filter((o) => o.classSessionId === sessionId)).toHaveLength(1);
+    const ext = (await pool.query("select id, summary from auto_change where entity_type = 'semester'")).rows[0];
+    expect(ext.summary).toMatch(/^Semester ends .+ → .+$/);
+    // A class in the added weeks changed since: undoing the extension would strand it, so Undo says why.
+    const newWeek = (await week("2027-01-11")).find((o) => o.classSessionId === sessionId)!.date;
+    expect((await a(sessionChanges.POST, "POST", "/session-changes", { body: { kind: "cancel", classSessionId: sessionId, date: newWeek } })).status).toBe(201);
+    expect(await a(undo.POST, "POST", `/auto-changes/${ext.id}/undo`, { params: { id: ext.id } })).toMatchObject({ status: 409, json: { error: { message: "Classes in the added weeks were changed since; undo those first" } } });
+    await pool.query("update session_change set deleted_at = now()");
+    expect((await a(undo.POST, "POST", `/auto-changes/${ext.id}/undo`, { params: { id: ext.id } })).status).toBe(200);
+    expect((await a(semesters.GET, "GET", "/semesters")).json).toMatchObject([{ endDate: "2026-12-18" }]);
   });
 });

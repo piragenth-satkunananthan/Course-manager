@@ -59,6 +59,9 @@ const proposed = z.discriminatedUnion("op", [
   addExtraSession.extend({ courseId: z.null() }),
 ]);
 
+/** update_session_change speaks "cancelled|rescheduled|extra"; the session_change table stores these. */
+export const CHANGE_KIND = { cancelled: "cancel", rescheduled: "reschedule", extra: "extra" } as const;
+
 export const DECISIONS = ["applied", "question", "ignored", "unknown_course", "possibly_missed"] as const;
 
 export const opsV1 = z.strictObject({

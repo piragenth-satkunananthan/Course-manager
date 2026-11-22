@@ -3,7 +3,8 @@
 import { and, desc, eq, gte, inArray, isNull, ne, or } from "drizzle-orm";
 import { decrypt } from "@/server/crypto";
 import type { Tx } from "@/server/db/client";
-import { assignment, course, courseNickname, exam, inboxMessage, semester, suppression } from "@/server/db/schema";
+import { assignment, classSession, course, courseNickname, exam, inboxMessage, semester, sessionChange, suppression } from "@/server/db/schema";
+import { expandOccurrences } from "@/server/domain/occurrences";
 import { addDays, localToInstant, todayIn } from "@/server/domain/time";
 import type { ContextAdapter } from "@/server/ai/context";
 
@@ -34,6 +35,25 @@ export function pgAdapter(db: Tx, studentId: string, groupId: string, batchIds: 
         name: c.name,
         nicknames: nicks.filter((n) => n.courseId === c.id).map((n) => n.nickname),
         ...(c.practicalOfCourseId && ids.includes(c.practicalOfCourseId) ? { practicalOf: c.practicalOfCourseId } : {}),
+      }));
+    },
+    async getOccurrences() {
+      const s = await currentSemester();
+      const ids = await courseIds();
+      if (!s || !ids.length) return [];
+      const [sessions, changes] = await Promise.all([
+        db.select().from(classSession).where(and(eq(classSession.studentId, studentId), inArray(classSession.courseId, ids))),
+        db.select().from(sessionChange).where(and(eq(sessionChange.studentId, studentId), inArray(sessionChange.courseId, ids), isNull(sessionChange.deletedAt))),
+      ]);
+      const today = todayIn(now);
+      const occ = expandOccurrences(
+        sessions.map((x) => ({ id: x.id, courseId: x.courseId, kind: x.kind, weekday: x.weekday, startTime: hhmm(x.startTime)!, endTime: hhmm(x.endTime)!, location: x.location, semesterStart: s.startDate, semesterEnd: s.endDate })),
+        changes.map((c) => ({ ...c, newStartTime: hhmm(c.newStartTime), newEndTime: hhmm(c.newEndTime) })),
+        { from: today, to: addDays(today, 21) },
+      );
+      return occ.map((o) => ({
+        classSessionId: o.classSessionId, courseId: o.courseId, kind: o.kind, date: o.date, start: o.startTime, end: o.endTime, location: o.location,
+        status: o.status, originalDate: o.originalDate, sessionChangeId: o.sessionChangeId,
       }));
     },
     async getOpenAndRecentAssessments() {

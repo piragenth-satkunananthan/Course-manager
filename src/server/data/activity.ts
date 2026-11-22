@@ -1,21 +1,22 @@
 // The Activity Log and Undo (design file 46). Source message text is decrypted here for display only.
-import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, or, type SQL } from "drizzle-orm";
 import { applyOperations } from "@/server/ai/apply-operations";
 import { buildContext } from "@/server/ai/context";
 import { isHandled, validateOutput } from "@/server/ai/validate";
 import { decrypt, loadKey } from "@/server/crypto";
 import { db, type Tx } from "@/server/db/client";
-import { activityEvent, aiBatch, assignment, autoChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
+import { activityEvent, aiBatch, assignment, autoChange, sessionChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
 import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
 import { AppError, invalid, notFound } from "@/server/http/errors";
 import type { ActivityItem, AutoChangeItem, ResolveResult, UnknownCourseResolve } from "@/shared/schemas/activity";
 import { pgAdapter } from "./ai-context";
 import { createCourse, getCourse } from "./courses";
+import { activeChangeFor } from "./timetable";
 import { iso } from "./util";
 import { writeEntity } from "./write-entity";
 
 type Change = typeof autoChange.$inferSelect;
-const TABLES = { assignment, exam } as const;
+const TABLES = { assignment, exam, session_change: sessionChange, semester } as const;
 
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
 async function undoState(x: typeof db | Tx, c: Change) {
@@ -109,6 +110,27 @@ export async function listActivity(studentId: string, cursor?: string): Promise<
 }
 
 /**
+ * Undo that the Undo rule allows but the timetable can't take (U16): bringing back a class change when the class has
+ * another change now, or ending the Semester earlier while classes are changed in the weeks it would lose.
+ */
+async function undoWouldBreak(tx: Tx, c: Change, before: Record<string, unknown> | null) {
+  if (c.entityType === "session_change" && c.op === "delete") {
+    const [row] = await tx.select().from(sessionChange).where(and(eq(sessionChange.studentId, c.studentId), eq(sessionChange.id, c.entityId)));
+    if (row?.classSessionId && (await activeChangeFor(tx, c.studentId, row.classSessionId, row.originalDate!))) return "This class has another change now";
+  }
+  if (c.entityType === "semester" && typeof before?.endDate === "string") {
+    const [late] = await tx
+      .select({ id: sessionChange.id })
+      .from(sessionChange)
+      .innerJoin(course, eq(course.id, sessionChange.courseId))
+      .where(and(eq(sessionChange.studentId, c.studentId), eq(course.semesterId, c.entityId), isNull(sessionChange.deletedAt), or(gt(sessionChange.newDate, before.endDate), gt(sessionChange.originalDate, before.endDate))))
+      .limit(1);
+    if (late) return "Classes in the added weeks were changed since; undo those first";
+  }
+  return null;
+}
+
+/**
  * Undo (design §3): allowed only while nothing has changed the item since. Restores the earlier values and their set
  * times as a new version. The Student's Undo of an AI-created item adds a suppression, so a repeat can't recreate it;
  * the system's (an edited or deleted message) doesn't. Returns why it was blocked, if it was.
@@ -117,12 +139,14 @@ export async function undoChange(tx: Tx, c: Change, actor: "student" | "system")
   const state = await undoState(tx, c);
   if (!state.ok) return state;
   const [v] = await tx.select().from(entityVersion).where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.autoChangeId, c.id)));
-  if (!v || (c.entityType !== "assignment" && c.entityType !== "exam")) return { ok: false, reason: "This change can't be undone" };
+  if (!v) return { ok: false, reason: "This change can't be undone" };
 
+  const blocked = await undoWouldBreak(tx, c, v.before as Record<string, unknown> | null);
+  if (blocked) return { ok: false, reason: blocked };
   const restore: Record<string, unknown> = c.op === "create" ? { deletedAt: new Date() } : c.op === "delete" ? { deletedAt: null } : { ...v.before };
   await writeEntity(tx, { studentId: c.studentId, entityType: c.entityType, op: "undo", entityId: c.entityId, restore, restoreFieldSetAt: v.beforeFieldSetAt, actor, setAt: new Date().toISOString() });
   await tx.update(autoChange).set({ undoneAt: new Date() }).where(and(eq(autoChange.studentId, c.studentId), eq(autoChange.id, c.id)));
-  if (c.op === "create" && actor === "student") {
+  if (c.op === "create" && actor === "student" && (c.entityType === "assignment" || c.entityType === "exam")) {
     const after = v.after as { courseId: string; title: string; dueDate?: string; date?: string | null };
     await tx.insert(suppression).values({ studentId: c.studentId, courseId: after.courseId, entityType: c.entityType, titleKey: titleKey(after.title), dueDate: (c.entityType === "assignment" ? after.dueDate : after.date) ?? null });
   }
@@ -207,7 +231,9 @@ export async function resolveUnknownCourse(studentId: string, id: string, input:
       const r = validateOutput(JSON.stringify({ messages: [], operations: [op], unknownCourses: [] }), ctx);
       if (r.ok && r.valid.length) {
         const [batch] = await tx.select({ modelId: aiBatch.modelId, promptVersion: aiBatch.promptVersion }).from(aiBatch).where(and(eq(aiBatch.studentId, studentId), eq(aiBatch.id, p.batchId)));
-        applied += await applyOperations(tx, { studentId, batchId: p.batchId, operations: r.valid, sentAt: new Map(sources.map((s) => [s.id, s.sentAt])), modelId: batch?.modelId ?? "", promptVersion: batch?.promptVersion ?? "" });
+        const done = await applyOperations(tx, { studentId, batchId: p.batchId, operations: r.valid, sentAt: new Map(sources.map((s) => [s.id, s.sentAt])), modelId: batch?.modelId ?? "", promptVersion: batch?.promptVersion ?? "" });
+        applied += done.applied;
+        for (const id of done.failed) missed.add(id);
       } else if (!(r.ok && r.dropped.every((d) => isHandled(d.reason)))) {
         for (const s of sources) missed.add(s.id);
       }

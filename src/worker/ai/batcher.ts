@@ -188,7 +188,8 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     await db.transaction(async (tx) => {
       await undoEditedOriginals(tx, batch!.studentId, edits);
       await recordUnknownCourses(tx, batch!.studentId, batchId, unknownCourses, new Set(ids));
-      await applyOperations(tx, { studentId: batch!.studentId, batchId, operations: valid, sentAt: new Map(rows.map((r) => [r.id, r.sentAt])), modelId: ai.model, promptVersion: PROMPT_VERSION });
+      const { failed } = await applyOperations(tx, { studentId: batch!.studentId, batchId, operations: valid, sentAt: new Map(rows.map((r) => [r.id, r.sentAt])), modelId: ai.model, promptVersion: PROMPT_VERSION });
+      for (const id of failed) flagged.add(id);
       for (const r of rows) {
         const d = superseded.has(r.id)
           ? { decision: "superseded" as const, reason: SUPERSEDED }
