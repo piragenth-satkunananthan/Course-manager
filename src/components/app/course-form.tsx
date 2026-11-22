@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { RadioGroup as RadioPrimitive } from "radix-ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiFetch } from "@/lib/api-fetch";
+import { apiFetch, type ApiResult } from "@/lib/api-fetch";
 import { COLOUR_BG, COLOUR_LABEL } from "@/lib/course-colours";
 import { Course, COURSE_COLOURS, CourseCreate } from "@/shared/schemas/course";
 import type { Semester } from "@/shared/schemas/semester";
@@ -15,15 +15,26 @@ import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } fro
 const LABELS = { semesterId: "Semester", code: "Code", name: "Name", lecturerName: "Lecturer", colour: "Colour", practicalOfCourseId: "Practical of" };
 const NONE = "none"; // Radix Select items can't have an empty value
 
-/** `semesterCourses`: the Courses that may be picked as "Practical of" (U13), filtered here to the chosen Semester. */
-type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; semesterCourses: Course[]; onDone: (course: Course) => void };
+/**
+ * `semesterCourses`: the Courses that may be picked as "Practical of" (U13), filtered here to the chosen Semester.
+ * `initial` pre-fills a new Course; `save` replaces the plain create (an Unknown Course's "Add course", #14).
+ */
+type Props = {
+  semesters: Semester[];
+  defaultSemesterId?: string;
+  course?: Course;
+  semesterCourses: Course[];
+  initial?: Partial<CourseCreate>;
+  save?: (values: CourseCreate) => Promise<ApiResult<Course>>;
+  onDone: (course: Course) => void;
+};
 
-export function CourseForm({ semesters, defaultSemesterId, course, semesterCourses, onDone }: Props) {
+export function CourseForm({ semesters, defaultSemesterId, course, semesterCourses, initial, save, onDone }: Props) {
   const form = useAppForm(
     CourseCreate,
     course
       ? { semesterId: course.semesterId, code: course.code, name: course.name, lecturerName: course.lecturerName ?? "", colour: course.colour, practicalOfCourseId: course.practicalOfCourseId }
-      : { semesterId: defaultSemesterId ?? "", code: "", name: "", lecturerName: "", colour: undefined, practicalOfCourseId: null },
+      : { semesterId: defaultSemesterId ?? "", code: "", name: "", lecturerName: "", colour: undefined, practicalOfCourseId: null, ...initial },
   );
   const { isSubmitting, errors, submitCount } = form.formState;
   const semesterId = form.watch("semesterId");
@@ -39,9 +50,11 @@ export function CourseForm({ semesters, defaultSemesterId, course, semesterCours
   async function onSubmit({ semesterId, ...rest }: CourseCreate) {
     const res = course
       ? await apiFetch(`/courses/${course.id}`, { method: "PATCH", body: rest, schema: Course })
-      : await apiFetch("/courses", { method: "POST", body: { semesterId, ...rest }, schema: Course });
+      : save
+        ? await save({ semesterId, ...rest })
+        : await apiFetch("/courses", { method: "POST", body: { semesterId, ...rest }, schema: Course });
     if (!res.ok) return applyServerError(form, res.error);
-    toast.success("Saved");
+    if (!save) toast.success("Saved"); // a custom save reports its own outcome
     onDone(res.data);
   }
 

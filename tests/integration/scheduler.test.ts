@@ -8,6 +8,7 @@ import * as assignments from "@/app/api/v1/assignments/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as exams from "@/app/api/v1/exams/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import { encrypt, loadKey } from "@/server/crypto";
 import { pool } from "@/server/db/client";
 import { runDigest, runFinalReminders } from "../../src/worker/scheduler/jobs";
 import { client, resetData, seedStudent } from "./api";
@@ -20,6 +21,7 @@ let server: Server;
 
 let a: ReturnType<typeof client>;
 let courseId: string;
+let studentId: string;
 // Fri 15 Jan 2027 in Colombo (UTC+05:30)
 const at = (localTime: string, date = "2027-01-15") => new Date(`${date}T${localTime}:00+05:30`);
 
@@ -47,7 +49,9 @@ beforeEach(async () => {
   sent = [];
   failNext = 0;
   await resetData();
-  a = client((await seedStudent("student@example.com")).cookie);
+  const me = await seedStudent("student@example.com");
+  studentId = me.id;
+  a = client(me.cookie);
   const semesterId = (await a(semesters.POST, "POST", "/semesters", { body: { name: "S", startDate: "2026-12-01", endDate: "2027-03-31" } })).json.id;
   courseId = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "CS2010", name: "DS", colour: "blue" } })).json.id;
 });
@@ -150,6 +154,36 @@ describe("the Daily Digest", () => {
     expect(sent).toHaveLength(2);
     expect(sent[1]!.text).toContain("Fresh");
     expect(sent[1]!.text).not.toContain("Old news");
+  });
+
+  it("adds Check these (#14): risky changes and Possibly Missed messages since the last digest, open Unknown Courses, and paused", async () => {
+    const q = (sql: string, params: unknown[] = []) => pool.query(sql, params);
+    const group = (await q("insert into wa_group (student_id, wa_jid, subject, linked_course_id) values ($1, 'g@g.us', 'CS2010 group', $2) returning id", [studentId, courseId])).rows[0].id;
+    const batch = (await q("insert into ai_batch (student_id, wa_group_id) values ($1, $2) returning id", [studentId, group])).rows[0].id;
+    const message = (text: string, flagged: boolean) =>
+      q("insert into inbox_message (student_id, wa_group_id, wa_message_id, kind, sender_name, sent_at, text_enc, possibly_missed, possibly_missed_at, status) values ($1, $2, $3, 'text', 'Kasun', now(), $4, $5, case when $5 then now() end, 'done')", [
+        studentId, group, text, encrypt(text, loadKey()), flagged,
+      ]);
+    await message("Group B lab cancelled", true);
+    await message("thanks all", false);
+    await q("insert into auto_change (student_id, batch_id, entity_type, entity_id, op, after_version, summary, risk) values ($1, $2, 'assignment', gen_random_uuid(), 'delete', 2, 'Quiz 2 cancelled', 'cancelled'), ($1, $2, 'assignment', gen_random_uuid(), 'create', 1, 'Lab 5: due Mon 18 Jan', 'normal')", [studentId, batch]);
+    await q("insert into unknown_course_mention (student_id, name, name_key) values ($1, 'ENG', 'eng'), ($1, 'Old', 'old')", [studentId]);
+    await q("update unknown_course_mention set status = 'ignored' where name = 'Old'");
+    await q("update \"user\" set auto_changes_paused = true");
+
+    await runDigest(at("07:00", "2027-01-14"));
+    expect(sent[0]!.text).toContain("Check these");
+    expect(sent[0]!.text).toContain("Cancelled: Quiz 2 cancelled");
+    expect(sent[0]!.text).toContain('Possibly missed, Kasun in CS2010 group: "Group B lab cancelled"');
+    expect(sent[0]!.text).toContain('Unknown Course "ENG"');
+    expect(sent[0]!.text).toContain("Auto Changes are paused");
+    expect(sent[0]!.text).toContain("/activity");
+    expect(sent[0]!.text).not.toMatch(/thanks all|Lab 5|"Old"/);
+
+    // The next day: what was already reported isn't repeated; the open Unknown Course still is.
+    await runDigest(at("07:00"));
+    expect(sent[1]!.text).toContain('Unknown Course "ENG"');
+    expect(sent[1]!.text).not.toMatch(/Quiz 2|Group B/);
   });
 
   it("records a day with nothing to report as skipped, and sends nothing", async () => {

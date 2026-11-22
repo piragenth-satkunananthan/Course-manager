@@ -1,4 +1,4 @@
-// The Daily Digest (design file 26). "Check these" joins with #14.
+// The Daily Digest (design file 26): Due soon, Added or moved, and Check these (#14).
 import { addDays, instantToLocal } from "./time";
 
 /** 07:00–08:59 Asia/Colombo. */
@@ -7,10 +7,30 @@ export const isDigestWindow = (now: Date) => {
   return time >= "07:00" && time < "09:00";
 };
 
+export type CheckTheseInput = {
+  riskyChanges: { summary: string; risk: "normal" | "moved_later" | "cancelled" }[];
+  possiblyMissed: { senderName: string | null; groupSubject: string; text: string | null }[];
+  unknownCourses: { name: string }[];
+  paused: boolean;
+};
+
+const clip = (t: string) => (t.length > 120 ? `${t.slice(0, 119)}…` : t);
+
+/** One line per thing to check, in the digest's order. */
+function checkThese(c: CheckTheseInput) {
+  return [
+    ...c.riskyChanges.map((r) => `${r.risk === "cancelled" ? "Cancelled" : "Moved later"}: ${r.summary}`),
+    ...c.possiblyMissed.map((m) => `Possibly missed, ${m.senderName ?? "a message"} in ${m.groupSubject}${m.text ? `: "${clip(m.text)}"` : ""}`),
+    ...c.unknownCourses.map((u) => `Unknown Course "${u.name}": add it, link it to a Course, or ignore it`),
+    ...(c.paused ? ["Auto Changes are paused: new announcements aren't applied"] : []),
+  ];
+}
+
 /** Due soon is today, tomorrow and the day after; Added or moved is what changed since the last digest. Null when there's nothing to say. */
-export function selectDigest<T extends { id: string; localDate: string | null }>(open: T[], changedIds: ReadonlySet<string>, today: string) {
+export function selectDigest<T extends { id: string; localDate: string | null }>(open: T[], changedIds: ReadonlySet<string>, today: string, check: CheckTheseInput) {
   const last = addDays(today, 2);
   const dueSoon = open.filter((d) => d.localDate !== null && d.localDate >= today && d.localDate <= last);
   const addedOrMoved = open.filter((d) => changedIds.has(d.id));
-  return dueSoon.length || addedOrMoved.length ? { dueSoon, addedOrMoved } : null;
+  const lines = checkThese(check);
+  return dueSoon.length || addedOrMoved.length || lines.length ? { dueSoon, addedOrMoved, checkThese: lines } : null;
 }

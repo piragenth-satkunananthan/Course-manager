@@ -189,3 +189,49 @@ describe("failures and crashes", () => {
     expect(await inbox()).toMatchObject([{ status: "pending" }]);
   });
 });
+
+describe("Possibly Missed and Unknown Courses (#14)", () => {
+  const decide = (decision: string) => fakeAi((ctx) => ({ messages: decideAll(ctx, decision), operations: [], unknownCourses: [] }));
+
+  it("flags an ignored message or a question with a date, time or deadline word, and one the AI calls possibly missed", async () => {
+    await say("thanks all");
+    await aiTick(decide("ignored"), key, later());
+    await say("is the quiz open-book?");
+    await aiTick(decide("question"), key, later());
+    await say("Group B lab cancelled");
+    await aiTick(decide("possibly_missed"), key, later());
+    await say("see you at 3pm");
+    await aiTick(decide("ignored"), key, later());
+    expect((await inbox()).map((r) => [r.decision, r.possibly_missed])).toEqual([
+      ["ignored", false],
+      ["question", true],
+      ["possibly_missed", true],
+      ["ignored", true],
+    ]);
+  });
+
+  const mentions = async () => (await pool.query("select name, name_key, status, jsonb_array_length(pending_ops) as ops, first_message_id is not null as first from unknown_course_mention")).rows;
+  const unknown = (name: string) =>
+    fakeAi((ctx) => ({
+      messages: decideAll(ctx, "unknown_course"),
+      operations: [],
+      unknownCourses: [{ name, messageIds: ctx.messages.map((m) => m.id), proposedOperations: [{ ...create(ctx), courseId: null, title: "Essay" }] }],
+    }));
+
+  it("logs one Unknown Course per name, a repeat adds its operations, and an ignored name stays quiet", async () => {
+    await say("ENG essay due 27th");
+    await aiTick(unknown("ENG"), key, later());
+    await say("eng essay reminder: due 27th");
+    await aiTick(unknown(" eng "), key, later());
+    expect(await mentions()).toEqual([{ name: "ENG", name_key: "eng", status: "open", ops: 2, first: true }]);
+    expect(await inbox()).toMatchObject([
+      { decision: "unknown_course", possibly_missed: false },
+      { decision: "unknown_course", possibly_missed: false },
+    ]);
+
+    await pool.query("update unknown_course_mention set status = 'ignored'");
+    await say("ENG essay due 28th");
+    await aiTick(unknown("ENG"), key, later());
+    expect(await mentions()).toMatchObject([{ status: "ignored", ops: 2 }]);
+  });
+});

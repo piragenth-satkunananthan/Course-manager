@@ -12,6 +12,7 @@ export type Dropped = { op: Operation; reason: string; messageIds: string[] };
 // Dropped because the item was already handled: not Possibly Missed.
 export const SUPERSEDED = "superseded: the Student dismissed this before";
 export const REPEATS = "repeats an existing item";
+export const isHandled = (reason: string) => reason === REPEATS || reason === SUPERSEDED;
 export type Validated =
   | { ok: false; error: string }
   | { ok: true; decisions: Map<string, Decision>; valid: Operation[]; dropped: Dropped[]; overflow: Operation[]; unknownCourses: z.infer<typeof opsV1>["unknownCourses"] };

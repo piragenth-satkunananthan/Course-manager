@@ -1,11 +1,16 @@
 // The Activity Log and Undo (design file 46). Source message text is decrypted here for display only.
 import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, type SQL } from "drizzle-orm";
+import { applyOperations } from "@/server/ai/apply-operations";
+import { buildContext } from "@/server/ai/context";
+import { isHandled, validateOutput } from "@/server/ai/validate";
 import { decrypt, loadKey } from "@/server/crypto";
 import { db, type Tx } from "@/server/db/client";
-import { activityEvent, assignment, autoChange, autoChangeSource, entityVersion, exam, inboxMessage, suppression, waGroup } from "@/server/db/schema";
+import { activityEvent, aiBatch, assignment, autoChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
 import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
-import { AppError, notFound } from "@/server/http/errors";
-import type { ActivityItem, AutoChangeItem } from "@/shared/schemas/activity";
+import { AppError, invalid, notFound } from "@/server/http/errors";
+import type { ActivityItem, AutoChangeItem, ResolveResult, UnknownCourseResolve } from "@/shared/schemas/activity";
+import { pgAdapter } from "./ai-context";
+import { createCourse, getCourse } from "./courses";
 import { iso } from "./util";
 import { writeEntity } from "./write-entity";
 
@@ -64,13 +69,39 @@ const PAGE = 50;
 // shortcut: the cursor is a timestamp, so rows sharing the boundary microsecond could be skipped; add an id tiebreak if seen.
 export async function listActivity(studentId: string, cursor?: string): Promise<{ items: ActivityItem[]; nextCursor: string | null }> {
   const before = cursor ? new Date(cursor) : null;
-  const [changes, events] = await Promise.all([
+  const key = loadKey();
+  const first = db.$with("first").as(db.select({ id: inboxMessage.id, senderName: inboxMessage.senderName, sentAt: inboxMessage.sentAt, textEnc: inboxMessage.textEnc, groupSubject: waGroup.subject }).from(inboxMessage).innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId)));
+  const [changes, events, missed, unknown] = await Promise.all([
     db.select().from(autoChange).where(and(eq(autoChange.studentId, studentId), before ? lt(autoChange.createdAt, before) : undefined)).orderBy(desc(autoChange.createdAt)).limit(PAGE),
     db.select().from(activityEvent).where(and(eq(activityEvent.studentId, studentId), before ? lt(activityEvent.createdAt, before) : undefined)).orderBy(desc(activityEvent.createdAt)).limit(PAGE),
+    db
+      .select({ m: inboxMessage, groupSubject: waGroup.subject, courseId: waGroup.linkedCourseId })
+      .from(inboxMessage)
+      .innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId))
+      .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.possiblyMissed, true), isNull(inboxMessage.revokedAt), before ? lt(inboxMessage.possiblyMissedAt, before) : undefined))
+      .orderBy(desc(inboxMessage.possiblyMissedAt))
+      .limit(PAGE),
+    db
+      .with(first)
+      .select({ u: unknownCourseMention, first: { senderName: first.senderName, sentAt: first.sentAt, textEnc: first.textEnc, groupSubject: first.groupSubject } })
+      .from(unknownCourseMention)
+      .leftJoin(first, eq(first.id, unknownCourseMention.firstMessageId))
+      .where(and(eq(unknownCourseMention.studentId, studentId), before ? lt(unknownCourseMention.createdAt, before) : undefined))
+      .orderBy(desc(unknownCourseMention.createdAt))
+      .limit(PAGE),
   ]);
+  const text = (enc: Buffer | null) => (enc ? decrypt(enc, key) : null);
   const items: ActivityItem[] = [
     ...(await toItems(changes)).map((c) => ({ type: "auto_change" as const, ...c })),
     ...events.map((e) => ({ type: "event" as const, id: e.id, kind: e.kind, payload: e.payload, createdAt: e.createdAt.toISOString() })),
+    ...missed.map(({ m, groupSubject, courseId }) => ({
+      type: "possibly_missed" as const, inboxMessageId: m.id, senderName: m.senderName, sentAt: m.sentAt.toISOString(), text: text(m.textEnc), groupSubject,
+      reason: m.decision === "possibly_missed" ? m.decisionReason : null, courseId, createdAt: (m.possiblyMissedAt ?? m.receivedAt).toISOString(),
+    })),
+    ...unknown.map(({ u, first: f }) => ({
+      type: "unknown_course" as const, id: u.id, name: u.name, status: u.status, operations: u.pendingOps.length, createdAt: u.createdAt.toISOString(),
+      firstMessage: f?.sentAt ? { senderName: f.senderName, sentAt: f.sentAt.toISOString(), text: text(f.textEnc), groupSubject: f.groupSubject! } : null,
+    })),
   ]
     .sort((x, y) => y.createdAt.localeCompare(x.createdAt))
     .slice(0, PAGE);
@@ -107,4 +138,83 @@ export async function undoAutoChange(studentId: string, id: string) {
     if (!r.ok) throw new AppError("UNDO_BLOCKED", r.reason);
   });
   return (await listAutoChanges(studentId, eq(autoChange.id, id)))[0]!;
+}
+
+/** Dismiss on a Possibly Missed message (or after adding from it): it leaves the Activity Log and the digest. */
+export async function dismissPossiblyMissed(studentId: string, inboxMessageId: string) {
+  const done = await db
+    .update(inboxMessage)
+    .set({ possiblyMissed: false })
+    .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.id, inboxMessageId), eq(inboxMessage.possiblyMissed, true)))
+    .returning({ id: inboxMessage.id });
+  if (!done.length) throw notFound("Message");
+  return null;
+}
+
+/**
+ * Resolving an Unknown Course (design file 46). "add" creates the Course in the current Semester, with the name as
+ * a Nickname; "nickname" maps the name to an existing Course. Either way each pending operation gets the Course,
+ * is validated against a fresh context, and applied as an Auto Change of its original batch (actor ai), so it can be
+ * undone. One that no longer passes becomes Possibly Missed. "ignore" stops the name being logged.
+ */
+export async function resolveUnknownCourse(studentId: string, id: string, input: UnknownCourseResolve, now = new Date()): Promise<ResolveResult> {
+  const mine = and(eq(unknownCourseMention.studentId, studentId), eq(unknownCourseMention.id, id));
+  const [open] = await db.select().from(unknownCourseMention).where(mine);
+  if (!open) throw notFound("Unknown Course");
+  if (open.status !== "open") throw new AppError("CONFLICT", "This Unknown Course was already resolved");
+  if (input.action === "ignore") {
+    await db.update(unknownCourseMention).set({ status: "ignored", resolvedAt: now }).where(mine);
+    return { applied: 0, possiblyMissed: 0, course: null };
+  }
+
+  const [current] = await db.select({ id: semester.id }).from(semester).where(and(eq(semester.studentId, studentId), eq(semester.isCurrent, true), isNull(semester.archivedAt)));
+  if (!current) throw new AppError("CONFLICT", "Set a current Semester first");
+  let courseId: string;
+  if (input.action === "add") {
+    // shortcut: the Course is created before the transaction below, so a failure after it leaves the Course; the entry stays open and "Nickname of…" finishes it.
+    const { code, name, lecturerName, colour, practicalOfCourseId } = input;
+    courseId = (await createCourse(studentId, { semesterId: current.id, code, name, lecturerName, colour, practicalOfCourseId })).id;
+  } else {
+    const [c] = await db.select({ semesterId: course.semesterId, archivedAt: course.archivedAt }).from(course).where(and(eq(course.studentId, studentId), eq(course.id, input.courseId)));
+    if (!c) throw notFound("Course");
+    if (c.semesterId !== current.id || c.archivedAt) throw invalid("courseId", "Choose a Course in the current Semester");
+    courseId = input.courseId;
+  }
+
+  const result = await db.transaction(async (tx) => {
+    const [locked] = await tx.select().from(unknownCourseMention).where(mine).for("update");
+    if (locked?.status !== "open") throw new AppError("CONFLICT", "This Unknown Course was already resolved");
+    const [c] = await tx.select({ code: course.code, name: course.name }).from(course).where(and(eq(course.studentId, studentId), eq(course.id, courseId)));
+    // shortcut: a name over 50 characters (the Nickname limit) gets no Nickname; such names haven't been seen.
+    if (locked.nameKey.length <= 50 && locked.nameKey !== c!.code.toLowerCase() && locked.nameKey !== c!.name.toLowerCase())
+      await tx.insert(courseNickname).values({ studentId, courseId, nickname: locked.nameKey, source: "unknown_course" }).onConflictDoNothing();
+
+    let applied = 0;
+    const missed = new Set<string>();
+    const key = loadKey();
+    // One operation at a time against a context rebuilt each time, so a repeat of one just applied is seen as a repeat.
+    for (const p of locked.pendingOps) {
+      const op: Record<string, unknown> = { ...p.op, courseId };
+      const ids = Array.isArray(op.sourceMessageIds) ? (op.sourceMessageIds as string[]) : [];
+      // A deleted source message withdrew its change (design §9), so it is neither applied nor flagged.
+      const sources = ids.length
+        ? await tx.select({ id: inboxMessage.id, sentAt: inboxMessage.sentAt }).from(inboxMessage).where(and(eq(inboxMessage.studentId, studentId), inArray(inboxMessage.id, ids), isNull(inboxMessage.revokedAt)))
+        : [];
+      const ctx = await buildContext(
+        { ...pgAdapter(tx, studentId, "", [], key, now), getRecentMessages: async () => [] },
+        { now, linkedTo: { courseId }, messages: sources.map((s) => ({ id: s.id, sender: null, sentAt: s.sentAt.toISOString(), kind: "text" as const, text: "", editOf: null })) },
+      );
+      const r = validateOutput(JSON.stringify({ messages: [], operations: [op], unknownCourses: [] }), ctx);
+      if (r.ok && r.valid.length) {
+        const [batch] = await tx.select({ modelId: aiBatch.modelId, promptVersion: aiBatch.promptVersion }).from(aiBatch).where(and(eq(aiBatch.studentId, studentId), eq(aiBatch.id, p.batchId)));
+        applied += await applyOperations(tx, { studentId, batchId: p.batchId, operations: r.valid, sentAt: new Map(sources.map((s) => [s.id, s.sentAt])), modelId: batch?.modelId ?? "", promptVersion: batch?.promptVersion ?? "" });
+      } else if (!(r.ok && r.dropped.every((d) => isHandled(d.reason)))) {
+        for (const s of sources) missed.add(s.id);
+      }
+    }
+    if (missed.size) await tx.update(inboxMessage).set({ possiblyMissed: true, possiblyMissedAt: now }).where(and(eq(inboxMessage.studentId, studentId), inArray(inboxMessage.id, [...missed])));
+    await tx.update(unknownCourseMention).set({ status: input.action === "add" ? "added" : "mapped", courseId, resolvedAt: now }).where(mine);
+    return { applied, possiblyMissed: missed.size };
+  });
+  return { ...result, course: await getCourse(studentId, courseId) };
 }

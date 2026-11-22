@@ -45,6 +45,6 @@ export async function auditLayout(page: Page, min: number) {
 }
 
 /** A real Auto Change: a WhatsApp message processed by the real AI batch, with a fake AI creating `title`. */
-export function seedAutoChange(courseId: string, title: string, dueDate: string, email = "student@example.com") {
-  execFileSync("npx", ["tsx", "e2e/support/seed-auto-change.ts", email, courseId, title, dueDate], { env: { ...process.env, ...E2E_ENV }, stdio: "inherit" });
+export function seedAutoChange(courseId: string, title: string, dueDate: string, email = "student@example.com", mode: "create" | "missed" | "unknown" = "create") {
+  execFileSync("npx", ["tsx", "e2e/support/seed-auto-change.ts", email, courseId, title, dueDate, mode], { env: { ...process.env, ...E2E_ENV }, stdio: "inherit" });
 }

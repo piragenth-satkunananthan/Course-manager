@@ -74,7 +74,7 @@ export async function processDeletes() {
     // One failing delete is flagged for the Student and can't block the others.
     await withdraw(r).catch(async (e) => {
       log.error("handling a deleted message failed", { messageId: r.id, error: (e as Error).message });
-      await db.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true }).where(and(eq(inboxMessage.studentId, r.studentId), eq(inboxMessage.id, r.id)));
+      await db.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, possiblyMissedAt: new Date() }).where(and(eq(inboxMessage.studentId, r.studentId), eq(inboxMessage.id, r.id)));
     });
   }
 }

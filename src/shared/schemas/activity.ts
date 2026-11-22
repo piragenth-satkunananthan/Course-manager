@@ -1,5 +1,9 @@
 import * as z from "zod";
 import { Id } from "./common";
+import { Course, CourseCreate } from "./course";
+
+/** A WhatsApp message as the Activity Log shows it; text is null once its Semester is archived (D1). */
+const Message = z.object({ senderName: z.string().nullable(), sentAt: z.string(), text: z.string().nullable(), groupSubject: z.string() });
 
 export const AutoChangeItem = z.object({
   id: Id,
@@ -11,15 +15,34 @@ export const AutoChangeItem = z.object({
   entityId: Id,
   canUndo: z.boolean(),
   undoBlockedReason: z.string().nullable(),
-  sources: z.array(z.object({ senderName: z.string().nullable(), sentAt: z.string(), text: z.string().nullable(), groupSubject: z.string() })),
+  sources: z.array(Message),
 });
 export type AutoChangeItem = z.infer<typeof AutoChangeItem>;
 
-// Unknown Courses and Possibly Missed messages join with #14.
+/** `reason` is the AI's, when it called the message possibly missed; `courseId` is the group's Course, for the Add form. */
+export const PossiblyMissedItem = Message.extend({ type: z.literal("possibly_missed"), inboxMessageId: Id, reason: z.string().nullable(), courseId: Id.nullable(), createdAt: z.string() });
+export type PossiblyMissedItem = z.infer<typeof PossiblyMissedItem>;
+export const UnknownCourseItem = z.object({
+  type: z.literal("unknown_course"), id: Id, name: z.string(), status: z.enum(["open", "added", "mapped", "ignored"]), operations: z.number(), firstMessage: Message.nullable(), createdAt: z.string(),
+});
+export type UnknownCourseItem = z.infer<typeof UnknownCourseItem>;
+
 export const ActivityItem = z.discriminatedUnion("type", [
   AutoChangeItem.extend({ type: z.literal("auto_change") }),
+  PossiblyMissedItem,
+  UnknownCourseItem,
   z.object({ type: z.literal("event"), id: Id, kind: z.string(), payload: z.record(z.string(), z.unknown()), createdAt: z.string() }),
 ]);
 export type ActivityItem = z.infer<typeof ActivityItem>;
 export const ActivityPage = z.object({ items: z.array(ActivityItem), nextCursor: z.string().nullable() });
 export const ActivityQuery = z.strictObject({ cursor: z.iso.datetime().optional() });
+
+/** Add course (in the current Semester), Nickname of an existing Course, or Ignore (design file 46). */
+export const UnknownCourseResolve = z.discriminatedUnion("action", [
+  CourseCreate.omit({ semesterId: true }).extend({ action: z.literal("add") }),
+  z.strictObject({ action: z.literal("nickname"), courseId: z.uuid({ error: "Choose a Course" }) }),
+  z.strictObject({ action: z.literal("ignore") }),
+]);
+export type UnknownCourseResolve = z.output<typeof UnknownCourseResolve>;
+export const ResolveResult = z.object({ applied: z.number(), possiblyMissed: z.number(), course: Course.nullable() });
+export type ResolveResult = z.infer<typeof ResolveResult>;
