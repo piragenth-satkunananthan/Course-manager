@@ -10,5 +10,7 @@ Class information arrives almost entirely through WhatsApp Course Groups and the
 ## Consequences
 
 - The link can see every chat on the number. Only explicitly linked groups are processed; every other message is dropped on arrival and is never stored or sent to the AI.
-- The link only reads and never sends anything, to keep the ban risk as low as possible.
+- The link only reads: it sends no messages, read receipts or presence, to keep the ban risk as low as possible. The protocol itself still sends delivery receipts and key uploads.
+- Baileys runs with `markOnlineOnConnect: false`, so the phone keeps its notifications (Baileys' README; checked in M0), and with `shouldIgnoreJid`, which drops every chat that isn't a linked group inside Baileys, before decryption (decision U10).
+- History sync is disabled (`syncFullHistory: false`, `shouldSyncHistoryMessage: () => false`): there is no look-back, and messages sent before a group was linked are never read.
 - WhatsApp drops linked devices after about 14 days if the phone stays offline. The dashboard shows a reconnect banner.
