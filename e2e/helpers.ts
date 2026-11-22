@@ -13,7 +13,8 @@ export async function signIn(page: Page, password = STUDENT.password, email = ST
 /** A Semester and a Course created through the API as the signed-in Student. Returns the Course id. */
 export async function seedCourse(page: Page, code: string) {
   const H = { origin: new URL(page.url()).origin };
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in Asia/Colombo, as the app counts it (in UTC it's still yesterday from 18:30 to midnight UTC).
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(new Date());
   const shift = (d: number) => new Date(Date.parse(today) + d * 86_400_000).toISOString().slice(0, 10);
   const sem = await (await page.request.post("/api/v1/semesters", { headers: H, data: { name: `Sem ${code}`, startDate: shift(-60), endDate: shift(60) } })).json();
   const course = await (await page.request.post("/api/v1/courses", { headers: H, data: { semesterId: sem.id, code, name: "Data Structures", colour: "cyan" } })).json();

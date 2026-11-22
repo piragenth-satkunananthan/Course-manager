@@ -40,7 +40,11 @@ export const ActivityPage = z.object({ items: z.array(ActivityItem), nextCursor:
 /** Filter chips (design-system §7.7): everything, Auto Changes only, or what needs the Student's attention. */
 export const ACTIVITY_FILTERS = ["all", "changes", "attention"] as const;
 export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];
-export const ActivityQuery = z.strictObject({ cursor: z.iso.datetime().optional(), filter: z.enum(ACTIVITY_FILTERS).optional() });
+/** `cursor`: the last item's time and id ("<ISO time>|<uuid>"), from the previous page's nextCursor. */
+export const ActivityQuery = z.strictObject({
+  cursor: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[0-9a-f-]{36}$/, "Not a page cursor").optional(),
+  filter: z.enum(ACTIVITY_FILTERS).optional(),
+});
 
 /** Undo batch (#22): what was undone and what was skipped, with the reason. */
 export const BatchUndoResult = z.object({

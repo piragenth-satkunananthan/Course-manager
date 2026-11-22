@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUndo, riskOf, titleKey } from "@/server/domain/auto-change";
+import { canUndo, onlyUndoneInBatch, riskOf, titleKey } from "@/server/domain/auto-change";
 
 describe("the Undo rule", () => {
   const change = { undoneAt: null, afterVersion: 3 };
@@ -28,5 +28,20 @@ describe("risk", () => {
 describe("titleKey", () => {
   it("ignores case, punctuation and spacing", () => {
     expect(titleKey("  Lab-4  Report! ")).toBe(titleKey("lab 4 report"));
+  });
+});
+
+describe("the Undo rule in an Undo batch (#22, U20)", () => {
+  const undone = new Set(["newer"]);
+  it("counts the item unchanged when every later version is this run's undone change, its Undo, or a status change", () => {
+    expect(onlyUndoneInBatch([{ op: "update", autoChangeId: "newer" }, { op: "undo", autoChangeId: null }, { op: "status", autoChangeId: null }], undone)).toBe(true);
+  });
+  it("not when a later change of the batch was skipped, or anything else changed the item", () => {
+    expect(onlyUndoneInBatch([{ op: "update", autoChangeId: "skipped" }], undone)).toBe(false);
+    expect(onlyUndoneInBatch([{ op: "update", autoChangeId: null }, { op: "undo", autoChangeId: null }], undone)).toBe(false); // the Student's edit
+    expect(onlyUndoneInBatch([{ op: "update", autoChangeId: "newer" }, { op: "update", autoChangeId: "another-batch" }], undone)).toBe(false);
+  });
+  it("needs at least one later version: nothing to excuse means the ordinary rule applies", () => {
+    expect(onlyUndoneInBatch([], undone)).toBe(false);
   });
 });

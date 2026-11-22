@@ -50,7 +50,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
     <>
       <h1 className="text-2xl font-bold md:text-display">Activity</h1>
       <div className="mt-4">
-        <Segmented label="Show" value={filter} options={FILTERS.map((f) => ({ ...f, href: href(f.value) }))} />
+        <Segmented label="Show" variant="chips" value={filter} options={FILTERS.map((f) => ({ ...f, href: href(f.value) }))} />
       </div>
       {items.length === 0 ? (
         <EmptyState icon={ActivityIcon}>{EMPTY[filter]}</EmptyState>
@@ -58,7 +58,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         <ul className="mt-4 space-y-2" aria-label="Activity">
           {items.map((i) =>
             i.type === "auto_change" ? (
-              <AutoChangeItem key={i.id} item={i} />
+              <AutoChangeItem key={i.id} item={i} batchUndo />
             ) : i.type === "possibly_missed" ? (
               <PossiblyMissedItem key={i.inboxMessageId} item={i} data={data} />
             ) : i.type === "unknown_course" ? (

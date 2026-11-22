@@ -244,6 +244,31 @@ describe("Undo batch (#22)", () => {
     expect(await kinds()).toEqual(["auto_change", "event", "event"]);
     expect(await kinds("changes")).toEqual(["auto_change"]);
     expect(await kinds("attention")).toEqual(["event", "event"]);
+    // "change kept" is information, not something to act on: not under Needs attention (U20)
+    await pool.query("insert into activity_event (student_id, kind, payload) values ($1, 'change_kept', '{}')", [studentId]);
+    expect(await kinds("attention")).toEqual(["event", "event"]);
+    expect(await kinds()).toEqual(["auto_change", "event", "event", "event"]);
     expect((await a(activity.GET, "GET", "/activity", { query: { filter: "nope" } })).status).toBe(400);
+  });
+});
+
+describe("paging the Activity Log (#22)", () => {
+  it("never loses the rest of a batch when a page ends inside it: one batch's changes share a time", async () => {
+    const studentId = (await pool.query("select id from \"user\" where email = 'a@example.com'")).rows[0].id;
+    const group = (await pool.query("select id from wa_group limit 1")).rows[0].id;
+    const batch = (await pool.query("insert into ai_batch (student_id, wa_group_id) values ($1, $2) returning id", [studentId, group])).rows[0].id;
+    // One statement, one transaction: all 51 get the same created_at, like an applied batch.
+    await pool.query(
+      "insert into auto_change (student_id, batch_id, entity_type, entity_id, op, after_version, summary) select $1, $2, 'assignment', gen_random_uuid(), 'create', 1, 'Lab ' || n from generate_series(1, 51) n",
+      [studentId, batch],
+    );
+    const page1 = (await a(activity.GET, "GET", "/activity", { query: { filter: "changes" } })).json;
+    expect(page1.items).toHaveLength(50);
+    expect(page1.nextCursor).toMatch(/\|/);
+    const page2 = (await a(activity.GET, "GET", "/activity", { query: { filter: "changes", cursor: page1.nextCursor } })).json;
+    const seen = [...page1.items, ...page2.items].map((i: { summary: string }) => i.summary);
+    expect(new Set(seen).size).toBe(51);
+    expect(page2.nextCursor).toBeNull();
+    expect((await a(activity.GET, "GET", "/activity", { query: { cursor: "2026-11-22T10:00:00Z" } })).status).toBe(400);
   });
 });

@@ -20,7 +20,8 @@ const when = (iso: string) => {
   return `${formatDate(l.date)}, ${l.time}`;
 };
 
-export function AutoChangeItem({ item }: { item: Item }) {
+/** `batchUndo`: offer Undo batch (the Activity Log, #22); the dashboard's copies keep only Undo. */
+export function AutoChangeItem({ item, batchUndo = false }: { item: Item; batchUndo?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -46,8 +47,8 @@ export function AutoChangeItem({ item }: { item: Item }) {
     const { undone, skipped } = res.data;
     const message = `Undid ${plural(undone.length, "change")}${skipped.length ? `; skipped ${skipped.length}` : ""}`;
     const why = skipped.map((s) => `${s.summary}: ${s.reason}`).join(". ");
-    // Skipped changes stay until the toast is closed, so their reasons can be read.
-    if (skipped.length) toast.warning(message, { description: why, duration: Infinity, closeButton: true });
+    // The usual 5-second toast (design-system §5): skipped changes also keep their reason under their own Undo.
+    if (skipped.length) toast.warning(message, { description: why });
     else toast.success(message);
     router.refresh();
   }
@@ -70,7 +71,7 @@ export function AutoChangeItem({ item }: { item: Item }) {
       {!item.undoneAt && (
         <div className="mt-2 flex flex-col items-end gap-1">
           <div className="flex flex-wrap justify-end gap-2">
-            {item.batchOpen > 1 && (
+            {batchUndo && item.batchOpen > 1 && (
               <Button variant="ghost" onClick={() => setConfirming(true)} disabled={pending}>
                 Undo batch ({item.batchOpen})
               </Button>
