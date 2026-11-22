@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { type AiContext, buildContext } from "../src/server/ai/context";
 import { validateOutput } from "../src/server/ai/validate";
-import { checkModel, nimClient } from "../src/worker/ai/nim-client";
+import { AiRetryableError, checkModel, nimClient } from "../src/worker/ai/nim-client";
 import { PROMPT_VERSION, repairPrompt, SYSTEM_PROMPT, userPrompt } from "../src/worker/ai/prompt";
 import { type EvalCase, gradeCase, summarise } from "./lib/score";
 
@@ -38,7 +38,22 @@ const cases: EvalCase[] = dirs.flatMap((d) =>
   existsSync(d) ? readdirSync(d).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(readFileSync(join(d, f), "utf8")) as EvalCase) : [],
 );
 if (!cases.length) throw new Error(`no cases in ${dirs.join(", ")}`);
-const ai = nimClient();
+const nim = nimClient();
+// NIM's free tier often times out or answers 429/5xx; retry those so one blip doesn't end the run.
+const ai = {
+  ...nim,
+  async complete(chat: Parameters<typeof nim.complete>[0]) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await nim.complete(chat);
+      } catch (e) {
+        if (!(e instanceof AiRetryableError) || attempt === 4) throw e;
+        console.warn(`  retrying after ${(e as Error).message}`);
+        await new Promise((r) => setTimeout(r, attempt * 15_000));
+      }
+    }
+  },
+};
 console.log(`${cases.length} cases, model ${ai.model}, prompt ${PROMPT_VERSION}`);
 
 const grades = [];

@@ -1,5 +1,5 @@
 // Semesters, scoped to the Student (design file 38). Every query filters on studentId.
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { course, inboxMessage, semester, waGroup, waSession } from "@/server/db/schema";
 import { AppError, notFound } from "@/server/http/errors";
@@ -44,8 +44,23 @@ export async function setCurrentSemester(studentId: string, id: string) {
     const [row] = await tx.select().from(semester).where(mine(studentId, id));
     if (!row) throw notFound("Semester");
     if (row.archivedAt) throw new AppError("VALIDATION", "An archived Semester can't be the current one");
-    await tx.update(semester).set({ isCurrent: false }).where(and(eq(semester.studentId, studentId), ne(semester.id, id), eq(semester.isCurrent, true)));
+    const previous = await tx
+      .update(semester)
+      .set({ isCurrent: false })
+      .where(and(eq(semester.studentId, studentId), ne(semester.id, id), eq(semester.isCurrent, true)))
+      .returning({ id: semester.id });
     const [updated] = await tx.update(semester).set({ isCurrent: true }).where(mine(studentId, id)).returning();
+    // U14: one Class Group for the whole degree, so it follows the current Semester. Messages already stored keep
+    // the Semester they arrived in, so archiving the old one still erases only its text. linkedAt stays: no gap.
+    // Only from the previously current Semester: a group the Student linked to another Semester on purpose stays.
+    const moved = previous.length
+      ? await tx
+          .update(waGroup)
+          .set({ linkedSemesterId: id })
+          .where(and(eq(waGroup.studentId, studentId), inArray(waGroup.linkedSemesterId, previous.map((p) => p.id))))
+          .returning({ id: waGroup.id })
+      : [];
+    if (moved.length) await tx.update(waSession).set({ groupsReloadRequestedAt: new Date() }).where(eq(waSession.studentId, studentId));
     return toDto(updated!);
   });
 }

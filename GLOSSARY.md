@@ -117,7 +117,7 @@ The WhatsApp group for one Course, linked to that Course. It also covers that Co
 _Avoid_: Course chat, channel
 
 **Class Group**:
-The WhatsApp group shared by the whole class, linked to the Semester. Its messages may concern any Course.
+The WhatsApp group shared by the whole class, linked to the current Semester. The class keeps one for the whole degree, so its link moves when another Semester is set current. Its messages may concern any Course.
 _Avoid_: Common group, batch group, main group
 
 **WhatsApp Link**:

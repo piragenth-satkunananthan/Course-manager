@@ -59,6 +59,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 ### WhatsApp Link and AI (see ADR-0002)
 - A live link on the Student's personal number. It reads only and never sends. Linking fails with a clear message if WhatsApp's linked-device limit is reached.
 - Only explicitly linked groups are processed. Each Course Group is linked to one Course; the Class Group is linked to the Semester. Every other chat is dropped immediately.
+- The class uses one Class Group for the whole degree. Setting a new Semester as current moves the Class Group to it, so it's never left unlinked; messages already stored stay with the Semester they arrived in. In the Class Group, a practical message names the subject ("IAD practical report due 27th") and applies to that subject's Practical Course.
 - A Practical Course shares its theory Course's Course Group. In that group, a message about the practical ("tomorrow practical is cancelled", "come to mac lab") applies to the Practical Course; every other message applies to the theory Course. A practical message in a group whose Course has no Practical Course is flagged Possibly Missed.
 - In Settings, a group whose name contains a Course code (for example "SWT22022/(22/23)") shows a "Link to SWT22022" suggestion. Nothing is read until the Student presses it.
 - There is no look-back. Messages sent before a group is linked are never read. At setup, the Student types in the Deadlines that are already open.

@@ -116,7 +116,7 @@ export function SemesterManager({ semesters }: { semesters: Semester[] }) {
             <AlertDialogTitle>Archive {archiving?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               Its Courses leave the dashboard and stay available. Stored WhatsApp message text from this Semester is erased. This can&apos;t be undone.
-              {archiving?.isCurrent && " It's your current Semester: set another one as current afterwards."}
+              {archiving?.isCurrent && " It's your current Semester, so your Class Group stops being read. Set the new Semester as current first: the Class Group moves to it."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
