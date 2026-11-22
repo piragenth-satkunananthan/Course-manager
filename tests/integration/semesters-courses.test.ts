@@ -8,15 +8,19 @@ import * as nickname from "@/app/api/v1/nicknames/[id]/route";
 import * as semesterArchive from "@/app/api/v1/semesters/[id]/archive/route";
 import * as setCurrent from "@/app/api/v1/semesters/[id]/set-current/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import { pool } from "@/server/db/client";
 import { client, ORIGIN, resetData, seedStudent } from "./api";
 
 let api: ReturnType<typeof client>;
 let cookie: string;
+let studentId: string;
 const sem = { name: "Year 2 · Semester 1", startDate: "2026-08-03", endDate: "2026-12-18" };
 
 beforeAll(async () => {
   await resetData();
-  cookie = (await seedStudent("a@example.com")).cookie;
+  const me = await seedStudent("a@example.com");
+  cookie = me.cookie;
+  studentId = me.id;
   api = client(cookie);
 });
 
@@ -56,6 +60,19 @@ describe("Semesters", () => {
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
     const current = (await api(semesters.GET, "GET", "/semesters")).json.filter((s: { isCurrent: boolean }) => s.isCurrent);
     expect(current).toHaveLength(1);
+  });
+
+  it("moves the Class Group to the Semester set as current, and asks the worker to reload (#28)", async () => {
+    const [oldSem, newSem] = [await newSemester("Y2S1"), await newSemester("Y2S2")];
+    await api(setCurrent.POST, "POST", `/semesters/${oldSem.id}/set-current`, { params: { id: oldSem.id } });
+    await pool.query("insert into wa_group (student_id, wa_jid, subject, linked_semester_id) values ($1, 'class@g.us', 'Batch 22/23', $2)", [studentId, oldSem.id]);
+    await pool.query("insert into wa_session (student_id) values ($1) on conflict (student_id) do update set groups_reload_requested_at = null", [studentId]);
+
+    await api(setCurrent.POST, "POST", `/semesters/${newSem.id}/set-current`, { params: { id: newSem.id } });
+    const g = (await pool.query("select linked_semester_id from wa_group where wa_jid = 'class@g.us'")).rows[0];
+    expect(g.linked_semester_id).toBe(newSem.id);
+    const s = (await pool.query("select groups_reload_requested_at from wa_session where student_id = $1", [studentId])).rows[0];
+    expect(s?.groups_reload_requested_at).toBeTruthy();
   });
 
   it("keeps the first archive time when archived twice", async () => {
