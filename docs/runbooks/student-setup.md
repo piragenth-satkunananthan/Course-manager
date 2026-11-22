@@ -4,11 +4,11 @@ For the Student, after the server is running (`provision-vm.md`) and the account
 
 ## 1. The Semester
 
-Settings → Semesters → **Add Semester**, with its start and end dates. The first one becomes current. Each new Semester: add it, **set it current first**, then archive the old one. The Class Group moves to the current Semester by itself (U14); archiving erases the old Semester's stored message text (ADR-0006).
+Settings → Semesters → **Add Semester**, with its start and end dates. The first one becomes current. Each new Semester: add it, choose **Set as current** on it first, then archive the old one. The Class Group moves to the current Semester by itself (U14); archiving erases the old Semester's stored message text (ADR-0006).
 
 ## 2. Courses
 
-Courses → **Add Course** for each subject: code, name, colour, and Nicknames people use in messages ("ds", "iad").
+Courses → **Add Course** for each subject: code, name, lecturer and colour. Then, on each Course's page, add the Nicknames people use in messages ("ds", "iad").
 
 **Practical Courses (U13).** When a subject has a separate practical code but shares the theory subject's WhatsApp group (for example theory SWT22022 and practical SWT22032 in the group "SWT22022/(22/23)"):
 
@@ -37,6 +37,6 @@ Check that the morning digest and Final Reminders arrive in Gmail's Primary inbo
 
 ## While the Semester runs
 
-- The Activity Log shows every Auto Change with Undo, Possibly Missed messages (Add Assignment, Add Exam, Dismiss) and Unknown Courses (Add course, Nickname of…, Ignore).
+- The Activity Log shows every Auto Change with Undo, Possibly Missed messages (Add Assignment, Add Exam, Dismiss, and Add Practical Course for a practical message whose Course has none) and Unknown Courses (Add course, Nickname of…, Ignore).
 - Settings → WhatsApp → **Auto Changes** pauses them; messages wait and are processed on Resume.
 - Once a month, download the latest backup (`backups-and-restore.md`, Part 2).
