@@ -38,6 +38,9 @@ services:
     environment:
       <<: *auth-env
       DATABASE_URL: *db-url
+      # The web app sends password-reset links and the account-deleted confirmation itself (#17).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Course-manager <onboarding@resend.dev>}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
