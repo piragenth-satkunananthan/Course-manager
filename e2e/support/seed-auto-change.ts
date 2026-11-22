@@ -16,6 +16,7 @@ const [u] = await db.select({ id: user.id }).from(user).where(eq(user.email, ema
 const [c] = await db.select({ semesterId: course.semesterId }).from(course).where(eq(course.id, courseId));
 await db.update(semester).set({ isCurrent: false }).where(eq(semester.studentId, u!.id));
 await db.update(semester).set({ isCurrent: true }).where(eq(semester.id, c!.semesterId));
+const code = (await db.select({ code: course.code }).from(course).where(eq(course.id, courseId)))[0]!.code;
 const jid = `${courseId}@g.us`;
 await db.insert(waGroup).values({ studentId: u!.id, waJid: jid, subject: "Course group", linkedCourseId: courseId }).onConflictDoNothing();
 const ingest = new Ingest(u!.id, key);
@@ -33,7 +34,7 @@ await aiTick(
       const assignment = { op: "create_assignment", courseId, title, dueDate, sourceMessageIds: ids };
       const reply =
         mode === "missed"
-          ? { messages: ids.map((id) => ({ id, decision: "possibly_missed", reason: "This Course has no Practical Course" })), operations: [], unknownCourses: [] }
+          ? { messages: ids.map((id) => ({ id, decision: "possibly_missed", reason: `${code} has no Practical Course` })), operations: [], unknownCourses: [] }
           : mode === "unknown"
             ? { messages: ids.map((id) => ({ id, decision: "unknown_course", reason: "e2e" })), operations: [], unknownCourses: [{ name: title, messageIds: ids, proposedOperations: [{ ...assignment, courseId: null, title: `${title} essay` }] }] }
             : { messages: ids.map((id) => ({ id, decision: "applied", reason: "e2e" })), operations: [assignment], unknownCourses: [] };

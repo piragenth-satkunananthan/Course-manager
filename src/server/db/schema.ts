@@ -391,6 +391,7 @@ export const inboxMessage = pgTable(
     textEnc: bytea("text_enc"),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     possiblyMissed: boolean("possibly_missed").default(false).notNull(),
+    possiblyMissedAt: timestamp("possibly_missed_at", { withTimezone: true }), // when last flagged: the digest lists those since the last one
     status: inboxStatus("status").default("pending").notNull(),
     processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
     attempts: integer("attempts").default(0).notNull(),

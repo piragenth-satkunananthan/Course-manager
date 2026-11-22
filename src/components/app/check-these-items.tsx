@@ -1,5 +1,5 @@
 "use client";
-// Possibly Missed messages and Unknown Courses in the Activity Log (design-system §6.5, #14).
+// Possibly Missed messages and Unknown Courses in the Activity Log (design-system §6.6, #14).
 import { CircleHelp, CircleCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -18,16 +18,20 @@ import { CourseField, type CourseOption, ErrorSummary, SaveButton, useAppForm } 
 import { ResponsiveDialog } from "./responsive-dialog";
 
 /** What the Add forms need: Course options, and the current Semester with its Courses for a new Course. */
-export type FormData = { options: CourseOption[]; current: Semester | null; currentCourses: Course[] };
+export type AddFormData = { options: CourseOption[]; current: Semester | null; currentCourses: Course[] };
 
-const NO_PRACTICAL = /has no Practical Course/i;
+// shortcut: the AI's reason text ("<code> has no Practical Course", see the prompt) is matched; a structured field would need a new ops version.
+const NO_PRACTICAL = /(\S+) has no Practical Course/i;
 
-export function PossiblyMissedItem({ item, data }: { item: Missed; data: FormData }) {
+export function PossiblyMissedItem({ item, data }: { item: Missed; data: AddFormData }) {
   const router = useRouter();
   const [adding, setAdding] = useState<"assignment" | "exam" | "course" | null>(null);
   const [pending, setPending] = useState(false);
   // The group's Course, if it can still take Assessments.
   const courseId = item.courseId && data.options.some((c) => c.id === item.courseId) ? item.courseId : "";
+  // The theory Course a practical message was about: named in the reason (a Class Group), else the group's Course.
+  const code = item.reason && NO_PRACTICAL.exec(item.reason)?.[1]?.toLowerCase();
+  const theoryId = code ? (data.currentCourses.find((c) => c.code.toLowerCase() === code)?.id ?? item.courseId) : null;
 
   async function dismiss(quiet = false) {
     setPending(true);
@@ -44,12 +48,12 @@ export function PossiblyMissedItem({ item, data }: { item: Missed; data: FormDat
     <li className="rounded-md border border-border bg-card p-3">
       <p className="flex items-start gap-2 font-semibold">
         <CircleHelp size={20} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-warning" />
-        Possibly missed
+        This might be a deadline
       </p>
       {item.reason && <p className="mt-1 text-sm text-muted-foreground">{item.reason}</p>}
       <SourceMessage message={item} />
       <div className="mt-2 flex flex-wrap justify-end gap-2">
-        {item.reason && NO_PRACTICAL.test(item.reason) && item.courseId && data.current && (
+        {theoryId && data.current && (
           <Button variant="outline" onClick={() => setAdding("course")}>Add Practical Course</Button>
         )}
         <Button variant="outline" onClick={() => setAdding("assignment")}>Add Assignment</Button>
@@ -64,7 +68,7 @@ export function PossiblyMissedItem({ item, data }: { item: Missed; data: FormDat
       </ResponsiveDialog>
       {data.current && (
         <ResponsiveDialog open={adding === "course"} onOpenChange={(o) => !o && setAdding(null)} title="New Practical Course">
-          <CourseForm semesters={[data.current]} defaultSemesterId={data.current.id} semesterCourses={data.currentCourses} initial={{ practicalOfCourseId: item.courseId }} onDone={added} />
+          <CourseForm semesters={[data.current]} defaultSemesterId={data.current.id} semesterCourses={data.currentCourses} initial={{ practicalOfCourseId: theoryId }} onDone={() => (setAdding(null), router.refresh())} />
         </ResponsiveDialog>
       )}
     </li>
@@ -74,7 +78,7 @@ export function PossiblyMissedItem({ item, data }: { item: Missed; data: FormDat
 const STATUS_TEXT = { added: "Added as a Course", mapped: "Linked to a Course", ignored: "Ignored" } as const;
 const NicknameOf = z.object({ courseId: z.uuid({ error: "Choose a Course" }) });
 
-export function UnknownCourseItem({ item, data }: { item: Unknown; data: FormData }) {
+export function UnknownCourseItem({ item, data }: { item: Unknown; data: AddFormData }) {
   const router = useRouter();
   const [open, setOpen] = useState<"add" | "nickname" | null>(null);
   const [pending, setPending] = useState(false);
@@ -101,10 +105,12 @@ export function UnknownCourseItem({ item, data }: { item: Unknown; data: FormDat
     <li className="rounded-md border border-border bg-card p-3">
       <p className="flex items-start gap-2 font-semibold">
         <CircleHelp size={20} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-warning" />
-        Unknown Course: {item.name}
+        <span>
+          Message mentions <strong>{item.name}</strong>, which isn&apos;t one of your Courses
+        </span>
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        {item.operations} {item.operations === 1 ? "change" : "changes"} waiting
+        {item.status === "open" && `${item.operations} ${item.operations === 1 ? "change" : "changes"} waiting`}
         {item.status !== "open" && <Badge variant="secondary" className="text-muted-foreground"><CircleCheck aria-hidden="true" />{STATUS_TEXT[item.status]}</Badge>}
       </div>
       {item.firstMessage && <SourceMessage message={item.firstMessage} />}

@@ -161,7 +161,7 @@ describe("the Daily Digest", () => {
     const group = (await q("insert into wa_group (student_id, wa_jid, subject, linked_course_id) values ($1, 'g@g.us', 'CS2010 group', $2) returning id", [studentId, courseId])).rows[0].id;
     const batch = (await q("insert into ai_batch (student_id, wa_group_id) values ($1, $2) returning id", [studentId, group])).rows[0].id;
     const message = (text: string, flagged: boolean) =>
-      q("insert into inbox_message (student_id, wa_group_id, wa_message_id, kind, sender_name, sent_at, text_enc, possibly_missed, status) values ($1, $2, $3, 'text', 'Kasun', now(), $4, $5, 'done')", [
+      q("insert into inbox_message (student_id, wa_group_id, wa_message_id, kind, sender_name, sent_at, text_enc, possibly_missed, possibly_missed_at, status) values ($1, $2, $3, 'text', 'Kasun', now(), $4, $5, case when $5 then now() end, 'done')", [
         studentId, group, text, encrypt(text, loadKey()), flagged,
       ]);
     await message("Group B lab cancelled", true);

@@ -15,8 +15,8 @@ test("a Possibly Missed message pre-fills Add and can be dismissed; an Unknown C
   seedAutoChange(courseId, `${code}A`, shift(6), undefined, "unknown");
 
   await page.goto("/activity");
-  const report = page.getByRole("listitem").filter({ hasText: "Possibly missed" }).filter({ hasText: `${code} practical report` });
-  await expect(report).toContainText("This Course has no Practical Course");
+  const report = page.getByRole("listitem").filter({ hasText: "This might be a deadline" }).filter({ hasText: `${code} practical report` });
+  await expect(report).toContainText(`${code} has no Practical Course`);
   expect((await auditLayout(page, phone ? 44 : 40)).small).toEqual([]);
 
   // Add Practical Course opens the Course form with "Practical of" set
@@ -41,7 +41,7 @@ test("a Possibly Missed message pre-fills Add and can be dismissed; an Unknown C
   await expect(chatter).toHaveCount(0);
 
   // Nickname of… an existing Course applies the waiting change
-  const nick = page.getByRole("listitem").filter({ hasText: `Unknown Course: ${code}N` });
+  const nick = page.getByRole("listitem").filter({ hasText: `Message mentions ${code}N,` });
   await expect(nick).toContainText("1 change waiting");
   await nick.getByRole("button", { name: "Nickname of…" }).click();
   const which = page.getByRole("dialog", { name: `Which Course is "${code}N"?` });
@@ -52,7 +52,7 @@ test("a Possibly Missed message pre-fills Add and can be dismissed; an Unknown C
   await expect(nick).toContainText("Linked to a Course");
 
   // Add course creates it in the current Semester and applies the change
-  const add = page.getByRole("listitem").filter({ hasText: `Unknown Course: ${code}A` });
+  const add = page.getByRole("listitem").filter({ hasText: `Message mentions ${code}A,` });
   await add.getByRole("button", { name: "Add course" }).click();
   const addDialog = page.getByRole("dialog", { name: `Add "${code}A" as a Course` });
   await expect(addDialog.getByLabel("Code (required)")).toHaveValue(`${code}A`);

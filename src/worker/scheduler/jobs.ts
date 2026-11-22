@@ -29,7 +29,7 @@ async function loadCheckThese(studentId: string, since: Date, paused: boolean): 
       .select({ senderName: inboxMessage.senderName, groupSubject: waGroup.subject, textEnc: inboxMessage.textEnc })
       .from(inboxMessage)
       .innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId))
-      .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.possiblyMissed, true), isNull(inboxMessage.revokedAt), gt(inboxMessage.receivedAt, since)))
+      .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.possiblyMissed, true), isNull(inboxMessage.revokedAt), gt(inboxMessage.possiblyMissedAt, since)))
       .orderBy(inboxMessage.sentAt),
     db.select({ name: unknownCourseMention.name }).from(unknownCourseMention).where(and(eq(unknownCourseMention.studentId, studentId), eq(unknownCourseMention.status, "open"))).orderBy(unknownCourseMention.createdAt),
   ]);

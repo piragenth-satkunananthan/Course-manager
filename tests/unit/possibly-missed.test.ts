@@ -23,7 +23,7 @@ describe("looksLikeDeadline", () => {
     "by December 3",
   ])("flags %j", (text) => expect(looksLikeDeadline(text)).toBe(true));
 
-  it.each(["Who didn't attend today's lecture?", "thanks all", "ok noted", "see the slides", "version 2.0 of the notes", "Group 4 photos"])(
+  it.each(["Who didn't attend today's lecture?", "thanks all", "ok noted", "see the slides", "version 2.0 of the notes", "Group 4 photos", "1st year students", "2nd semester notes"])(
     "leaves %j alone",
     (text) => expect(looksLikeDeadline(text)).toBe(false),
   );

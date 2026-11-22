@@ -1,5 +1,5 @@
 {
-  "id": "bbf862c9-ebe8-4e98-a29a-c6f293b04654",
+  "id": "afd5369c-001b-4e66-adbe-fe8e825eca28",
   "prevId": "6622ab4e-29b7-493e-8ffe-2eb60e56dc6a",
   "version": "7",
   "dialect": "postgresql",
@@ -1706,6 +1706,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "possibly_missed_at": {
+          "name": "possibly_missed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",

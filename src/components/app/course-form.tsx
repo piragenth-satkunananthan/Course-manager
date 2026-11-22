@@ -54,7 +54,7 @@ export function CourseForm({ semesters, defaultSemesterId, course, semesterCours
         ? await save({ semesterId, ...rest })
         : await apiFetch("/courses", { method: "POST", body: { semesterId, ...rest }, schema: Course });
     if (!res.ok) return applyServerError(form, res.error);
-    toast.success("Saved");
+    if (!save) toast.success("Saved"); // a custom save reports its own outcome
     onDone(res.data);
   }
 

@@ -3,8 +3,8 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { applyOperations } from "@/server/ai/apply-operations";
 import { type AiContext, buildContext } from "@/server/ai/context";
-import { pgAdapter } from "@/server/ai/pg-adapter";
-import { REPEATS, SUPERSEDED, type Validated, validateOutput } from "@/server/ai/validate";
+import { pgAdapter } from "@/server/data/ai-context";
+import { isHandled, SUPERSEDED, type Validated, validateOutput } from "@/server/ai/validate";
 import { decrypt } from "@/server/crypto";
 import { db, type Tx } from "@/server/db/client";
 import { activityEvent, aiBatch, inboxMessage, unknownCourseMention, user, waGroup } from "@/server/db/schema";
@@ -65,7 +65,7 @@ export async function claimBatch(studentId: string, groupId: string, now: Date) 
 }
 
 /** Possibly Missed by decision (design §9): the AI said so, or it set aside a message that reads like a deadline. */
-const missed = (decision: string, text: string) => decision === "possibly_missed" || ((decision === "ignored" || decision === "question") && looksLikeDeadline(text));
+const isPossiblyMissed = (decision: string, text: string) => decision === "possibly_missed" || ((decision === "ignored" || decision === "question") && looksLikeDeadline(text));
 
 export const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -76,7 +76,7 @@ async function recordUnknownCourses(tx: Tx, studentId: string, batchId: string, 
     if (!key) continue;
     const ops = u.proposedOperations.map((op) => ({ batchId, op }));
     const first = u.messageIds.find((id) => batchIds.has(id)) ?? null;
-    const t = unknownCourseMention;
+    const t = unknownCourseMention; // short, for the case expressions below
     await tx
       .insert(t)
       .values({ studentId, name: u.name.trim(), nameKey: key, firstMessageId: first, pendingOps: ops })
@@ -87,6 +87,7 @@ async function recordUnknownCourses(tx: Tx, studentId: string, batchId: string, 
           firstMessageId: sql`case when ${t.status} in ('added', 'mapped') then excluded.first_message_id else ${t.firstMessageId} end`,
           courseId: sql`case when ${t.status} in ('added', 'mapped') then null else ${t.courseId} end`,
           resolvedAt: sql`case when ${t.status} in ('added', 'mapped') then null else ${t.resolvedAt} end`,
+          createdAt: sql`case when ${t.status} in ('added', 'mapped') then now() else ${t.createdAt} end`, // reopened: shown as new
           status: sql`case when ${t.status} = 'ignored' then 'ignored'::unknown_course_status else 'open'::unknown_course_status end`,
         },
       });
@@ -159,7 +160,7 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     if (!result.ok) {
       const error = result.error;
       await db.transaction(async (tx) => {
-        await tx.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
+        await tx.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, possiblyMissedAt: new Date(), processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
         // The validation error can quote the AI output, and so message text: it isn't stored (design §10).
         await tx.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_output_rejected", payload: { batchId, messageIds: ids } });
         log.warn("ai output rejected", { batchId, errorLength: error.length });
@@ -170,9 +171,8 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
 
     const { decisions, valid, dropped, overflow, unknownCourses } = result;
     // Possibly Missed: operations that couldn't be applied. A repeat or a dismissed item was handled, not missed.
-    const handled = (reason: string) => reason === REPEATS || reason === SUPERSEDED;
     const superseded = new Set(dropped.filter((d) => d.reason === SUPERSEDED).flatMap((d) => d.messageIds));
-    const flagged = new Set([...dropped.filter((d) => !handled(d.reason)).flatMap((d) => d.messageIds), ...overflow.flatMap((o) => o.sourceMessageIds)]);
+    const flagged = new Set([...dropped.filter((d) => !isHandled(d.reason)).flatMap((d) => d.messageIds), ...overflow.flatMap((o) => o.sourceMessageIds)]);
     const textOf = new Map(messages.map((m) => [m.id, m.text]));
     await db.transaction(async (tx) => {
       await undoEditedOriginals(tx, batch!.studentId, edits);
@@ -182,9 +182,10 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
         const d = superseded.has(r.id)
           ? { decision: "superseded" as const, reason: SUPERSEDED }
           : (decisions.get(r.id) ?? { decision: "ignored" as const, reason: "no decision returned" });
+        const flag = flagged.has(r.id) || isPossiblyMissed(d.decision, textOf.get(r.id) ?? "");
         await tx
           .update(inboxMessage)
-          .set({ status: "done", decision: d.decision, decisionReason: d.reason.slice(0, 300), possiblyMissed: flagged.has(r.id) || missed(d.decision, textOf.get(r.id) ?? ""), processingStartedAt: null })
+          .set({ status: "done", decision: d.decision, decisionReason: d.reason.slice(0, 300), possiblyMissed: flag, possiblyMissedAt: flag ? new Date() : null, processingStartedAt: null })
           .where(eq(inboxMessage.id, r.id));
       }
       if (overflow.length) await tx.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_overflow", payload: { batchId, applied: valid.length, notApplied: overflow.length } });
@@ -195,7 +196,7 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
   } catch (e) {
     if (!(e instanceof AiFatalError || e instanceof AiRetryableError)) {
       // Not the AI: applying failed and rolled back. Retrying would fail the same way, so flag the messages.
-      await db.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
+      await db.update(inboxMessage).set({ status: "done", decision: "rejected", possiblyMissed: true, possiblyMissedAt: new Date(), processingStartedAt: null }).where(inArray(inboxMessage.id, ids));
       await db.insert(activityEvent).values({ studentId: batch!.studentId, kind: "ai_output_rejected", payload: { batchId, messageIds: ids } });
       await db.update(aiBatch).set({ status: "failed", finishedAt: new Date(), error: (e as Error).message.slice(0, 300) }).where(eq(aiBatch.id, batchId));
       log.error("applying ai output failed", { batchId, error: (e as Error).message });
