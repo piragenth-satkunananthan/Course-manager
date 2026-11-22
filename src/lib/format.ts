@@ -37,3 +37,10 @@ export function dueLine(date: string, time: string | null, today: string, verb =
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const; // ISO 1–7
 export const SESSION_KIND_LABEL = { lecture: "Lecture", tutorial: "Tutorial", lab: "Lab" } as const;
+
+/** "1 class", "2 classes": `many` when the plural isn't just an added "s". */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "November 2026" for a YYYY-MM month (the month view's title). */
+export const formatMonth = (month: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${month}-01T00:00:00Z`));

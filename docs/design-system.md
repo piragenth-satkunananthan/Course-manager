@@ -352,7 +352,7 @@ Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. It's the
 - shows **Deadline chips**: on phones, the Course code only; from 768 px up, the code and a shortened title. An Overdue chip has a `--destructive` ring and an icon;
 - marks today with a `--primary` circle around the date. Days outside the month are in muted text.
 
-**`day-sheet`** opens when a day is tapped. It is a bottom sheet on phones and a side panel on desktop, showing that day's `day-list`: its classes first, then its Deadlines. The URL becomes `/calendar?day=YYYY-MM-DD`.
+**`day-sheet`** opens when a day is tapped. It is a bottom sheet under 768 px and a side panel from 768 px (like every other dialog), showing that day's `day-list`: its classes first, then its Deadlines. The URL becomes `/calendar?month=YYYY-MM&day=YYYY-MM-DD`; `/calendar?day=YYYY-MM-DD` alone opens that day's month with the sheet. On phones the grid runs edge to edge, so seven 44 px cells fit at 320 px.
 
 ### 6.10 `banner`
 

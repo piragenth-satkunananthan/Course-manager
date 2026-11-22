@@ -27,6 +27,13 @@ export function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** A YYYY-MM month moved by `months` (December + 1 is the next January). */
+export function addMonths(month: string, months: number): string {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const d = new Date(Date.UTC(y, m - 1 + months, 1));
+  return d.toISOString().slice(0, 7);
+}
+
 /** ISO weekday of a local date: 1 = Monday … 7 = Sunday. */
 export function weekdayOf(date: string): number {
   const d = new Date(`${date}T00:00:00Z`).getUTCDay();

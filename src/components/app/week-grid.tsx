@@ -3,9 +3,10 @@
 // strip on top of each day, class blocks in the Course colour, and a current-time line on today. It scrolls
 // vertically only. Each class and Deadline is a button that opens the same sheet as the day list.
 import { Ban, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CirclePlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useNow } from "@/hooks/use-now";
 import { COLOUR_BG } from "@/lib/course-colours";
-import { deadlineDate } from "@/lib/deadline-date";
+import { deadlineDate, isOverdueDeadline } from "@/lib/deadline-date";
 import { occurrenceKey } from "@/lib/occurrence-key";
 import { formatDate, SESSION_KIND_LABEL } from "@/lib/format";
 import { FIRST_HOUR, GRID_HEIGHT, HOUR_PX, LAST_HOUR, layoutDay, nowOffset } from "@/lib/week-layout";
@@ -19,18 +20,6 @@ import { OccurrenceSheet } from "./occurrence";
 type Props = { days: string[]; occurrences: Occurrence[]; deadlines: Deadline[]; today: string; courses: CourseOption[] };
 const STATUS = { normal: "", cancelled: ", cancelled", rescheduled: ", moved", extra: ", extra session" } as const;
 const timeOf = (d: Deadline) => (d.type === "assignment" ? d.item.dueTime : d.item.startTime);
-
-/** The current time, read only after the page has loaded (so server and browser render the same) and each minute after. */
-function useNow() {
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const t = setInterval(tick, 60_000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
-}
 
 function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: React.CSSProperties; cutStart: boolean; cutEnd: boolean }) {
   const [open, setOpen] = useState(false);
@@ -67,8 +56,7 @@ function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: Reac
 function DeadlineChip({ d, today, now, courses }: { d: Deadline; today: string; now: Date | null; courses: CourseOption[] }) {
   const [open, setOpen] = useState(false);
   const submitted = d.type === "assignment" && d.item.status === "submitted";
-  // dueAt is the server's due instant (an untimed Assignment is due at 23:59); no clock until the page has loaded.
-  const overdue = d.type === "assignment" && !submitted && !!now && !!d.item.dueAt && new Date(d.item.dueAt) < now;
+  const overdue = isOverdueDeadline(d, now);
   const label = `${d.item.courseCode} ${d.type === "assignment" ? "Assignment" : "Exam"}: ${d.item.title}${timeOf(d) ? `, ${timeOf(d)}` : ""}${submitted ? ", submitted" : overdue ? ", overdue" : ""}`;
   return (
     <li>
