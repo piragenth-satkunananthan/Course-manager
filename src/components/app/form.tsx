@@ -25,7 +25,7 @@ export function useAppForm<S extends z.ZodType<FieldValues, FieldValues>>(schema
 }
 
 /** Saving shows a spinner and disables the button (design-system §5). */
-export function SaveButton({ pending, children, variant, className }: { pending: boolean; children: React.ReactNode; variant?: "default" | "outline"; className?: string }) {
+export function SaveButton({ pending, children, variant, className }: { pending: boolean; children: React.ReactNode; variant?: "default" | "outline" | "destructive"; className?: string }) {
   return (
     <Button type="submit" disabled={pending} variant={variant} className={className}>
       {pending && <LoaderCircle size={20} className="animate-spin" aria-hidden="true" />}

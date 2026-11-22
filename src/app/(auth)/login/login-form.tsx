@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CircleAlert, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -101,6 +102,9 @@ export function LoginForm() {
       >
         {pending ? "Signing in…" : "Sign in"}
       </button>
+      <Link href="/reset-password" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline md:min-h-10">
+        Forgot password?
+      </Link>
     </form>
   );
 }

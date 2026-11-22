@@ -474,7 +474,7 @@ The main ones:
 | `POST /api/v1/whatsapp/pairing` · `DELETE /api/v1/whatsapp` | `{phone}` (digits with country code) · none | status · 204 (logs out and wipes the session) |
 | `PUT /api/v1/whatsapp/groups/:id/link` · `DELETE /api/v1/whatsapp/groups/:id/link` | `{courseId}` or `{semesterId}` · none | group · 204 |
 | `GET /api/v1/settings` · `PATCH /api/v1/settings` | `{autoChangesPaused?}` | settings |
-| `POST /api/v1/account/delete` | `{password}` | 204, then signs out |
+| `POST /api/v1/account/delete` | `{password}` | 204, then signs out; a wrong password is a field error |
 | `/api/auth/*` | served by Better Auth (sign-in, sign-out, password reset, change password) | |
 | `GET /api/health` | no auth | `200 {db:"ok"}`, used by the Docker health check |
 
@@ -900,6 +900,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U14 | (2026-11-22, product owner) The class keeps one Class Group for the whole degree. Setting a Semester current moves the Class Group's link to it; stored messages keep their Semester, so D1 erasure is unchanged. Archiving a Semester still unlinks its groups. In the Class Group, "<subject> practical…" goes to that subject's Practical Course. |
 | U15 | (2026-11-22, product owner) An extra class announced without an end time lasts as long as that Course's weekly class of the same kind, or 2 hours if it has none. |
 | U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. It is blocked, with the reason, when the class has another change now, or when classes in the weeks an extension added were changed since. |
+| U17 | (2026-11-22, product owner) Changing the password in Settings signs out every other device (`revokeOtherSessions`), as a reset does. |
 
 ## Risks and Mitigations
 
@@ -1400,7 +1401,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
 *   **Type / Scope**: Better Auth configuration.
 *   **Proposed Changes**:
     - **Database:** the Drizzle adapter.
-    - **`emailAndPassword`:** `{ enabled: true, disableSignUp: true, minPasswordLength: 12, sendResetPassword, resetPasswordTokenExpiresIn: 3600, revokeSessionsOnPasswordReset: true }`. `sendResetPassword` is not awaited, and sends through file 35. The link target is `${APP_ORIGIN}/reset-password?token=…`.
+    - **`emailAndPassword`:** `{ enabled: true, disableSignUp: true, minPasswordLength: 12, sendResetPassword, resetPasswordTokenExpiresIn: 3600, revokeSessionsOnPasswordReset: true }`. `sendResetPassword` is not awaited, and sends through file 35. The emailed link is Better Auth's `${APP_ORIGIN}/api/auth/reset-password/<token>?callbackURL=/reset-password`, which checks the token and redirects to `/reset-password?token=…` (or `?error=INVALID_TOKEN`). Caddy keeps no access log, so the token isn't written anywhere. Changing the password is limited to 5 per minute and always signs out other devices (U17); deleting the account allows 5 wrong passwords per 15 minutes.
     - **`rateLimit`:** `{ storage: "database", customRules: { "/sign-in/email": {window: 60, max: 5}, "/request-password-reset": {window: 60, max: 3} } }`. All limits become 1000 when `NODE_ENV=test`.
     - **`advanced.ipAddress.ipAddressHeaders`:** `["x-real-ip"]`.
     - **Sessions and origin:** sessions last 30 days; the trusted origin is `APP_ORIGIN`.
