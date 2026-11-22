@@ -612,6 +612,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - Relative dates ("tomorrow", "next Friday") resolve against the message's `sent_at`, in Asia/Colombo.
   - Clock times with no am/pm (decision U12): hours 1–7 mean pm ("4.30" → 16:30), hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm", "evening" or "tonight" override this.
   - A due date with no time leaves `dueTime` out (the 23:59 rule applies).
+  - "Before <date>" ("submit before 27th") makes that date the due date: it is the last day (product owner, 2026-11-22).
 - **Practical Courses:** in a Course Group, a message about the practical (the word "practical", or a lab room such as "mac lab") applies to `linkedTo.practicalCourseId`; every other message applies to `linkedTo.courseId`. With no Practical Course linked, a practical message produces no operation and gets `decision = possibly_missed`, with "<code> has no Practical Course" as the reason.
 - **Session Groups (decision U11):** M1 has none. A message that names a group ("Group B lab cancelled") produces **no operation**. It gets `decision = possibly_missed`, with the group name in the reason.
 - **Output:** only `ops.v1` JSON.
