@@ -6,7 +6,7 @@ import { Ban, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CirclePlus } fro
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
 import { COLOUR_BG } from "@/lib/course-colours";
-import { deadlineDate } from "@/lib/deadline-date";
+import { deadlineDate, isOverdueDeadline } from "@/lib/deadline-date";
 import { occurrenceKey } from "@/lib/occurrence-key";
 import { formatDate, SESSION_KIND_LABEL } from "@/lib/format";
 import { FIRST_HOUR, GRID_HEIGHT, HOUR_PX, LAST_HOUR, layoutDay, nowOffset } from "@/lib/week-layout";
@@ -56,8 +56,7 @@ function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: Reac
 function DeadlineChip({ d, today, now, courses }: { d: Deadline; today: string; now: Date | null; courses: CourseOption[] }) {
   const [open, setOpen] = useState(false);
   const submitted = d.type === "assignment" && d.item.status === "submitted";
-  // dueAt is the server's due instant (an untimed Assignment is due at 23:59); no clock until the page has loaded.
-  const overdue = d.type === "assignment" && !submitted && !!now && !!d.item.dueAt && new Date(d.item.dueAt) < now;
+  const overdue = isOverdueDeadline(d, now);
   const label = `${d.item.courseCode} ${d.type === "assignment" ? "Assignment" : "Exam"}: ${d.item.title}${timeOf(d) ? `, ${timeOf(d)}` : ""}${submitted ? ", submitted" : overdue ? ", overdue" : ""}`;
   return (
     <li>

@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useNow } from "@/hooks/use-now";
 import { COLOUR_BG, COLOUR_LABEL } from "@/lib/course-colours";
-import { formatDate, formatMonth } from "@/lib/format";
+import { occurrenceKey } from "@/lib/occurrence-key";
+import { calendarHref, isOverdueDeadline } from "@/lib/deadline-date";
+import { formatDate, formatMonth, plural } from "@/lib/format";
 import type { CalendarMonth } from "@/shared/schemas/calendar";
 import type { Deadline } from "@/shared/schemas/dashboard";
 
@@ -15,22 +17,18 @@ type Day = CalendarMonth["days"][number];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_DOTS = 4;
 const MAX_CHIPS = 2;
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
 const isSubmitted = (d: Deadline) => d.type === "assignment" && d.item.status === "submitted";
-// dueAt is the server's due instant (an untimed Assignment is due at 23:59); no clock until the page has loaded.
-const isOverdue = (d: Deadline, now: Date | null) => d.type === "assignment" && !isSubmitted(d) && !!now && !!d.item.dueAt && new Date(d.item.dueAt) < now;
 
 /** What a screen reader hears for a cell: the day, then its classes and Deadlines in words. */
 function cellLabel(day: Day, today: string, now: Date | null) {
   const cancelled = day.occurrences.filter((o) => o.status === "cancelled").length;
   const classes = day.occurrences.length ? `${plural(day.occurrences.length, "class", "classes")}${cancelled ? `, ${cancelled} cancelled` : ""}` : "no classes";
-  const deadlines = day.deadlines.map((d) => `${d.item.courseCode} ${d.item.title}${isOverdue(d, now) ? ", overdue" : isSubmitted(d) ? ", submitted" : ""}`);
+  const deadlines = day.deadlines.map((d) => `${d.item.courseCode} ${d.item.title}${isOverdueDeadline(d, now) ? ", overdue" : isSubmitted(d) ? ", submitted" : ""}`);
   return `${formatDate(day.date)}${day.date === today ? ", today" : ""}: ${classes}${deadlines.length ? `; ${plural(deadlines.length, "Deadline")}: ${deadlines.join("; ")}` : ""}`;
 }
 
 function Chip({ d, now }: { d: Deadline; now: Date | null }) {
-  const overdue = isOverdue(d, now);
+  const overdue = isOverdueDeadline(d, now);
   const submitted = isSubmitted(d);
   return (
     <span className={`flex min-w-0 items-center gap-0.5 rounded-sm border bg-card px-1 text-[11px] leading-4 ${overdue ? "border-destructive ring-1 ring-destructive" : "border-border"} ${submitted ? "text-muted-foreground" : ""}`}>
@@ -50,7 +48,7 @@ export function MonthGrid({ data, today, selected }: { data: CalendarMonth; toda
   const startFocus = data.days.findIndex((d) => d.date === (selected ?? today));
   const [focus, setFocus] = useState(startFocus >= 0 ? startFocus : data.days.findIndex((d) => d.date.startsWith(data.month)));
   const cells = useRef<(HTMLButtonElement | null)[]>([]);
-  const open = (date: string) => router.push(`/calendar?month=${data.month}&day=${date}`, { scroll: false });
+  const open = (date: string) => router.push(calendarHref(data.month, date), { scroll: false });
 
   // The arrow keys move a day or a week; Home and End go to the week's ends; the focused cell is the only tab stop.
   function onKeyDown(e: React.KeyboardEvent, i: number) {
@@ -63,7 +61,7 @@ export function MonthGrid({ data, today, selected }: { data: CalendarMonth; toda
 
   const weeks = Array.from({ length: data.days.length / 7 }, (_, w) => data.days.slice(w * 7, w * 7 + 7));
   return (
-    <div role="grid" aria-label={formatMonth(data.month)} className="mt-4 overflow-hidden rounded-md border border-border bg-card">
+    <div role="grid" aria-label={formatMonth(data.month)} className="mt-4 overflow-hidden rounded-md border border-border bg-card max-sm:-mx-4 max-sm:rounded-none max-sm:border-x-0">
       <div role="row" className="grid grid-cols-7 border-b border-border">
         {WEEKDAYS.map((w) => (
           <span key={w} role="columnheader" className="py-1 text-center text-xs font-semibold text-muted-foreground">{w}</span>
@@ -98,9 +96,9 @@ export function MonthGrid({ data, today, selected }: { data: CalendarMonth; toda
                   </span>
                   {day.occurrences.length > 0 && (
                     <span className="flex flex-wrap items-center gap-0.5" aria-hidden="true">
-                      {day.occurrences.slice(0, MAX_DOTS).map((o, k) => (
+                      {day.occurrences.slice(0, MAX_DOTS).map((o) => (
                         <span
-                          key={k}
+                          key={occurrenceKey(o)}
                           title={COLOUR_LABEL[o.colour]}
                           className={`size-2 rounded-full ${o.status === "cancelled" ? "border border-muted-foreground bg-transparent" : COLOUR_BG[o.colour]}`}
                           data-testid={o.status === "cancelled" ? "dot-cancelled" : "dot"}

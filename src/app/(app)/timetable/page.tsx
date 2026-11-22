@@ -1,17 +1,12 @@
-import { CalendarX } from "lucide-react";
-import { DeadlineItem } from "@/components/app/deadline-item";
-import { EmptyState } from "@/components/app/empty-state";
+import { DayItems } from "@/components/app/day-items";
 import type { CourseOption } from "@/components/app/form";
-import { SessionItem } from "@/components/app/occurrence";
 import { Header, Pager } from "@/components/app/timetable-header";
 import { WeekGrid } from "@/components/app/week-grid";
-import { deadlineDate } from "@/lib/deadline-date";
-import { occurrenceKey } from "@/lib/occurrence-key";
+import { calendarHref, deadlineDate } from "@/lib/deadline-date";
 import { formatDate } from "@/lib/format";
 import { listDeadlinesIn } from "@/server/data/assessments";
 import { listCourseOptions } from "@/server/data/courses";
 import { getOccurrences } from "@/server/data/timetable";
-import { isHappeningNow } from "@/server/domain/occurrences";
 import { addDays, todayIn, weekdayOf } from "@/server/domain/time";
 import { requireStudentId } from "@/server/session";
 import { IsoDate } from "@/shared/schemas/common";
@@ -21,11 +16,10 @@ import type { Occurrence } from "@/shared/schemas/timetable";
 const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
 const dayHref = (date: string) => `/timetable?view=day&date=${date}`;
 const weekHref = (week: string) => `/timetable?view=week&week=${week}`;
-const monthHref = (date: string) => `/calendar?month=${date.slice(0, 7)}`;
+const monthHref = (date: string) => calendarHref(date.slice(0, 7));
 
 /** The day list (design-system §6.7): that day's classes, then what's due. */
 function DayList({ date, today, occurrences, deadlines, courses }: { date: string; today: string; occurrences: Occurrence[]; deadlines: Deadline[]; courses: CourseOption[] }) {
-  const now = new Date();
   return (
     <>
       <Pager
@@ -33,27 +27,9 @@ function DayList({ date, today, occurrences, deadlines, courses }: { date: strin
         prev={dayHref(addDays(date, -1))} prevLabel="Previous day" next={dayHref(addDays(date, 1))} nextLabel="Next day"
         home={dayHref(today)} homeLabel="Today" current={date === today}
       />
-      <section aria-label={`Classes on ${formatDate(date)}`} className="mt-4">
-        {occurrences.length === 0 ? (
-          <EmptyState icon={CalendarX}>No classes on {formatDate(date)}.</EmptyState>
-        ) : (
-          <ul className="space-y-2">
-            {occurrences.map((o) => (
-              <SessionItem key={occurrenceKey(o)} o={o} now={isHappeningNow(o, now)} />
-            ))}
-          </ul>
-        )}
-      </section>
-      {deadlines.length > 0 && (
-        <section aria-labelledby="due-heading" className="mt-6">
-          <h2 id="due-heading" className="text-title font-semibold">Due</h2>
-          <ul className="mt-2 space-y-2">
-            {deadlines.map((d) => (
-              <DeadlineItem key={d.item.id} deadline={d} today={today} tomorrow={addDays(today, 1)} courses={courses} />
-            ))}
-          </ul>
-        </section>
-      )}
+      <div className="mt-4">
+        <DayItems date={date} today={today} now={new Date()} occurrences={occurrences} deadlines={deadlines} courses={courses} />
+      </div>
     </>
   );
 }

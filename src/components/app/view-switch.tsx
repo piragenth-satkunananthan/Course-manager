@@ -3,14 +3,7 @@
 // offered from 1024 px only; below that the day list is shown. Month is /calendar (#20).
 import { RadioGroup as RadioPrimitive } from "radix-ui";
 import { useRouter } from "next/navigation";
-import { useSyncExternalStore } from "react";
-
-const WIDE = "(min-width: 1024px)";
-const subscribe = (onChange: () => void) => {
-  const m = window.matchMedia(WIDE);
-  m.addEventListener("change", onChange);
-  return () => m.removeEventListener("change", onChange);
-};
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 export type View = "day" | "week" | "month";
 
@@ -18,7 +11,7 @@ export function ViewSwitch({ view, hrefs }: { view: View; hrefs: Record<View, st
   const router = useRouter();
   // Under 1024 px a week URL shows the day list, so Day is the one shown as chosen. The server assumes a wide screen,
   // so desktop never flickers; only a phone opening a week link switches to Day after loading.
-  const wide = useSyncExternalStore(subscribe, () => window.matchMedia(WIDE).matches, () => true);
+  const wide = useMediaQuery("(min-width: 1024px)", true);
   const shown: View = view === "week" && !wide ? "day" : view;
   const item = "inline-flex min-h-11 items-center justify-center rounded-sm px-4 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:bg-primary-subtle data-[state=checked]:text-primary md:min-h-10";
   return (

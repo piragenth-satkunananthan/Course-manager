@@ -25,6 +25,7 @@ beforeAll(async () => {
   await a(changes.POST, "POST", "/session-changes", { body: { kind: "reschedule", classSessionId: lecture, date: "2026-11-12", newDate: "2026-11-13", newStart: "14:00", newEnd: "16:00" } });
   await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 4", dueDate: "2026-11-20" } }); // no time: 23:59
   await a(exams.POST, "POST", "/exams", { body: { courseId, title: "Quiz 2", date: "2026-11-25", startTime: "09:00" } });
+  await a(changes.POST, "POST", "/session-changes", { body: { kind: "extra", courseId, sessionKind: "lab", date: "2026-11-21", start: "09:00", end: "11:00" } }); // a Saturday
   await a(exams.POST, "POST", "/exams", { body: { courseId, title: "Final", kindLabel: "exam" } }); // TBA: left out
 });
 
@@ -47,6 +48,7 @@ describe("the month (#20)", () => {
     expect(on(days, "2026-11-21").deadlines).toEqual([]); // 23:59 Colombo is still the 20th
     expect(on(days, "2026-11-25").deadlines).toMatchObject([{ type: "exam", item: { title: "Quiz 2" } }]);
     expect(days.flatMap((d) => d.deadlines).map((d) => d.item.title)).not.toContain("Final");
+    expect(on(days, "2026-11-21").occurrences).toMatchObject([{ status: "extra", startTime: "09:00" }]);
     expect(on(days, "2026-11-30").occurrences).toEqual([]); // after the Semester's end, no classes
   });
 

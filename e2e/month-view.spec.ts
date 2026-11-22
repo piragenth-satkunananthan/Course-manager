@@ -54,6 +54,12 @@ test("a class dot and a Deadline chip on their day; the day sheet opens from a t
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(new RegExp(`/calendar\\?month=${day.slice(0, 7)}$`));
 
+  // The design's link, with only the day: its month opens with the sheet
+  await page.goto(`/calendar?day=${day}`);
+  await expect(page.getByRole("dialog", { name: new RegExp(fmt(day)) })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(new RegExp(`/calendar\\?month=${day.slice(0, 7)}$`));
+
   // Keyboard: one tab stop, arrows move by a day and a week, Enter opens
   await cell.focus();
   await page.keyboard.press("ArrowRight");
@@ -66,4 +72,16 @@ test("a class dot and a Deadline chip on their day; the day sheet opens from a t
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`day=${day}$`));
   await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("at 320 px the month still fits: every cell at least 44 x 56 px and nothing scrolls sideways", async ({ page }, info) => {
+  test.skip(info.project.name !== "phone", "the narrowest phone width");
+  await page.setViewportSize({ width: 320, height: 640 });
+  await signIn(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+  await page.goto("/calendar");
+  const sizes = await page.getByRole("grid").getByRole("button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => [Math.floor(r.width), Math.floor(r.height)]));
+  expect(sizes).toHaveLength(42);
+  for (const [w, h] of sizes as [number, number][]) expect(w >= 44 && h >= 56).toBe(true);
+  expect((await auditLayout(page, 44)).sidewaysScroll).toBe(0);
 });
