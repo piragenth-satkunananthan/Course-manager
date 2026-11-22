@@ -6,15 +6,26 @@ import { db } from "@/server/db/client";
 import { user, waSession } from "@/server/db/schema";
 import { sendEmail } from "@/server/email/resend";
 import { accountDeletedEmail } from "@/server/email/templates/account-deleted";
-import { invalid, notFound } from "@/server/http/errors";
+import { AppError, invalid, notFound } from "@/server/http/errors";
 import { log } from "@/server/log";
 
-const WRONG = "That password isn't right";
+const WRONG_PASSWORD = "That password isn't right";
+
+// Password guesses here sit outside Better Auth's limiter: at most 5 wrong ones per Student in 15 minutes.
+// shortcut: counted in this web process's memory (one container, v1); move to the rate_limit table if it scales out.
+const failures = new Map<string, number[]>();
+const WINDOW_MS = 15 * 60_000;
 
 export async function deleteAccount(studentId: string, password: string, { waitMs = 10_000 } = {}) {
+  const recent = (failures.get(studentId) ?? []).filter((t) => Date.now() - t < WINDOW_MS);
+  if (recent.length >= 5) throw new AppError("RATE_LIMITED", "Too many attempts, try again in 15 minutes");
   const ctx = await auth.$context;
   const credential = (await ctx.internalAdapter.findAccounts(studentId)).find((a) => a.providerId === "credential");
-  if (!credential?.password || !(await ctx.password.verify({ hash: credential.password, password }))) throw invalid("password", WRONG);
+  if (!credential?.password || !(await ctx.password.verify({ hash: credential.password, password }))) {
+    failures.set(studentId, [...recent, Date.now()]);
+    throw invalid("password", WRONG_PASSWORD);
+  }
+  failures.delete(studentId);
   const [me] = await db.select({ email: user.email }).from(user).where(eq(user.id, studentId));
   if (!me) throw notFound("Account");
 
@@ -28,8 +39,8 @@ export async function deleteAccount(studentId: string, password: string, { waitM
     const [s] = await db.select({ status: waSession.status }).from(waSession).where(eq(waSession.studentId, studentId));
     unlinked = !s || s.status === "unlinked";
   }
-  log.info("account deleted", { whatsappUnlinked: unlinked });
-
+  // Not unlinked in time: the worker still logs out once it sees the session row gone (poller.ts).
   await db.delete(user).where(eq(user.id, studentId)); // cascades to sessions and every other row
+  log.info("account deleted", { whatsappUnlinkedBeforeDelete: unlinked });
   return null;
 }

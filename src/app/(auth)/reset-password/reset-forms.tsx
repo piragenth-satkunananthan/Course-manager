@@ -40,7 +40,8 @@ export function NewPasswordForm({ token }: { token: string }) {
   const { errors, submitCount, isSubmitting } = form.formState;
   async function onSubmit({ newPassword }: { newPassword: string }) {
     const { error } = await authClient.resetPassword({ newPassword, token });
-    if (error) return form.setError("root", { message: error.status === 400 ? "That link has expired or was already used. Ask for a new one below." : "Something went wrong. Try again." });
+    if (error?.code === "INVALID_TOKEN") return form.setError("root", { message: "That link has expired or was already used. Ask for a new one below." });
+    if (error) return form.setError("root", { message: "Couldn't set the password. Try again." });
     setDone(true);
   }
   if (done)

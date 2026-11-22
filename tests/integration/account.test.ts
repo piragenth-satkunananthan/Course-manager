@@ -85,9 +85,9 @@ describe("forgot password (#17)", () => {
 });
 
 describe("change password (#17)", () => {
-  it("needs the current password, and signs the other devices out", async () => {
+  it("needs the current password, and signs the other devices out even if the caller didn't ask (U17)", async () => {
     const other = (await signIn(PASSWORD)).headers.get("set-cookie")!.split(";")[0]!;
-    const change = (currentPassword: string) => post("/change-password", { currentPassword, newPassword: "a brand new password", revokeOtherSessions: true }, { cookie: me.cookie });
+    const change = (currentPassword: string) => post("/change-password", { currentPassword, newPassword: "a brand new password" }, { cookie: me.cookie });
     expect((await change("wrong password!!")).status).toBe(400);
     expect((await change(PASSWORD)).status).toBe(200);
     expect(await sessionOf(other)).toBeNull();
@@ -99,10 +99,13 @@ describe("account deletion (#17)", () => {
   const remove = (password: string, cookie = me.cookie) => client(cookie)(deleteAccount.POST, "POST", "/account/delete", { body: { password } });
   const count = async (table: string) => Number((await pool.query(`select count(*) from ${table}`)).rows[0].count);
 
-  it("refuses a wrong password and keeps everything", async () => {
+  it("refuses a wrong password and keeps everything; after 5 wrong ones it stops checking for 15 minutes", async () => {
     expect(await remove("wrong password!!")).toMatchObject({ status: 400, json: { error: { fieldErrors: { password: "That password isn't right" } } } });
     expect(await count('"user"')).toBe(1);
     expect(emails).toEqual([]);
+    for (let i = 0; i < 4; i++) await remove("wrong password!!");
+    expect(await remove(PASSWORD)).toMatchObject({ status: 429, json: { error: { code: "RATE_LIMITED" } } });
+    expect(await count('"user"')).toBe(1);
   });
 
   it("emails a confirmation, asks the worker to unlink WhatsApp and waits for it, deletes every row, and signs out", async () => {

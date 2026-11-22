@@ -16,7 +16,8 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   const { errors, submitCount, isSubmitting } = form.formState;
   async function onSubmit(values: { currentPassword: string; newPassword: string }) {
     const { error } = await authClient.changePassword({ ...values, revokeOtherSessions: true });
-    if (error?.status === 400) return form.setError("currentPassword", { message: "That password isn't right" });
+    if (error?.code === "INVALID_PASSWORD") return form.setError("currentPassword", { message: "That password isn't right" });
+    if (error?.status === 429) return form.setError("root", { message: "Too many attempts, try again in a minute" });
     if (error) return form.setError("root", { message: "Couldn't change the password. Try again." });
     toast.success("Password changed. Other devices were signed out.");
     onDone();
@@ -52,10 +53,10 @@ function DeleteAccountForm() {
       </p>
       <TextField control={form.control} name="password" label="Your password" type="password" autoComplete="current-password" required />
       <div className="flex justify-end">
-        <Button type="submit" variant="destructive" disabled={isSubmitting} className="max-md:w-full">
-          <Trash2 size={20} strokeWidth={1.75} aria-hidden="true" />
-          Delete my account
-        </Button>
+        <SaveButton pending={isSubmitting} variant="destructive" className="max-md:w-full">
+          {!isSubmitting && <Trash2 size={20} strokeWidth={1.75} aria-hidden="true" />}
+          {isSubmitting ? "Deleting… (unlinking WhatsApp)" : "Delete my account"}
+        </SaveButton>
       </div>
     </form>
   );

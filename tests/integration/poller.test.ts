@@ -33,6 +33,15 @@ describe("the request poller", () => {
     expect(calls).toEqual(["pair 94771234567", "reload", "unlink"]);
   });
 
+  it("logs WhatsApp out when the account (and so its session row) is deleted, once (#17)", async () => {
+    timer = await startPoller(studentId, link, ingest, 20);
+    await new Promise((r) => setTimeout(r, 60));
+    await pool.query('delete from "user" where id = $1', [studentId]);
+    await until(() => calls.includes("unlink"));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(calls).toEqual(["unlink"]);
+  });
+
   it("still unlinks when the request came while the worker was down, but doesn't replay older requests", async () => {
     await pool.query(
       "update wa_session set status = 'connected', last_connected_at = now() - interval '1 hour', unlink_requested_at = now(), groups_reload_requested_at = now() - interval '2 hours' where student_id = $1",

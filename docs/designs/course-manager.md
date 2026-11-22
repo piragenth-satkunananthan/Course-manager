@@ -1401,7 +1401,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
 *   **Type / Scope**: Better Auth configuration.
 *   **Proposed Changes**:
     - **Database:** the Drizzle adapter.
-    - **`emailAndPassword`:** `{ enabled: true, disableSignUp: true, minPasswordLength: 12, sendResetPassword, resetPasswordTokenExpiresIn: 3600, revokeSessionsOnPasswordReset: true }`. `sendResetPassword` is not awaited, and sends through file 35. The link target is `${APP_ORIGIN}/reset-password?token=…`.
+    - **`emailAndPassword`:** `{ enabled: true, disableSignUp: true, minPasswordLength: 12, sendResetPassword, resetPasswordTokenExpiresIn: 3600, revokeSessionsOnPasswordReset: true }`. `sendResetPassword` is not awaited, and sends through file 35. The emailed link is Better Auth's `${APP_ORIGIN}/api/auth/reset-password/<token>?callbackURL=/reset-password`, which checks the token and redirects to `/reset-password?token=…` (or `?error=INVALID_TOKEN`). Caddy keeps no access log, so the token isn't written anywhere. Changing the password is limited to 5 per minute and always signs out other devices (U17); deleting the account allows 5 wrong passwords per 15 minutes.
     - **`rateLimit`:** `{ storage: "database", customRules: { "/sign-in/email": {window: 60, max: 5}, "/request-password-reset": {window: 60, max: 3} } }`. All limits become 1000 when `NODE_ENV=test`.
     - **`advanced.ipAddress.ipAddressHeaders`:** `["x-real-ip"]`.
     - **Sessions and origin:** sessions last 30 days; the trusted origin is `APP_ORIGIN`.

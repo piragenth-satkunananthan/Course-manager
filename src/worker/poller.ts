@@ -21,9 +21,16 @@ export async function startPoller(studentId: string, link: WhatsAppLink, ingest:
     await db.update(waSession).set({ status: "error", pairingCode: null, lastError: "Pairing was interrupted; try again." }).where(eq(waSession.studentId, studentId));
   }
 
+  let seen = !!first;
   const poll = async () => {
     const s = await read();
-    if (!s) return;
+    // The row went with the account (deleted, file 48): log WhatsApp out even if the 10-second wait ran out.
+    if (!s) {
+      if (seen) await link.unlink().catch((e) => log.error("unlink after account deletion failed", { error: e }));
+      seen = false;
+      return;
+    }
+    seen = true;
     if (t(s.unlinkRequestedAt) > handled.unlink) {
       handled.unlink = t(s.unlinkRequestedAt);
       await link.unlink();
