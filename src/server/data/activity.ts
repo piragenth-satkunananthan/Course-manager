@@ -1,5 +1,5 @@
 // The Activity Log and Undo (design file 46). Source message text is decrypted here for display only.
-import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { applyOperations } from "@/server/ai/apply-operations";
 import { buildContext } from "@/server/ai/context";
 import { isHandled, validateOutput } from "@/server/ai/validate";
@@ -8,7 +8,7 @@ import { db, type Tx } from "@/server/db/client";
 import { activityEvent, aiBatch, assignment, autoChange, sessionChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
 import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
 import { AppError, invalid, notFound } from "@/server/http/errors";
-import type { ActivityItem, AutoChangeItem, ResolveResult, UnknownCourseResolve } from "@/shared/schemas/activity";
+import type { ActivityFilter, ActivityItem, AutoChangeItem, BatchUndoResult, ResolveResult, UnknownCourseResolve } from "@/shared/schemas/activity";
 import { pgAdapter } from "./ai-context";
 import { createCourse, getCourse } from "./courses";
 import { activeChangeFor } from "./timetable";
@@ -19,16 +19,22 @@ type Change = typeof autoChange.$inferSelect;
 const TABLES = { assignment, exam, session_change: sessionChange, semester } as const;
 
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
-async function undoState(x: typeof db | Tx, c: Change) {
+/**
+ * `sameBatch`: in an Undo batch, the batch's own later changes and Undos don't count as "changed since", so a batch
+ * that changed one item twice can undo both, newest first (#22).
+ */
+async function undoState(x: typeof db | Tx, c: Change, sameBatch?: ReadonlySet<string>) {
   const table = TABLES[c.entityType as keyof typeof TABLES];
   const [row] = table ? await x.select({ version: table.version }).from(table).where(and(eq(table.studentId, c.studentId), eq(table.id, c.entityId))) : [];
-  const [next] = await x
-    .select({ actor: entityVersion.actor })
+  const later = await x
+    .select({ actor: entityVersion.actor, op: entityVersion.op, autoChangeId: entityVersion.autoChangeId })
     .from(entityVersion)
     .where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.entityType, c.entityType), eq(entityVersion.entityId, c.entityId), gt(entityVersion.version, c.afterVersion)))
-    .orderBy(entityVersion.version)
-    .limit(1);
-  return canUndo(c, row?.version ?? -1, next?.actor ?? null);
+    .orderBy(entityVersion.version);
+  const state = canUndo(c, row?.version ?? -1, later[0]?.actor ?? null);
+  if (state.ok || !sameBatch || c.undoneAt) return state;
+  const onlyThisBatch = later.every((v) => v.op === "undo" || v.op === "status" || (v.autoChangeId && sameBatch.has(v.autoChangeId)));
+  return onlyThisBatch ? { ok: true as const } : state;
 }
 
 // shortcut: two queries per change for its Undo state; fine at one Student's volume, batch them if pages get slow.
@@ -41,11 +47,17 @@ async function toItems(changes: Change[]): Promise<AutoChangeItem[]> {
     .innerJoin(inboxMessage, eq(inboxMessage.id, autoChangeSource.inboxMessageId))
     .innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId))
     .where(inArray(autoChangeSource.autoChangeId, changes.map((c) => c.id)));
+  const open = await db
+    .select({ batchId: autoChange.batchId, n: sql<number>`count(*)::int` })
+    .from(autoChange)
+    .where(and(inArray(autoChange.batchId, [...new Set(changes.map((c) => c.batchId))]), isNull(autoChange.undoneAt)))
+    .groupBy(autoChange.batchId);
   return Promise.all(
     changes.map(async (c) => {
       const state = await undoState(db, c);
       return {
         id: c.id, createdAt: c.createdAt.toISOString(), summary: c.summary, risk: c.risk, undoneAt: iso(c.undoneAt), entityType: c.entityType, entityId: c.entityId,
+        batchId: c.batchId, batchOpen: open.find((o) => o.batchId === c.batchId)?.n ?? 0,
         canUndo: state.ok, undoBlockedReason: state.ok ? null : state.reason,
         // Text is erased when its Semester is archived (D1).
         sources: sources.filter((s) => s.changeId === c.id).map((s) => ({ senderName: s.senderName, sentAt: s.sentAt.toISOString(), text: s.textEnc ? decrypt(s.textEnc, key) : null, groupSubject: s.groupSubject })),
@@ -68,26 +80,29 @@ export async function dashboardChanges(studentId: string, now: Date) {
 
 const PAGE = 50;
 // shortcut: the cursor is a timestamp, so rows sharing the boundary microsecond could be skipped; add an id tiebreak if seen.
-export async function listActivity(studentId: string, cursor?: string): Promise<{ items: ActivityItem[]; nextCursor: string | null }> {
+export async function listActivity(studentId: string, cursor?: string, filter: ActivityFilter = "all"): Promise<{ items: ActivityItem[]; nextCursor: string | null }> {
   const before = cursor ? new Date(cursor) : null;
+  // Changes: Auto Changes only. Needs attention: Possibly Missed messages, open Unknown Courses, and events.
+  const want = { changes: filter !== "attention", attention: filter !== "changes" };
+  const none = Promise.resolve([]);
   const key = loadKey();
   const first = db.$with("first").as(db.select({ id: inboxMessage.id, senderName: inboxMessage.senderName, sentAt: inboxMessage.sentAt, textEnc: inboxMessage.textEnc, groupSubject: waGroup.subject }).from(inboxMessage).innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId)));
   const [changes, events, missed, unknown] = await Promise.all([
-    db.select().from(autoChange).where(and(eq(autoChange.studentId, studentId), before ? lt(autoChange.createdAt, before) : undefined)).orderBy(desc(autoChange.createdAt)).limit(PAGE),
-    db.select().from(activityEvent).where(and(eq(activityEvent.studentId, studentId), before ? lt(activityEvent.createdAt, before) : undefined)).orderBy(desc(activityEvent.createdAt)).limit(PAGE),
-    db
+    !want.changes ? none : db.select().from(autoChange).where(and(eq(autoChange.studentId, studentId), before ? lt(autoChange.createdAt, before) : undefined)).orderBy(desc(autoChange.createdAt)).limit(PAGE),
+    !want.attention ? none : db.select().from(activityEvent).where(and(eq(activityEvent.studentId, studentId), before ? lt(activityEvent.createdAt, before) : undefined)).orderBy(desc(activityEvent.createdAt)).limit(PAGE),
+    !want.attention ? none : db
       .select({ m: inboxMessage, groupSubject: waGroup.subject, courseId: waGroup.linkedCourseId })
       .from(inboxMessage)
       .innerJoin(waGroup, eq(waGroup.id, inboxMessage.waGroupId))
       .where(and(eq(inboxMessage.studentId, studentId), eq(inboxMessage.possiblyMissed, true), isNull(inboxMessage.revokedAt), before ? lt(inboxMessage.possiblyMissedAt, before) : undefined))
       .orderBy(desc(inboxMessage.possiblyMissedAt))
       .limit(PAGE),
-    db
+    !want.attention ? none : db
       .with(first)
       .select({ u: unknownCourseMention, first: { senderName: first.senderName, sentAt: first.sentAt, textEnc: first.textEnc, groupSubject: first.groupSubject } })
       .from(unknownCourseMention)
       .leftJoin(first, eq(first.id, unknownCourseMention.firstMessageId))
-      .where(and(eq(unknownCourseMention.studentId, studentId), before ? lt(unknownCourseMention.createdAt, before) : undefined))
+      .where(and(eq(unknownCourseMention.studentId, studentId), filter === "attention" ? eq(unknownCourseMention.status, "open") : undefined, before ? lt(unknownCourseMention.createdAt, before) : undefined))
       .orderBy(desc(unknownCourseMention.createdAt))
       .limit(PAGE),
   ]);
@@ -135,8 +150,8 @@ async function undoWouldBreak(tx: Tx, c: Change, before: Record<string, unknown>
  * times as a new version. The Student's Undo of an AI-created item adds a suppression, so a repeat can't recreate it;
  * the system's (an edited or deleted message) doesn't. Returns why it was blocked, if it was.
  */
-export async function undoChange(tx: Tx, c: Change, actor: "student" | "system"): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const state = await undoState(tx, c);
+export async function undoChange(tx: Tx, c: Change, actor: "student" | "system", sameBatch?: ReadonlySet<string>): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const state = await undoState(tx, c, sameBatch);
   if (!state.ok) return state;
   const [v] = await tx.select().from(entityVersion).where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.autoChangeId, c.id)));
   if (!v) return { ok: false, reason: "This change can't be undone" };
@@ -243,4 +258,30 @@ export async function resolveUnknownCourse(studentId: string, id: string, input:
     return { applied, possiblyMissed: missed.size };
   });
   return { ...result, course: await getCourse(studentId, courseId) };
+}
+
+/**
+ * Undo batch (design file 46, #22): every change the batch made that isn't undone yet, newest first, each under the
+ * Undo rule (its own batch's later changes don't block it). Reports what was undone and what was skipped, and why.
+ */
+export async function undoBatch(studentId: string, batchId: string): Promise<BatchUndoResult> {
+  return db.transaction(async (tx) => {
+    const [batch] = await tx.select({ id: aiBatch.id }).from(aiBatch).where(and(eq(aiBatch.studentId, studentId), eq(aiBatch.id, batchId)));
+    if (!batch) throw notFound("Batch");
+    // Newest first: the same transaction gives them one created_at, so an item's later version comes first.
+    const changes = await tx
+      .select()
+      .from(autoChange)
+      .where(and(eq(autoChange.studentId, studentId), eq(autoChange.batchId, batchId), isNull(autoChange.undoneAt)))
+      .orderBy(desc(autoChange.createdAt), desc(autoChange.afterVersion))
+      .for("update");
+    const ids = new Set((await tx.select({ id: autoChange.id }).from(autoChange).where(and(eq(autoChange.studentId, studentId), eq(autoChange.batchId, batchId)))).map((c) => c.id));
+    const result: BatchUndoResult = { undone: [], skipped: [] };
+    for (const c of changes) {
+      const r = await undoChange(tx, c, "student", ids);
+      if (r.ok) result.undone.push({ autoChangeId: c.id, summary: c.summary });
+      else result.skipped.push({ autoChangeId: c.id, summary: c.summary, reason: r.reason });
+    }
+    return result;
+  });
 }

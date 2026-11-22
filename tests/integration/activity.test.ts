@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import * as activity from "@/app/api/v1/activity/route";
 import * as assignment from "@/app/api/v1/assignments/[id]/route";
 import * as assignments from "@/app/api/v1/assignments/route";
+import * as batchUndo from "@/app/api/v1/ai-batches/[id]/undo/route";
 import * as undo from "@/app/api/v1/auto-changes/[id]/undo/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as dashboard from "@/app/api/v1/dashboard/route";
@@ -193,5 +194,56 @@ describe("Unknown Courses (#14)", () => {
     await process("ENG essay due 28th", mention("ENG", (id) => [essay(id)]));
     expect((await feed()).filter((i: { type: string }) => i.type === "unknown_course")).toMatchObject([{ status: "ignored", operations: 1 }]);
     expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual([]);
+  });
+});
+
+describe("Undo batch (#22)", () => {
+  /** One message whose batch makes several changes. */
+  async function batch(text: string, ops: (ctx: AiContext) => object[]) {
+    await ingest.handle("messages.upsert", {
+      type: "notify",
+      messages: [{ key: { remoteJid: GROUP, id: `M${++seq}`, fromMe: false }, messageTimestamp: Math.floor(Date.now() / 1000) + 5, pushName: "Kasun", message: { conversation: text } }],
+    });
+    await aiTick(ai((ctx) => ops(ctx).map((o) => ({ ...o, sourceMessageIds: [ctx.messages[0]!.id] }))), key, later());
+  }
+  const undoAll = (batchId: string, who = a) => who(batchUndo.POST, "POST", `/ai-batches/${batchId}/undo`, { params: { id: batchId } });
+
+  it("undoes each change newest first, skipping the one the Student edited since, and says why", async () => {
+    const lab = (await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 4", dueDate: "2026-11-27" } })).json;
+    await batch("Lab 4 is now Lab 4 report, due 30th; Lab 5 due Dec 4", () => [
+      { op: "update_assignment", assignmentId: lab.id, fields: { dueDate: "2026-11-30" } },
+      { op: "update_assignment", assignmentId: lab.id, fields: { title: "Lab 4 report" } },
+      { op: "create_assignment", courseId, title: "Lab 5", dueDate: "2026-12-04" },
+    ]);
+    const changes = (await feed()).filter((i: { type: string }) => i.type === "auto_change");
+    expect(changes).toHaveLength(3);
+    expect(changes.every((c: { batchId: string; batchOpen: number }) => c.batchId === changes[0].batchId && c.batchOpen === 3)).toBe(true);
+    // The Student edits Lab 5 afterwards: that change can't be undone any more.
+    const lab5 = (await a(assignments.GET, "GET", "/assignments")).json.find((x: { title: string }) => x.title === "Lab 5");
+    await a(assignment.PATCH, "PATCH", `/assignments/${lab5.id}`, { params: { id: lab5.id }, body: { expectedVersion: lab5.version, title: "Lab 5 (mine)" } });
+
+    expect((await undoAll(changes[0].batchId, b)).status).toBe(404);
+    const res = await undoAll(changes[0].batchId);
+    expect(res.status).toBe(200);
+    expect(res.json.undone.map((u: { summary: string }) => u.summary).sort()).toEqual(["Lab 4 report updated", "Lab 4: Fri 27 Nov → Mon 30 Nov"]);
+    expect(res.json.skipped).toEqual([{ autoChangeId: expect.any(String), summary: "Lab 5: due Fri 4 Dec", reason: "You edited this after the change" }]);
+    // Both of Lab 4's changes are undone, even though they touched the same item.
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "Lab 4", dueDate: "2026-11-27" }), expect.objectContaining({ title: "Lab 5 (mine)" })]),
+    );
+    const after = (await feed()).filter((i: { type: string }) => i.type === "auto_change");
+    expect(after.map((c: { undoneAt: string | null }) => !!c.undoneAt).sort()).toEqual([false, true, true]);
+    expect(after.every((c: { batchOpen: number }) => c.batchOpen === 1)).toBe(true);
+  });
+
+  it("filters the feed: changes only, or what needs attention", async () => {
+    await announce("Lab 6 due Dec 4", () => ({ op: "create_assignment", courseId, title: "Lab 6", dueDate: "2026-12-04" }));
+    const studentId = (await pool.query("select id from \"user\" where email = 'a@example.com'")).rows[0].id;
+    await pool.query("insert into activity_event (student_id, kind, payload) values ($1, 'stuck_messages', '{\"count\": 3}'), ($1, 'file_too_large', '{\"fileName\": \"notes.pdf\"}')", [studentId]);
+    const kinds = async (filter?: string) => ((await a(activity.GET, "GET", "/activity", { query: filter ? { filter } : {} })).json.items as { type: string }[]).map((i) => i.type).sort();
+    expect(await kinds()).toEqual(["auto_change", "event", "event"]);
+    expect(await kinds("changes")).toEqual(["auto_change"]);
+    expect(await kinds("attention")).toEqual(["event", "event"]);
+    expect((await a(activity.GET, "GET", "/activity", { query: { filter: "nope" } })).status).toBe(400);
   });
 });

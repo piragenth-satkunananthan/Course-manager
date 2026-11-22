@@ -1519,7 +1519,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
       - Possibly Missed `inbox_message` rows;
       - `activity_event`.
     - **`undoAutoChange`:** `canUndo`, then `writeEntity` with `op = undo` and `actor = student`, then sets `undone_at`.
-    - **`undoBatch`:** goes through the batch's changes newest `auto_change` first, and reports which ones it skipped and why.
+    - **`undoBatch`:** goes through the batch's changes newest `auto_change` first, and reports which ones it skipped and why. Within it, the batch's own later changes (and their Undos) don't count as "changed since", so a batch that changed one item twice undoes both (#22).
     - **`resolveUnknownCourse`:**
       - "add" creates the Course in the **current** Semester, and adds `name_key` as its Nickname (`source = unknown_course`) when it differs from the code and the name, so the next message using it is understood.
       - "nickname" adds `name_key` as a Nickname of the chosen Course, with `source = unknown_course`.
