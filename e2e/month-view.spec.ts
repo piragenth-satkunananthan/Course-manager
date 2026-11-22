@@ -41,7 +41,7 @@ test("a class dot and a Deadline chip on their day; the day sheet opens from a t
     expect(await grid.getByRole("button", { name: new RegExp(`^${fmt(shift(10))}: \\d+ class(es)?, \\d+ cancelled`) }).getByTestId("dot-cancelled").count()).toBeGreaterThanOrEqual(1);
   }
   if (shift(-2).slice(0, 7) === day.slice(0, 7)) {
-    await expect(grid.getByRole("button", { name: new RegExp(`${code} late sheet, overdue$`) })).toBeVisible();
+    await expect(grid.getByRole("button", { name: new RegExp(`${code} late sheet, overdue(;|$)`) })).toBeVisible();
   }
 
   // Tap: the day sheet, with the day in the URL; Escape closes it and drops the day
