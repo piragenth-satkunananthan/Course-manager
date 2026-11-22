@@ -73,6 +73,28 @@ describe("Semesters", () => {
     expect(g.linked_semester_id).toBe(newSem.id);
     const s = (await pool.query("select groups_reload_requested_at from wa_session where student_id = $1", [studentId])).rows[0];
     expect(s?.groups_reload_requested_at).toBeTruthy();
+
+    // A message from before the switch keeps the old Semester, so archiving it erases only that text
+    const gid = (await pool.query("select id from wa_group where wa_jid = 'class@g.us'")).rows[0].id;
+    const msg = (sem: string, id: string) =>
+      pool.query("insert into inbox_message (student_id, wa_group_id, semester_id, wa_message_id, kind, sent_at, text_enc) values ($1, $2, $3, $4, 'text', now(), '\\x01')", [studentId, gid, sem, id]);
+    await msg(oldSem.id, "old-1");
+    await msg(newSem.id, "new-1");
+    await api(semesterArchive.POST, "POST", `/semesters/${oldSem.id}/archive`, { params: { id: oldSem.id } });
+    const texts = (await pool.query("select wa_message_id, text_enc is not null as kept from inbox_message where wa_group_id = $1 order by wa_message_id", [gid])).rows;
+    expect(texts).toEqual([{ wa_message_id: "new-1", kept: true }, { wa_message_id: "old-1", kept: false }]);
+    expect((await pool.query("select linked_semester_id from wa_group where id = $1", [gid])).rows[0].linked_semester_id).toBe(newSem.id);
+  });
+
+  it("leaves a group linked to a Semester that wasn't current, and asks no reload when nothing moved (#28)", async () => {
+    const [a1, b1, other] = [await newSemester("A"), await newSemester("B"), await newSemester("Other")];
+    await api(setCurrent.POST, "POST", `/semesters/${a1.id}/set-current`, { params: { id: a1.id } });
+    await pool.query("insert into wa_group (student_id, wa_jid, subject, linked_semester_id) values ($1, 'other@g.us', 'Other', $2)", [studentId, other.id]);
+    await pool.query("delete from wa_group where wa_jid = 'class@g.us'");
+    await pool.query("update wa_session set groups_reload_requested_at = null where student_id = $1", [studentId]);
+    await api(setCurrent.POST, "POST", `/semesters/${b1.id}/set-current`, { params: { id: b1.id } });
+    expect((await pool.query("select linked_semester_id from wa_group where wa_jid = 'other@g.us'")).rows[0].linked_semester_id).toBe(other.id);
+    expect((await pool.query("select groups_reload_requested_at from wa_session where student_id = $1", [studentId])).rows[0].groups_reload_requested_at).toBeNull();
   });
 
   it("keeps the first archive time when archived twice", async () => {
