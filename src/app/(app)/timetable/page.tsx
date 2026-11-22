@@ -6,6 +6,7 @@ import type { CourseOption } from "@/components/app/form";
 import { AddExtraClass, SessionItem } from "@/components/app/occurrence";
 import { type View, ViewSwitch } from "@/components/app/view-switch";
 import { WeekGrid } from "@/components/app/week-grid";
+import { deadlineDate } from "@/lib/deadline-date";
 import { occurrenceKey } from "@/lib/occurrence-key";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
@@ -21,7 +22,7 @@ import type { Occurrence } from "@/shared/schemas/timetable";
 
 const nav = "inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-muted md:size-10";
 const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
-const dayHref = (date: string) => `/timetable?date=${date}`;
+const dayHref = (date: string) => `/timetable?view=day&date=${date}`;
 const weekHref = (week: string) => `/timetable?view=week&week=${week}`;
 
 function Pager({ label, prev, next, prevLabel, nextLabel, home, homeLabel, current }: { label: string; prev: string; next: string; prevLabel: string; nextLabel: string; home: string; homeLabel: string; current: boolean }) {
@@ -76,12 +77,13 @@ function DayList({ date, today, occurrences, deadlines, courses }: { date: strin
   );
 }
 
-// The timetable (design-system §7.4): the day list everywhere, and from 1024 px the week grid (#19). Month: #20.
+// The timetable (design-system §7.4): the day list everywhere, and from 1024 px the week grid, its default there (#19). Month: #20.
 export default async function TimetablePage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string; week?: string }> }) {
   const studentId = await requireStudentId();
   const today = todayIn();
   const q = await searchParams;
-  const view: View = q.view === "week" ? "week" : "day";
+  // With no choice in the URL, the week: a grid from 1024 px, today's list below that (the design's routes table).
+  const view: View = q.view === "day" || (!q.view && q.date) ? "day" : "week";
   const valid = (d?: string) => (IsoDate.safeParse(d).success ? d! : null);
 
   if (view === "day") {
@@ -116,7 +118,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
         <DayList
           date={focus} today={today} courses={courses}
           occurrences={occurrences.filter((o) => o.date === focus)}
-          deadlines={deadlines.filter((d) => (d.type === "assignment" ? d.item.dueDate : d.item.date) === focus)}
+          deadlines={deadlines.filter((d) => deadlineDate(d) === focus)}
         />
       </div>
     </>

@@ -901,6 +901,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U15 | (2026-11-22, product owner) An extra class announced without an end time lasts as long as that Course's weekly class of the same kind, or 2 hours if it has none. |
 | U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. It is blocked, with the reason, when the class has another change now, or when classes in the weeks an extension added were changed since. |
 | U17 | (2026-11-22, product owner) Changing the password in Settings signs out every other device (`revokeOtherSessions`), as a reset does. |
+| U18 | (2026-11-22, product owner) In the week grid every class block is at least 40 px tall (the desktop tap target), so a class under 50 minutes looks a little longer than it is; its times are written on it. Keyboard use is Tab, Enter and Escape; no arrow keys inside the grid. |
 
 ## Risks and Mitigations
 

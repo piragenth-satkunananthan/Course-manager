@@ -16,12 +16,17 @@ test("the week grid: classes, Deadlines, the week in the URL, keyboard and label
   await page.request.post(`/api/v1/courses/${courseId}/class-sessions`, { headers: H, data: { kind: "lecture", weekday: weekday(today), startTime: "09:00", endTime: "11:00", location: "Hall A" } });
   await page.request.post("/api/v1/assignments", { headers: H, data: { courseId, title: "WG1 grid report", dueDate: today, dueTime: "23:00" } });
 
+  // On a desktop, the timetable opens on the week; Day and back to Week through the switch, kept in the URL.
   await page.goto("/timetable");
   const views = page.getByRole("radiogroup", { name: "View" });
-  await expect(views.getByRole("radio", { name: "Day" })).toBeChecked();
+  await expect(views.getByRole("radio", { name: "Week" })).toBeChecked();
+  await views.getByRole("radio", { name: "Day" }).click();
+  await expect(page).toHaveURL(new RegExp(`/timetable\\?view=day&date=${today}$`));
+  await expect(page.getByRole("region", { name: /^Week of / })).toBeHidden();
   await views.getByRole("radio", { name: "Week" }).click();
   await expect(page).toHaveURL(new RegExp(`/timetable\\?view=week&week=${monday(today)}$`));
   await expect(views.getByRole("radio", { name: "Week" })).toBeChecked();
+  await expect(page.getByText("20:00", { exact: true })).toBeVisible(); // both edges of the hours are labelled
 
   const grid = page.getByRole("region", { name: /^Week of / });
   const block = grid.getByRole("button", { name: new RegExp(`^WG1 Lecture, .+, 09:00 to 11:00, Hall A$`) });
@@ -63,11 +68,13 @@ test("the week grid: classes, Deadlines, the week in the URL, keyboard and label
   await expect(page).toHaveURL(new RegExp(`week=${monday(today)}$`));
 });
 
-test("under 1024 px there's no Week option, and a week link shows the day list", async ({ page }, info) => {
+test("under 1024 px there's no Week option, and the timetable (or a week link) shows the day list", async ({ page }, info) => {
   test.skip(info.project.name !== "phone", "phone width only");
   await signIn(page);
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   const [today] = colombo().split(", ") as [string];
+  await page.goto("/timetable");
+  await expect(page.getByRole("region", { name: /^Classes on / })).toBeVisible();
   await page.goto(`/timetable?view=week&week=${monday(today)}`);
   const views = page.getByRole("radiogroup", { name: "View" });
   await expect(views.getByRole("radio", { name: "Week" })).toBeHidden();

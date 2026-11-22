@@ -9,15 +9,20 @@ describe("layoutDay", () => {
     expect(GRID_HEIGHT).toBe(13 * 48);
     expect(layoutDay([c("08:00", "10:00"), c("13:30", "14:15")])).toEqual([
       { item: c("08:00", "10:00"), top: 48, height: 96, lane: 0, lanes: 1, cutStart: false, cutEnd: false },
-      { item: c("13:30", "14:15"), top: 312, height: 36, lane: 0, lanes: 1, cutStart: false, cutEnd: false },
+      { item: c("13:30", "14:15"), top: 312, height: 40, lane: 0, lanes: 1, cutStart: false, cutEnd: false }, // 45 minutes is 36 px: raised to 40
     ]);
   });
 
-  it("clips classes outside 07:00–20:00 and marks the cut, keeping a minimum height", () => {
+  it("clips classes outside 07:00–20:00 and marks the cut; every block is at least 40 px, and boxes never cover each other", () => {
     expect(layoutDay([c("06:00", "08:00"), c("19:30", "21:00"), c("05:00", "06:00")])).toEqual([
-      { item: c("05:00", "06:00"), top: 0, height: 24, lane: 0, lanes: 1, cutStart: true, cutEnd: false }, // all before 07:00: shown at the top
-      { item: c("06:00", "08:00"), top: 0, height: 48, lane: 0, lanes: 1, cutStart: true, cutEnd: false },
-      { item: c("19:30", "21:00"), top: 600, height: 24, lane: 0, lanes: 1, cutStart: false, cutEnd: true },
+      { item: c("06:00", "08:00"), top: 0, height: 48, lane: 0, lanes: 2, cutStart: true, cutEnd: false },
+      { item: c("05:00", "06:00"), top: 0, height: 40, lane: 1, lanes: 2, cutStart: true, cutEnd: false }, // all before 07:00: at the top, beside the other
+      { item: c("19:30", "21:00"), top: GRID_HEIGHT - 40, height: 40, lane: 0, lanes: 1, cutStart: false, cutEnd: true },
+    ]);
+    // A 15-minute class drawn 40 px tall reaches into the next class's box: they go side by side.
+    expect(layoutDay([c("13:00", "13:15", "short"), c("13:15", "14:00", "next")]).map((b) => [b.item.id, b.height, b.lane, b.lanes])).toEqual([
+      ["short", 40, 0, 2],
+      ["next", 40, 1, 2],
     ]);
   });
 

@@ -163,8 +163,6 @@ export async function deleteExam(studentId: string, id: string, expectedVersion:
 }
 
 /** Assignments and dated Exams due on one local date, for the day list's "Due" section. */
-export const listDeadlinesOn = (studentId: string, date: string) => listDeadlinesIn(studentId, date, date);
-
 /** Assignments due and Exams held in [from, to], submitted ones included, earliest first (the day list and the week grid). */
 export async function listDeadlinesIn(studentId: string, from: string, to: string) {
   const [assignments, exams] = await Promise.all([

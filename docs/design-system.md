@@ -330,7 +330,7 @@ A vertical list of `session-item`s for one day, with "‹ Wed 18 Nov ›" date n
 
 ### 6.8 `week-grid` (desktop, 1024 px and up; M1b)
 
-Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. Each Occurrence is a block with its Course colour bar and code. Deadlines appear as chips in a strip across the top of each day. The current time is marked with a 2 px `--primary` line. The grid scrolls vertically inside the page; it never scrolls sideways.
+Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. It's the timetable's default view from 1024 px; every block is at least 40 px tall (U18), overlapping classes sit side by side, and a class cut at 07:00 or 20:00 shows a small arrow at that edge. Each Occurrence is a block with its Course colour bar and code. Deadlines appear as chips in a strip across the top of each day. The current time is marked with a 2 px `--primary` line. The grid scrolls vertically inside the page; it never scrolls sideways.
 
 ### 6.9 `month-grid` and `day-sheet` (M1b)
 
