@@ -1,14 +1,12 @@
-import { ChevronLeft, ChevronRight, CalendarX } from "lucide-react";
-import Link from "next/link";
+import { CalendarX } from "lucide-react";
 import { DeadlineItem } from "@/components/app/deadline-item";
 import { EmptyState } from "@/components/app/empty-state";
 import type { CourseOption } from "@/components/app/form";
-import { AddExtraClass, SessionItem } from "@/components/app/occurrence";
-import { type View, ViewSwitch } from "@/components/app/view-switch";
+import { SessionItem } from "@/components/app/occurrence";
+import { Header, Pager } from "@/components/app/timetable-header";
 import { WeekGrid } from "@/components/app/week-grid";
 import { deadlineDate } from "@/lib/deadline-date";
 import { occurrenceKey } from "@/lib/occurrence-key";
-import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { listDeadlinesIn } from "@/server/data/assessments";
 import { listCourseOptions } from "@/server/data/courses";
@@ -20,27 +18,10 @@ import { IsoDate } from "@/shared/schemas/common";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Occurrence } from "@/shared/schemas/timetable";
 
-const nav = "inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-muted md:size-10";
 const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
 const dayHref = (date: string) => `/timetable?view=day&date=${date}`;
 const weekHref = (week: string) => `/timetable?view=week&week=${week}`;
-
-function Pager({ label, prev, next, prevLabel, nextLabel, home, homeLabel, current }: { label: string; prev: string; next: string; prevLabel: string; nextLabel: string; home: string; homeLabel: string; current: boolean }) {
-  return (
-    <div className="mt-4 flex items-center gap-2">
-      <Link href={prev} aria-label={prevLabel} title={prevLabel} className={nav}>
-        <ChevronLeft size={20} strokeWidth={1.75} aria-hidden="true" />
-      </Link>
-      <p className="min-w-0 flex-1 text-center font-semibold sm:flex-none sm:min-w-32" aria-live="polite">{label}</p>
-      <Link href={next} aria-label={nextLabel} title={nextLabel} className={nav}>
-        <ChevronRight size={20} strokeWidth={1.75} aria-hidden="true" />
-      </Link>
-      <Button asChild variant="outline" className="ml-auto">
-        <Link href={home} aria-current={current ? "date" : undefined}>{homeLabel}</Link>
-      </Button>
-    </div>
-  );
-}
+const monthHref = (date: string) => `/calendar?month=${date.slice(0, 7)}`;
 
 /** The day list (design-system §6.7): that day's classes, then what's due. */
 function DayList({ date, today, occurrences, deadlines, courses }: { date: string; today: string; occurrences: Occurrence[]; deadlines: Deadline[]; courses: CourseOption[] }) {
@@ -83,7 +64,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   const today = todayIn();
   const q = await searchParams;
   // With no choice in the URL, the week: a grid from 1024 px, today's list below that (the design's routes table).
-  const view: View = q.view === "day" || (!q.view && q.date) ? "day" : "week";
+  const view: "day" | "week" = q.view === "day" || (!q.view && q.date) ? "day" : "week";
   const valid = (d?: string) => (IsoDate.safeParse(d).success ? d! : null);
 
   if (view === "day") {
@@ -91,7 +72,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
     const [occurrences, deadlines, courses] = await Promise.all([getOccurrences(studentId, date, date), listDeadlinesIn(studentId, date, date), listCourseOptions(studentId)]);
     return (
       <>
-        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(monday(date)) }} />
+        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(monday(date)), month: monthHref(date) }} />
         <DayList date={date} today={today} occurrences={occurrences} deadlines={deadlines} courses={courses} />
       </>
     );
@@ -104,7 +85,7 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   const thisWeek = monday(today);
   return (
     <>
-      <Header courses={courses} date={focus} view="week" hrefs={{ day: dayHref(focus), week: weekHref(week) }} />
+      <Header courses={courses} date={focus} view="week" hrefs={{ day: dayHref(focus), week: weekHref(week), month: monthHref(focus) }} />
       <div className="max-lg:hidden">
         <Pager
           label={`${formatDate(week, { weekday: false })} – ${formatDate(days[6]!, { weekday: false, year: true })}`}
@@ -122,17 +103,5 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
         />
       </div>
     </>
-  );
-}
-
-function Header({ courses, date, view, hrefs }: { courses: CourseOption[]; date: string; view: View; hrefs: Record<View, string> }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <h1 className="text-2xl font-bold md:text-display">Timetable</h1>
-      <div className="flex flex-wrap items-center gap-2">
-        <ViewSwitch view={view} hrefs={hrefs} />
-        {courses.length > 0 && <AddExtraClass courses={courses} date={date} />}
-      </div>
-    </div>
   );
 }
