@@ -1,5 +1,5 @@
 // Assignments and Exams, scoped to the Student (design files 42, 43). Writes go through writeEntity.
-import { and, asc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, between, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { assignment, course, exam, semester } from "@/server/db/schema";
 import { effectiveDueInstant } from "@/server/domain/deadlines";
@@ -163,10 +163,11 @@ export async function deleteExam(studentId: string, id: string, expectedVersion:
 }
 
 /** Assignments and dated Exams due on one local date, for the day list's "Due" section. */
-export async function listDeadlinesOn(studentId: string, date: string) {
+/** Assignments due and Exams held in [from, to], submitted ones included, earliest first (the day list and the week grid). */
+export async function listDeadlinesIn(studentId: string, from: string, to: string) {
   const [assignments, exams] = await Promise.all([
-    loadAssignments(db, studentId, eq(assignment.dueDate, date)),
-    loadExams(db, studentId, eq(exam.date, date)),
+    loadAssignments(db, studentId, between(assignment.dueDate, from, to)),
+    loadExams(db, studentId, between(exam.date, from, to)),
   ]);
   return [
     ...assignments.map((item) => ({ type: "assignment" as const, item })),

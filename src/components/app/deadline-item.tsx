@@ -90,7 +90,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   ) : null;
 }
 
-function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { deadline: Deadline; open: boolean; onOpenChange: (o: boolean) => void; today: string; courses: CourseOption[] }) {
+export function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { deadline: Deadline; open: boolean; onOpenChange: (o: boolean) => void; today: string; courses: CourseOption[] }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
