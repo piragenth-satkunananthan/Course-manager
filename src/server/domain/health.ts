@@ -1,4 +1,4 @@
-// Health signals (design §10). wa_socket and ai, and the capture check, join with #11 and #12.
+// Health signals (design §10): what the heartbeats ping and which banners show.
 type Signal = { lastOkAt: Date | null; lastErrorAt: Date | null };
 export type Signals = Partial<Record<"scheduler" | "email" | "wa_socket" | "ai" | "backup", Signal>>;
 
@@ -14,13 +14,14 @@ export function evaluateHealth(signals: Signals, now: Date, ai: { oldestWaitingM
   // The last send succeeded, or none was attempted.
   const email = !signals.email?.lastErrorAt || isLater(signals.email.lastOkAt, signals.email.lastErrorAt);
   // wa_socket: connected, or deliberately unlinked (both record lastOkAt). ai: nothing waits over 30 minutes, or paused.
+  // A stopped AI loop shows here once messages wait; it also alerts at once (design §8).
   const waSocket = isLater(signals.wa_socket?.lastOkAt ?? null, signals.wa_socket?.lastErrorAt ?? null);
   const aiOk = ai.paused || ai.oldestWaitingMs === null || ai.oldestWaitingMs <= 30 * 60_000;
-  return {
-    scheduler,
-    email,
-    pingReminders: scheduler && email,
-    pingCapture: waSocket && aiOk,
-    banners: scheduler ? [] : [{ kind: "worker_unhealthy" as const, since: s?.lastOkAt?.toISOString() ?? null }],
-  };
+  const since = (d: Date | null | undefined) => d?.toISOString() ?? null;
+  const banners = [
+    ...(scheduler ? [] : [{ kind: "worker_unhealthy" as const, since: since(s?.lastOkAt) }]),
+    ...(aiOk ? [] : [{ kind: "ai_unavailable" as const, since: new Date(+now - ai.oldestWaitingMs!).toISOString() }]),
+    ...(ai.paused ? [{ kind: "auto_changes_paused" as const, since: null }] : []),
+  ];
+  return { scheduler, email, pingReminders: scheduler && email, pingCapture: waSocket && aiOk, banners };
 }

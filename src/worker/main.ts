@@ -3,9 +3,10 @@
 import { Client } from "pg";
 import { loadKey } from "@/server/crypto";
 import { db } from "@/server/db/client";
-import { healthSignal, user, waSession } from "@/server/db/schema";
-import { aiTick } from "./ai/batcher";
-import { AiFatalError, checkModel, nimClient } from "./ai/nim-client";
+import { recordHealth } from "@/server/data/health";
+import { user, waSession } from "@/server/db/schema";
+import { startAiLoop } from "./ai/loop";
+import { checkModel, nimClient } from "./ai/nim-client";
 import { startPoller } from "./poller";
 import { raiseAlert } from "./scheduler/alerts";
 import { recordSchedulerHealth, tick } from "./scheduler/tick";
@@ -75,7 +76,7 @@ async function startWhatsApp() {
     const detail = (e as Error).message;
     log("error", "whatsapp loop not started; checking again in 5 minutes", { error: detail });
     const now = new Date();
-    await db.insert(healthSignal).values({ component: "wa_socket", lastErrorAt: now, detail }).onConflictDoUpdate({ target: healthSignal.component, set: { lastErrorAt: now, detail } }).catch(() => {});
+    await recordHealth("wa_socket", false, detail, now).catch(() => {});
     const students = await db.select({ id: user.id }).from(user).catch(() => []);
     if (students.length === 1) await raiseAlert(students[0]!.id, "whatsapp_not_started", { error: detail }, now).catch(() => {});
     setTimeout(startWhatsApp, 5 * 60_000);
@@ -83,32 +84,10 @@ async function startWhatsApp() {
 }
 void startWhatsApp();
 
-// AI loop. Startup check: the encryption key loads and NIM lists the pinned model (design §8). A 401/403 stops only
-// this loop, alerts, and re-checks every 5 minutes; messages keep queuing meanwhile.
-async function startAi() {
-  const recheck = async (detail: string, fatal: boolean) => {
-    log("error", "ai loop stopped; checking again in 5 minutes", { error: detail });
-    const now = new Date();
-    await db.insert(healthSignal).values({ component: "ai", lastErrorAt: now, detail }).onConflictDoUpdate({ target: healthSignal.component, set: { lastErrorAt: now, detail } }).catch(() => {});
-    const students = await db.select({ id: user.id }).from(user).catch(() => []);
-    if (fatal && students.length === 1) await raiseAlert(students[0]!.id, "ai_auth", { error: detail }, now).catch(() => {});
-    setTimeout(startAi, 5 * 60_000);
-  };
-  try {
-    const key = loadKey();
-    await checkModel();
-    const ai = nimClient();
-    log("info", "ai loop started", { model: ai.model });
-    const timer = setInterval(() => {
-      aiTick(ai, key).catch((e) => {
-        if (e instanceof AiFatalError) {
-          clearInterval(timer);
-          void recheck(e.message, true);
-        } else log("error", "ai tick failed", { error: (e as Error).message });
-      });
-    }, 60_000);
-  } catch (e) {
-    await recheck((e as Error).message, false);
-  }
+// AI loop (ai/loop.ts): a refused key or a missing model stops only it, alerts, and re-checks every 5 minutes.
+try {
+  const key = loadKey();
+  startAiLoop({ key, client: () => nimClient(), check: () => checkModel() });
+} catch (e) {
+  log("error", "ai loop not started: the encryption key doesn't load", { error: (e as Error).message });
 }
-void startAi();

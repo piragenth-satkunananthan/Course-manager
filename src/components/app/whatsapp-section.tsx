@@ -1,5 +1,6 @@
 "use client";
 // Settings → WhatsApp (design-system §7.6): pairing by phone code (U1), linking groups, and unlinking.
+import { AutoChangesSwitch } from "./auto-changes";
 import { CircleCheck, WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -101,7 +102,7 @@ function GroupRow({ group, courses, semester }: { group: WaGroup; courses: Optio
   );
 }
 
-export function WhatsAppSection({ initial, courses, semester }: { initial: WhatsAppStatus; courses: Option[]; semester: Option | null }) {
+export function WhatsAppSection({ initial, courses, semester, autoChangesPaused }: { initial: WhatsAppStatus; courses: Option[]; semester: Option | null; autoChangesPaused: boolean }) {
   const router = useRouter();
   const [state, setState] = useState(initial);
   const [pairingSince, setPairingSince] = useState(() => Date.now());
@@ -170,6 +171,7 @@ export function WhatsAppSection({ initial, courses, semester }: { initial: Whats
               ))}
             </ul>
           )}
+          <AutoChangesSwitch paused={autoChangesPaused} />
           <Button variant="outline" className="mt-4" onClick={() => setUnlinking(true)}>Unlink WhatsApp</Button>
         </>
       )}
