@@ -1,9 +1,11 @@
-// Better Auth configuration (design §5, file 31). Password reset arrives with #17.
+// Better Auth configuration (design §5, file 31).
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { db } from "@/server/db/client";
 import * as schema from "@/server/db/schema";
+import { sendEmail } from "@/server/email/resend";
+import { passwordResetEmail } from "@/server/email/templates/password-reset";
 
 const origin = process.env.APP_ORIGIN;
 if (!origin) throw new Error("APP_ORIGIN is not set");
@@ -16,7 +18,17 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [origin],
   database: drizzleAdapter(db, { provider: "pg", schema }),
-  emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 12 },
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+    minPasswordLength: 12,
+    resetPasswordTokenExpiresIn: 3600,
+    revokeSessionsOnPasswordReset: true,
+    // Not awaited, so the reply takes as long whether or not the email exists (Better Auth's advice). sendEmail never throws.
+    sendResetPassword: async ({ user, url }) => {
+      void sendEmail(user.id, "password_reset", { to: user.email, ...passwordResetEmail(url) });
+    },
+  },
   session: { expiresIn: 30 * 24 * 3600, updateAge: 24 * 3600 },
   user: { additionalFields: { autoChangesPaused: { type: "boolean", defaultValue: false, input: false } } },
   rateLimit: {

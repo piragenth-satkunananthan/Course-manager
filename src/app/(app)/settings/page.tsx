@@ -7,7 +7,7 @@ import { listSemesters } from "@/server/data/semesters";
 import { getSettings } from "@/server/data/settings";
 import { requireStudentEmail, requireStudentId } from "@/server/session";
 
-// Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (sign out). Password and deletion (#17) join later.
+// Semesters, WhatsApp (with the Auto Changes switch, #15), Account (password, sign out) and the danger zone (#17).
 export default async function SettingsPage() {
   const studentId = await requireStudentId();
   const [semesters, email, whatsapp, settings] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId)]);
