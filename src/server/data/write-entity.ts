@@ -3,12 +3,12 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { Tx } from "@/server/db/client";
-import { assignment, entityVersion, exam, sessionChange } from "@/server/db/schema";
+import { assignment, entityVersion, exam, semester, sessionChange } from "@/server/db/schema";
 import { planFieldUpdate } from "@/server/domain/versioning";
 import { AppError, notFound } from "@/server/http/errors";
 
 type Actor = "ai" | "student" | "system";
-type VersionedTable = PgTable & { id: PgColumn; studentId: PgColumn; deletedAt: PgColumn; version: PgColumn };
+type VersionedTable = PgTable & { id: PgColumn; studentId: PgColumn; deletedAt?: PgColumn; version: PgColumn }; // a Semester is archived, never deleted
 
 /** Per entity: its table, the fields each actor may write (§3: the Student owns status, the AI only these). */
 const ENTITIES = {
@@ -26,6 +26,11 @@ const ENTITIES = {
     table: sessionChange as unknown as VersionedTable,
     fields: ["courseId", "classSessionId", "kind", "sessionKind", "originalDate", "newDate", "newStartTime", "newEndTime", "newLocation"],
     ai: ["kind", "newDate", "newStartTime", "newEndTime", "newLocation"], // §9 update_session_change
+  },
+  semester: {
+    table: semester as unknown as VersionedTable,
+    fields: ["endDate"],
+    ai: ["endDate"], // §9 extend_semester; validation allows only a later date
   },
 } as const;
 export type EntityType = keyof typeof ENTITIES;
@@ -85,7 +90,7 @@ export async function writeEntity(tx: Tx, w: Write): Promise<{ row: Row; noChang
   const [current] = (await tx
     .select()
     .from(table)
-    .where(w.op === "undo" ? mine(w.entityId) : and(mine(w.entityId), isNull(table.deletedAt)))
+    .where(w.op === "undo" || !table.deletedAt ? mine(w.entityId) : and(mine(w.entityId), isNull(table.deletedAt)))
     .for("update")) as Row[];
   if (!current) throw notFound("Item");
   if (w.op === "undo") {

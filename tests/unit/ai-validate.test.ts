@@ -8,6 +8,12 @@ const ctx: AiContext = {
   semester: { id: "sem", startDate: "2026-08-03", endDate: "2026-12-18" },
   linkedTo: { courseId: "c1" },
   courses: [{ id: "c1", code: "CS2010", name: "Data Structures", nicknames: ["ds"] }],
+  occurrences: [
+    { classSessionId: "s1", courseId: "c1", kind: "lecture", date: "2026-11-23", start: "08:00", end: "10:00", location: "Hall A", status: "normal", originalDate: null, sessionChangeId: null },
+    { classSessionId: "s1", courseId: "c1", kind: "lecture", date: "2026-11-30", start: "08:00", end: "10:00", location: "Hall A", status: "cancelled", originalDate: null, sessionChangeId: "sc1" },
+    { classSessionId: "s1", courseId: "c1", kind: "lecture", date: "2026-12-08", start: "13:00", end: "15:00", location: null, status: "rescheduled", originalDate: "2026-12-07", sessionChangeId: "sc3" },
+    { classSessionId: null, courseId: "c1", kind: "lab", date: "2026-11-28", start: "09:00", end: "11:00", location: "Mac Lab", status: "extra", originalDate: null, sessionChangeId: "sc2" },
+  ],
   assignments: [
     { id: "a1", courseId: "c1", title: "Lab 4 report", dueDate: "2026-11-27", dueTime: null, status: "todo" },
     { id: "a2", courseId: "c1", title: "Lab 3", dueDate: "2026-11-13", dueTime: null, status: "submitted" },
@@ -70,11 +76,6 @@ describe("validateOutput: every reference is real", () => {
     const r = validateOutput(out([create({ title: "Lab 9", dueDate: "2026-12-01" }), create({ title: "lab 3 ", dueDate: "2026-11-13" }), create({ title: "LAB 4 REPORT", dueDate: "2026-11-27" })]), ctx);
     expect(reasons(r)).toEqual(["superseded: the Student dismissed this before", "repeats an existing item", "repeats an existing item"]);
   });
-
-  it("drops timetable and Semester operations until they are supported (#16)", () => {
-    const r = validateOutput(out([{ op: "cancel_occurrence", classSessionId: "s1", date: "2026-11-26", sourceMessageIds: ["m2"] }]), ctx);
-    expect(r.ok && r.dropped).toMatchObject([{ reason: "timetable changes aren't applied yet", messageIds: ["m2"] }]);
-  });
 });
 
 describe("validateOutput: volume", () => {
@@ -82,5 +83,65 @@ describe("validateOutput: volume", () => {
     const ops = Array.from({ length: 12 }, (_, i) => create({ title: `Lab ${20 + i}` }));
     const r = validateOutput(out(ops), ctx);
     expect(r.ok && [r.valid.length, r.overflow.length]).toEqual([10, 2]);
+  });
+});
+
+describe("validateOutput: the timetable and the Semester (#16)", () => {
+  const src = { sourceMessageIds: ["m1"] };
+  const ok = [
+    { op: "cancel_occurrence", classSessionId: "s1", date: "2026-11-23", ...src },
+    { op: "cancel_occurrence", classSessionId: "s1", date: "2026-12-07", ...src }, // a rescheduled one, by its original date
+    { op: "reschedule_occurrence", classSessionId: "s1", date: "2026-11-23", newDate: "2026-11-24", newStart: "13:00", newEnd: "15:00", ...src },
+    { op: "add_extra_session", courseId: "c1", kind: "lecture", date: "2026-11-28", start: "09:00", end: "11:00", ...src },
+    { op: "update_session_change", sessionChangeId: "sc1", fields: { kind: "rescheduled", newDate: "2026-12-01", newStart: "08:00", newEnd: "10:00" }, ...src },
+    { op: "update_session_change", sessionChangeId: "sc3", fields: { newStart: "14:00", newEnd: "16:00" }, ...src },
+    { op: "update_session_change", sessionChangeId: "sc2", fields: { newLocation: "Lab 2" }, ...src },
+    { op: "remove_session_change", sessionChangeId: "sc2", ...src },
+  ];
+
+  it("accepts operations on real occurrences and Session Changes", () => {
+    const r = validateOutput(out(ok), ctx);
+    expect(reasons(r)).toEqual([]);
+    expect(r.ok && r.valid).toHaveLength(ok.length);
+  });
+
+  it("drops operations on classes that aren't in the timetable, and impossible times or dates", () => {
+    const r = validateOutput(
+      out([
+        { op: "cancel_occurrence", classSessionId: "s1", date: "2026-11-24", ...src },
+        { op: "cancel_occurrence", classSessionId: "s9", date: "2026-11-23", ...src },
+        { op: "reschedule_occurrence", classSessionId: "s1", date: "2026-11-23", newDate: "2026-11-24", newStart: "15:00", newEnd: "13:00", ...src },
+        { op: "reschedule_occurrence", classSessionId: "s1", date: "2026-11-23", newDate: "2026-12-21", newStart: "13:00", newEnd: "15:00", ...src },
+        { op: "add_extra_session", courseId: "c9", kind: "lab", date: "2026-11-28", start: "09:00", end: "11:00", ...src },
+        { op: "add_extra_session", courseId: "c1", kind: "lab", date: "2027-01-05", start: "09:00", end: "11:00", ...src },
+        { op: "update_session_change", sessionChangeId: "sc9", fields: { newStart: "09:00" }, ...src },
+        { op: "update_session_change", sessionChangeId: "sc1", fields: { kind: "rescheduled" }, ...src },
+        { op: "update_session_change", sessionChangeId: "sc3", fields: { newEnd: "12:00" }, ...src },
+        { op: "update_session_change", sessionChangeId: "sc2", fields: { kind: "cancelled" }, ...src },
+        { op: "remove_session_change", sessionChangeId: "sc9", ...src },
+      ]),
+      ctx,
+    );
+    expect(reasons(r)).toEqual([
+      "not a class in the timetable",
+      "not a class in the timetable",
+      "the end is before the start",
+      "date outside the Semester",
+      "unknown Course",
+      "date outside the Semester",
+      "unknown Session Change",
+      "give the new date, start and end",
+      "the end is before the start",
+      "an extra session can't become a change to a weekly class",
+      "unknown Session Change",
+    ]);
+  });
+
+  it("extends the Semester only later, and checks the batch's other dates against the extended end", () => {
+    const extend = (newEndDate: string, semesterId = "sem") => ({ op: "extend_semester", semesterId, newEndDate, ...src });
+    const late = create({ dueDate: "2026-12-30" });
+    expect(reasons(validateOutput(out([late]), ctx))).toEqual(["date outside the Semester"]);
+    expect(reasons(validateOutput(out([late, extend("2027-01-01")]), ctx))).toEqual([]);
+    expect(reasons(validateOutput(out([extend("2026-12-10"), extend("2027-01-01", "other")]), ctx))).toEqual(["the Semester can only end later", "unknown Semester"]);
   });
 });

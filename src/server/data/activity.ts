@@ -5,7 +5,7 @@ import { buildContext } from "@/server/ai/context";
 import { isHandled, validateOutput } from "@/server/ai/validate";
 import { decrypt, loadKey } from "@/server/crypto";
 import { db, type Tx } from "@/server/db/client";
-import { activityEvent, aiBatch, assignment, autoChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
+import { activityEvent, aiBatch, assignment, autoChange, sessionChange, autoChangeSource, course, courseNickname, entityVersion, exam, inboxMessage, semester, suppression, unknownCourseMention, waGroup } from "@/server/db/schema";
 import { canUndo, HIGHLIGHT_DAYS, titleKey } from "@/server/domain/auto-change";
 import { AppError, invalid, notFound } from "@/server/http/errors";
 import type { ActivityItem, AutoChangeItem, ResolveResult, UnknownCourseResolve } from "@/shared/schemas/activity";
@@ -15,7 +15,7 @@ import { iso } from "./util";
 import { writeEntity } from "./write-entity";
 
 type Change = typeof autoChange.$inferSelect;
-const TABLES = { assignment, exam } as const;
+const TABLES = { assignment, exam, session_change: sessionChange, semester } as const;
 
 /** The item's current version and who made the version after the change, to apply and explain the Undo rule. */
 async function undoState(x: typeof db | Tx, c: Change) {
@@ -117,12 +117,12 @@ export async function undoChange(tx: Tx, c: Change, actor: "student" | "system")
   const state = await undoState(tx, c);
   if (!state.ok) return state;
   const [v] = await tx.select().from(entityVersion).where(and(eq(entityVersion.studentId, c.studentId), eq(entityVersion.autoChangeId, c.id)));
-  if (!v || (c.entityType !== "assignment" && c.entityType !== "exam")) return { ok: false, reason: "This change can't be undone" };
+  if (!v) return { ok: false, reason: "This change can't be undone" };
 
   const restore: Record<string, unknown> = c.op === "create" ? { deletedAt: new Date() } : c.op === "delete" ? { deletedAt: null } : { ...v.before };
   await writeEntity(tx, { studentId: c.studentId, entityType: c.entityType, op: "undo", entityId: c.entityId, restore, restoreFieldSetAt: v.beforeFieldSetAt, actor, setAt: new Date().toISOString() });
   await tx.update(autoChange).set({ undoneAt: new Date() }).where(and(eq(autoChange.studentId, c.studentId), eq(autoChange.id, c.id)));
-  if (c.op === "create" && actor === "student") {
+  if (c.op === "create" && actor === "student" && (c.entityType === "assignment" || c.entityType === "exam")) {
     const after = v.after as { courseId: string; title: string; dueDate?: string; date?: string | null };
     await tx.insert(suppression).values({ studentId: c.studentId, courseId: after.courseId, entityType: c.entityType, titleKey: titleKey(after.title), dueDate: (c.entityType === "assignment" ? after.dueDate : after.date) ?? null });
   }

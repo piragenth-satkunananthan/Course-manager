@@ -1,0 +1,230 @@
+{
+  "id": "extra-session",
+  "category": "timetable",
+  "now": "2026-11-20T10:00:00+05:30",
+  "fixture": {
+    "semester": {
+      "id": "sem",
+      "startDate": "2026-08-03",
+      "endDate": "2026-12-18"
+    },
+    "linkedTo": {
+      "courseId": "c-ds"
+    },
+    "courses": [
+      {
+        "id": "c-ds",
+        "code": "CS2010",
+        "name": "Data Structures",
+        "nicknames": [
+          "ds"
+        ]
+      },
+      {
+        "id": "c-iad",
+        "code": "SWT22022",
+        "name": "Internet Application Development",
+        "nicknames": [
+          "iad"
+        ]
+      },
+      {
+        "id": "c-iadp",
+        "code": "SWT22032",
+        "name": "IAD Practical",
+        "nicknames": [],
+        "practicalOf": "c-iad"
+      }
+    ],
+    "occurrences": [
+      {
+        "classSessionId": "s-iadp-lab",
+        "courseId": "c-iadp",
+        "kind": "lab",
+        "date": "2026-11-20",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 2",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lec",
+        "courseId": "c-ds",
+        "kind": "lecture",
+        "date": "2026-11-23",
+        "start": "08:00",
+        "end": "10:00",
+        "location": "Hall A",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iad-lec",
+        "courseId": "c-iad",
+        "kind": "lecture",
+        "date": "2026-11-24",
+        "start": "10:00",
+        "end": "12:00",
+        "location": "Hall B",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lab",
+        "courseId": "c-ds",
+        "kind": "lab",
+        "date": "2026-11-25",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 1",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iadp-lab",
+        "courseId": "c-iadp",
+        "kind": "lab",
+        "date": "2026-11-27",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 2",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lec",
+        "courseId": "c-ds",
+        "kind": "lecture",
+        "date": "2026-11-30",
+        "start": "08:00",
+        "end": "10:00",
+        "location": "Hall A",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iad-lec",
+        "courseId": "c-iad",
+        "kind": "lecture",
+        "date": "2026-12-01",
+        "start": "10:00",
+        "end": "12:00",
+        "location": "Hall B",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lab",
+        "courseId": "c-ds",
+        "kind": "lab",
+        "date": "2026-12-02",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 1",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iadp-lab",
+        "courseId": "c-iadp",
+        "kind": "lab",
+        "date": "2026-12-04",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 2",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lec",
+        "courseId": "c-ds",
+        "kind": "lecture",
+        "date": "2026-12-07",
+        "start": "08:00",
+        "end": "10:00",
+        "location": "Hall A",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iad-lec",
+        "courseId": "c-iad",
+        "kind": "lecture",
+        "date": "2026-12-08",
+        "start": "10:00",
+        "end": "12:00",
+        "location": "Hall B",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lab",
+        "courseId": "c-ds",
+        "kind": "lab",
+        "date": "2026-12-09",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 1",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-iadp-lab",
+        "courseId": "c-iadp",
+        "kind": "lab",
+        "date": "2026-12-11",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Lab 2",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      }
+    ],
+    "assignments": [],
+    "exams": [],
+    "suppressions": [],
+    "recentMessages": []
+  },
+  "thread": [
+    {
+      "id": "m1",
+      "senderName": "Nimal",
+      "sentAt": "2026-11-20T09:30:00+05:30",
+      "kind": "text",
+      "text": "extra DS lab this Saturday 9am at mac lab"
+    }
+  ],
+  "expected": {
+    "operations": [
+      {
+        "op": "add_extra_session",
+        "courseId": "c-ds",
+        "kind": "lab",
+        "date": "2026-11-21",
+        "start": "09:00",
+        "end": "11:00",
+        "location": "Mac Lab",
+        "sourceMessageIds": [
+          "m1"
+        ]
+      }
+    ],
+    "decisions": {
+      "m1": "applied"
+    }
+  }
+}

@@ -615,6 +615,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - A due date with no time leaves `dueTime` out (the 23:59 rule applies).
   - "Before <date>" ("submit before 27th") makes that date the due date: it is the last day (product owner, 2026-11-22).
 - **Practical Courses:** in a Course Group, a message about the practical (the word "practical", or a lab room such as "mac lab") applies to `linkedTo.practicalCourseId`; every other message applies to `linkedTo.courseId`. In the Class Group, a message naming a subject's practical ("IAD practical…") applies to the Course whose `practicalOf` is that subject's Course. With no Practical Course linked, a practical message produces no operation and gets `decision = possibly_missed`, with "<code> has no Practical Course" as the reason.
+- **Classes (#16):** a class is found in `occurrences` by its course (the practical rule above applies), kind and day, or the next one when no day is given. "Cancelled" is `cancel_occurrence`; a new time or day is `reschedule_occurrence`, keeping the usual length; a new place on the same date and time is `reschedule_occurrence` with `newLocation`. A class that already has a `sessionChangeId` is corrected with `update_session_change` (only the changing fields) and reverted ("back on") with `remove_session_change`. An extra class with no end time lasts as long as that Course's weekly class of the same kind, or 2 hours if it has none (U15). "Semester extended by N weeks" is `extend_semester` to `endDate` plus N weeks.
 - **Session Groups (decision U11):** M1 has none. A message that names a group ("Group B lab cancelled") produces **no operation**. It gets `decision = possibly_missed`, with the group name in the reason.
 - **Output:** only `ops.v1` JSON.
 
@@ -670,7 +671,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
 | `cancel_occurrence`, `reschedule_occurrence`, `add_extra_session` | create a `session_change`; if one already exists for that occurrence, update it instead |
 | `extend_semester` | update `semester.end_date` |
 
-A write that changes nothing (§3) produces no Auto Change. Changes that move a Deadline later, or cancel an Assessment or Class Session occurrence, get `risk = moved_later` or `risk = cancelled`. They stay highlighted on the dashboard for 7 days, or until undone (decision U3), and they appear in the digest's "Check these" section.
+A write that changes nothing (§3) produces no Auto Change. An operation naming an occurrence that already has an active change updates that change instead of adding one. Extensions are applied before the batch's other operations. Every Auto Change, including Session Changes and a Semester extension, can be undone under the Undo rule (U16). Changes that move a Deadline later, or cancel an Assessment or Class Session occurrence, get `risk = moved_later` or `risk = cancelled`. They stay highlighted on the dashboard for 7 days, or until undone (decision U3), and they appear in the digest's "Check these" section.
 
 **Edited and deleted messages** (both are stored as their own inbox rows; see §3):
 
@@ -897,6 +898,8 @@ The author decided each of these after the five-stage review. Each one has been 
 | U12 | Clock times with no am/pm: hours 1–7 mean pm, hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm" or "tonight" override this. |
 | U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings suggests the Course whose code is in the group's name, as a "Link to SWT22022" button; nothing is linked until it's pressed. |
 | U14 | (2026-11-22, product owner) The class keeps one Class Group for the whole degree. Setting a Semester current moves the Class Group's link to it; stored messages keep their Semester, so D1 erasure is unchanged. Archiving a Semester still unlinks its groups. In the Class Group, "<subject> practical…" goes to that subject's Practical Course. |
+| U15 | (2026-11-22, product owner) An extra class announced without an end time lasts as long as that Course's weekly class of the same kind, or 2 hours if it has none. |
+| U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. |
 
 ## Risks and Mitigations
 

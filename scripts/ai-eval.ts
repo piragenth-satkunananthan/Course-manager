@@ -63,6 +63,7 @@ for (const c of cases) {
     {
       getSemester: async () => f.semester,
       getCourses: async () => f.courses,
+      getOccurrences: async () => f.occurrences ?? [],
       getOpenAndRecentAssessments: async () => ({ assignments: f.assignments ?? [], exams: f.exams ?? [] }),
       getSuppressions: async () => f.suppressions ?? [],
       getRecentMessages: async () => f.recentMessages ?? [],
