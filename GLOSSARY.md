@@ -12,6 +12,10 @@ _Avoid_: User, learner, account
 A university subject the Student is enrolled in, such as "CS2010 Data Structures". Belongs to one Semester.
 _Avoid_: Module, unit, subject, class
 
+**Practical Course**:
+A Course for the practical part of another (theory) Course, with its own course code. The Student picks the theory Course once ("Practical of"). A theory Course has at most one Practical Course. Its notices arrive in the theory Course's Course Group and say "practical" (or name a lab room, such as "mac lab") without its code.
+_Avoid_: Lab course, practical subject
+
 **Nickname**:
 Another name people use for a Course in messages, such as "DS" or "data structures".
 _Avoid_: Alias, short name, tag
@@ -107,10 +111,6 @@ A file, usually a PDF, uploaded to a Note.
 _Avoid_: Upload, file, resource
 
 ## WhatsApp
-
-**Practical Course**:
-A Course for the practical part of another (theory) Course, with its own course code. The Student picks the theory Course once ("Practical of"). A theory Course has at most one Practical Course. Its notices arrive in the theory Course's Course Group and say "practical" (or name a lab room, such as "mac lab") without its code.
-_Avoid_: Lab course, practical subject
 
 **Course Group**:
 The WhatsApp group for one Course, linked to that Course. It also covers that Course's Practical Course, if it has one.

@@ -76,8 +76,8 @@ function GroupRow({ group, courses, semester }: { group: WaGroup; courses: Optio
   // Only a suggestion: nothing is read until the Student confirms it (U13).
   const suggested = value === "none" ? suggestCourse(group.subject, courses.filter((c): c is Option & { code: string } => !!c.code)) : undefined;
   return (
-    <li className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-col items-start gap-1">
+    <li className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col items-start gap-2">
         <label htmlFor={id} className="font-medium">{group.subject}</label>
         {suggested && (
           <Button variant="outline" size="sm" className="min-h-11 md:min-h-10" onClick={() => change(suggested.id)}>

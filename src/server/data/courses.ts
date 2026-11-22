@@ -50,14 +50,15 @@ async function assertSemester(studentId: string, semesterId: string) {
 }
 
 /** U13: a Practical Course points at a theory Course in its own Semester; neither side may be part of another pair. */
-async function assertPractical(studentId: string, self: { id?: string; semesterId: string }, theoryId: string | null | undefined) {
-  if (!theoryId) return;
+async function assertPractical(studentId: string, self: { id?: string; semesterId: string; practicalOfCourseId?: string | null }, theoryId: string | null | undefined) {
+  if (!theoryId || theoryId === self.practicalOfCourseId) return; // unchanged
   const field = "practicalOfCourseId";
   if (theoryId === self.id) throw invalid(field, "A Course can't be its own Practical Course");
   const [t] = await db.select().from(course).where(mine(studentId, theoryId));
   if (!t) throw notFound("Course");
   if (t.semesterId !== self.semesterId) throw invalid(field, "Choose a Course in the same Semester");
   if (t.practicalOfCourseId) throw invalid(field, "That Course is itself a Practical Course");
+  if (t.archivedAt) throw invalid(field, "That Course is archived");
   if (self.id) {
     const [own] = await db.select({ id: course.id }).from(course).where(and(eq(course.studentId, studentId), eq(course.practicalOfCourseId, self.id)));
     if (own) throw invalid(field, "This Course has its own Practical Course");
@@ -85,7 +86,7 @@ export async function createCourse(studentId: string, input: CourseCreate) {
 
 export async function updateCourse(studentId: string, id: string, input: CourseUpdate) {
   if (input.practicalOfCourseId) {
-    const [self] = await db.select({ id: course.id, semesterId: course.semesterId }).from(course).where(mine(studentId, id));
+    const [self] = await db.select({ id: course.id, semesterId: course.semesterId, practicalOfCourseId: course.practicalOfCourseId }).from(course).where(mine(studentId, id));
     if (!self) throw notFound("Course");
     await assertPractical(studentId, self, input.practicalOfCourseId);
   }

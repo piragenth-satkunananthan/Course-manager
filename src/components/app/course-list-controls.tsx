@@ -43,7 +43,7 @@ export function AddCourseButton({ semesters, semesterId, courses }: { semesters:
         Add Course
       </Button>
       <ResponsiveDialog open={open} onOpenChange={setOpen} title="Add Course">
-        <CourseForm semesters={semesters.filter((s) => !s.archivedAt)} defaultSemesterId={semesterId} others={courses} onDone={() => (setOpen(false), router.refresh())} />
+        <CourseForm semesters={semesters.filter((s) => !s.archivedAt)} defaultSemesterId={semesterId} semesterCourses={courses} onDone={() => (setOpen(false), router.refresh())} />
       </ResponsiveDialog>
     </>
   );

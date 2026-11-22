@@ -15,10 +15,10 @@ import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } fro
 const LABELS = { semesterId: "Semester", code: "Code", name: "Name", lecturerName: "Lecturer", colour: "Colour", practicalOfCourseId: "Practical of" };
 const NONE = "none"; // Radix Select items can't have an empty value
 
-/** `others`: the Courses that may be picked as "Practical of" (U13), filtered here to the chosen Semester. */
-type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; others: Course[]; onDone: (course: Course) => void };
+/** `semesterCourses`: the Courses that may be picked as "Practical of" (U13), filtered here to the chosen Semester. */
+type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; semesterCourses: Course[]; onDone: (course: Course) => void };
 
-export function CourseForm({ semesters, defaultSemesterId, course, others, onDone }: Props) {
+export function CourseForm({ semesters, defaultSemesterId, course, semesterCourses, onDone }: Props) {
   const form = useAppForm(
     CourseCreate,
     course
@@ -28,9 +28,12 @@ export function CourseForm({ semesters, defaultSemesterId, course, others, onDon
   const { isSubmitting, errors, submitCount } = form.formState;
   const semesterId = form.watch("semesterId");
   // A theory Course with its own Practical Course can't become one; a candidate is a theory Course without one yet.
-  const isTheory = !!course && others.some((o) => o.practicalOfCourseId === course.id);
-  const candidates = others.filter(
-    (o) => o.semesterId === semesterId && o.id !== course?.id && !o.archivedAt && !o.practicalOfCourseId && !others.some((p) => p.practicalOfCourseId === o.id && p.id !== course?.id),
+  const isTheory = !!course && semesterCourses.some((o) => o.practicalOfCourseId === course.id);
+  // Mirrors assertPractical on the server; the saved choice stays listed even if that Course was archived since.
+  const candidates = semesterCourses.filter(
+    (o) =>
+      o.id === course?.practicalOfCourseId ||
+      (o.semesterId === semesterId && o.id !== course?.id && !o.archivedAt && !o.practicalOfCourseId && !semesterCourses.some((p) => p.practicalOfCourseId === o.id)),
   );
 
   async function onSubmit({ semesterId, ...rest }: CourseCreate) {
@@ -52,7 +55,7 @@ export function CourseForm({ semesters, defaultSemesterId, course, others, onDon
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor="semesterId">Semester (required)</FieldLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
+              <Select value={field.value} onValueChange={(v) => (field.onChange(v), form.setValue("practicalOfCourseId", null))}>
                 <SelectTrigger id="semesterId" className="w-full" aria-invalid={fieldState.invalid} aria-describedby={fieldState.error ? "semesterId-error" : undefined}>
                   <SelectValue placeholder="Choose a Semester" />
                 </SelectTrigger>

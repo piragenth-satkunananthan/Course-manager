@@ -155,6 +155,18 @@ describe("Practical Courses (#26)", () => {
     expect(fieldError(await patch(theory.id, { practicalOfCourseId: other.id }))).toBeTruthy();
   });
 
+  it("refuses an archived theory Course, but keeps an existing link to one", async () => {
+    const s = await newSemester();
+    const theory = await newCourse(s.id, "T3");
+    const practical = await newCourse(s.id, "P4");
+    const late = await newCourse(s.id, "P5");
+    await patch(practical.id, { practicalOfCourseId: theory.id });
+    await api(courseArchive.POST, "POST", `/courses/${theory.id}/archive`, { params: { id: theory.id } });
+    expect((await patch(practical.id, { practicalOfCourseId: theory.id, name: "Renamed" })).status).toBe(200);
+    await patch(practical.id, { practicalOfCourseId: null });
+    expect(fieldError(await patch(late.id, { practicalOfCourseId: theory.id }))).toBe("That Course is archived");
+  });
+
   it("clears the link when the theory Course is deleted", async () => {
     const s = await newSemester();
     const theory = await newCourse(s.id, "T2");

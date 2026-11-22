@@ -612,7 +612,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - Relative dates ("tomorrow", "next Friday") resolve against the message's `sent_at`, in Asia/Colombo.
   - Clock times with no am/pm (decision U12): hours 1–7 mean pm ("4.30" → 16:30), hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm", "evening" or "tonight" override this.
   - A due date with no time leaves `dueTime` out (the 23:59 rule applies).
-- **Practical Courses:** in a Course Group, a message about the practical (the word "practical", or a lab room such as "mac lab") applies to `linkedTo.practicalCourseId`; every other message applies to `linkedTo.courseId`. With no Practical Course linked, a practical message produces no operation and gets `decision = possibly_missed`, with "<code> has no Practical Course" as the reason. In the Class Group, "IAD practical…" resolves through the Course's name and its `practicalOf`.
+- **Practical Courses:** in a Course Group, a message about the practical (the word "practical", or a lab room such as "mac lab") applies to `linkedTo.practicalCourseId`; every other message applies to `linkedTo.courseId`. With no Practical Course linked, a practical message produces no operation and gets `decision = possibly_missed`, with "<code> has no Practical Course" as the reason.
 - **Session Groups (decision U11):** M1 has none. A message that names a group ("Group B lab cancelled") produces **no operation**. It gets `decision = possibly_missed`, with the group name in the reason.
 - **Output:** only `ops.v1` JSON.
 
@@ -893,7 +893,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U10 | Unlinked chats are dropped inside Baileys, before decryption. The first messages of a group linked later may fail to decrypt until WhatsApp re-sends its keys; tested in M0. |
 | U11 | Until Session Groups exist (M2), messages for one group ("Group B lab cancelled") go to Possibly Missed and are not applied. |
 | U12 | Clock times with no am/pm: hours 1–7 mean pm, hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm" or "tonight" override this. |
-| U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings pre-selects the Course whose code is in the group's name. |
+| U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings suggests the Course whose code is in the group's name, as a "Link to SWT22022" button; nothing is linked until it's pressed. |
 
 ## Risks and Mitigations
 
