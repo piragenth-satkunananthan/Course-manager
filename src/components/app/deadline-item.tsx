@@ -55,7 +55,9 @@ export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, co
   async function toggleSubmitted(checked: boolean) {
     setPending(true);
     // Unticking restores the status it had before it was submitted (To do or In progress).
-    if (await putStatus(d.item.id, d.item.title, checked ? "submitted" : "unsubmitted")) router.refresh();
+    // On a failure too: the item may be gone or changed (deleted elsewhere), so the list shows what's true now.
+    await putStatus(d.item.id, d.item.title, checked ? "submitted" : "unsubmitted");
+    router.refresh();
     setPending(false);
   }
 
