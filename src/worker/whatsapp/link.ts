@@ -105,7 +105,8 @@ export class WhatsAppLink {
     sock.ev.on("connection.update", async (u) => {
       if (!live()) return;
       try {
-        if (this.pairingPhone && !auth.creds.registered && !codeRequested && (u.connection === "connecting" || u.qr)) {
+        // Only once the QR event shows the handshake is done: asking on "connecting" gets a 401 from WhatsApp.
+        if (this.pairingPhone && !auth.creds.registered && !codeRequested && u.qr) {
           codeRequested = true;
           const code = await sock.requestPairingCode(this.pairingPhone);
           await this.setStatus("pairing", { pairingCode: code });
