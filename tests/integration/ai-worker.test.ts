@@ -5,6 +5,8 @@ import * as assignments from "@/app/api/v1/assignments/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as undo from "@/app/api/v1/auto-changes/[id]/undo/route";
 import * as classSessions from "@/app/api/v1/courses/[id]/class-sessions/route";
+import * as sessionChangeRoute from "@/app/api/v1/session-changes/[id]/route";
+import * as sessionChanges from "@/app/api/v1/session-changes/route";
 import * as semesters from "@/app/api/v1/semesters/route";
 import * as timetable from "@/app/api/v1/timetable/route";
 import type { AiContext } from "@/server/ai/context";
@@ -156,7 +158,7 @@ describe("validation and volume", () => {
 });
 
 describe("failures and crashes", () => {
-  it("flags the batch, rather than retrying forever, when applying fails", async () => {
+  it("drops and flags an operation whose item went away meanwhile; the batch's other messages are done as decided", async () => {
     const item = (await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 9", dueDate: "2026-11-27" } })).json;
     await say("lab 9 moved to the 28th");
     await say("unrelated", new Date(Date.now() + 1000));
@@ -164,7 +166,7 @@ describe("failures and crashes", () => {
     // The Student deletes it while the AI is working, so the write fails after validation.
     const ai: AiClient = { model: fake.model, complete: async (chat) => (await pool.query("update assignment set deleted_at = now() where id = $1", [item.id]), fake.complete(chat)) };
     await aiTick(ai, key, later());
-    expect(await inbox()).toMatchObject([{ status: "done", decision: "rejected", possibly_missed: true }, { status: "done", decision: "rejected" }]);
+    expect(await inbox()).toMatchObject([{ status: "done", decision: "applied", possibly_missed: true }, { status: "done", decision: "applied", possibly_missed: false }]);
     expect(await changes()).toEqual([]);
   });
 
@@ -373,6 +375,44 @@ describe("the timetable and the Semester (#16)", () => {
     expect((await lastChange()).risk).toBe("cancelled");
   });
 
+  it("drops only the operation that breaks a rule when applied; the rest of the batch still applies", async () => {
+    const t0 = Date.now();
+    await say("moved to 3pm", new Date(t0 - 3000));
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    // The Student shortens it now; then an older message arrives saying 4pm to 6pm. Its start wins (newer than the
+    // AI's 3pm) but its end loses (older than the Student's edit): 16:00 to 15:30 can't be kept.
+    const [c] = (await pool.query("select id, version from session_change")).rows;
+    await a(sessionChangeRoute.PATCH, "PATCH", `/session-changes/${c.id}`, { params: { id: c.id }, body: { expectedVersion: c.version, newEnd: "15:30" } });
+    await say("4pm to 6pm; lab 6 due Friday", new Date(t0 - 2000));
+    await aiTick(
+      fakeAi((ctx) => ops(ctx, [
+        { op: "update_session_change", sessionChangeId: c.id, fields: { newStart: "16:00", newEnd: "18:00" }, sourceMessageIds: [ctx.messages[0]!.id] },
+        create(ctx, { title: "Lab 6" }),
+      ])),
+      key,
+      later(),
+    );
+    expect(await on()).toMatchObject([{ startTime: "15:00" }]);
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toMatchObject([{ title: "Lab 6" }]);
+    expect((await inbox()).at(-1)).toMatchObject({ status: "done", possibly_missed: true });
+  });
+
+  it("a change turned into a cancellation keeps no new time; Undo of \"back on\" is blocked once the class has another change", async () => {
+    await tell("moved to 3pm");
+    await run(() => [{ op: "reschedule_occurrence", classSessionId: sessionId, date: day, newDate: day, newStart: "15:00", newEnd: "17:00" }]);
+    await tell("no, it's cancelled");
+    await run((ctx) => [{ op: "update_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "rescheduled")!.sessionChangeId, fields: { kind: "cancelled" } }]);
+    expect((await pool.query("select kind, new_date, new_start_time from session_change")).rows).toEqual([{ kind: "cancel", new_date: null, new_start_time: null }]);
+
+    await tell("it's back on");
+    await run((ctx) => [{ op: "remove_session_change", sessionChangeId: ctx.occurrences.find((o) => o.status === "cancelled")!.sessionChangeId }]);
+    const backOn = await lastChange();
+    await tell("cancelled again, sorry");
+    await run(() => [{ op: "cancel_occurrence", classSessionId: sessionId, date: day }]);
+    const res = await a(undo.POST, "POST", `/auto-changes/${backOn.id}/undo`, { params: { id: backOn.id } });
+    expect(res).toMatchObject({ status: 409, json: { error: { message: "This class has another change now" } } });
+  });
+
   it("extends the Semester: weekly classes continue, a due date in the new weeks applies in the same batch, and Undo restores the end", async () => {
     const newEnd = "2027-01-15";
     await tell("semester extended by 4 weeks; final report due 2027-01-08");
@@ -382,6 +422,11 @@ describe("the timetable and the Semester (#16)", () => {
     expect((await week("2027-01-11")).filter((o) => o.classSessionId === sessionId)).toHaveLength(1);
     const ext = (await pool.query("select id, summary from auto_change where entity_type = 'semester'")).rows[0];
     expect(ext.summary).toMatch(/^Semester ends .+ → .+$/);
+    // A class in the added weeks changed since: undoing the extension would strand it, so Undo says why.
+    const newWeek = (await week("2027-01-11")).find((o) => o.classSessionId === sessionId)!.date;
+    expect((await a(sessionChanges.POST, "POST", "/session-changes", { body: { kind: "cancel", classSessionId: sessionId, date: newWeek } })).status).toBe(201);
+    expect(await a(undo.POST, "POST", `/auto-changes/${ext.id}/undo`, { params: { id: ext.id } })).toMatchObject({ status: 409, json: { error: { message: "Classes in the added weeks were changed since; undo those first" } } });
+    await pool.query("update session_change set deleted_at = now()");
     expect((await a(undo.POST, "POST", `/auto-changes/${ext.id}/undo`, { params: { id: ext.id } })).status).toBe(200);
     expect((await a(semesters.GET, "GET", "/semesters")).json).toMatchObject([{ endDate: "2026-12-18" }]);
   });

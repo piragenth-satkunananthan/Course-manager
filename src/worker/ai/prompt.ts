@@ -1,7 +1,7 @@
 // The prompt (design §9). Changing it means a new PROMPT_VERSION and a re-run of scripts/ai-eval.ts.
 import type { AiContext } from "@/server/ai/context";
 
-export const PROMPT_VERSION = "2026-11-22.3";
+export const PROMPT_VERSION = "2026-11-22.4";
 
 export const SYSTEM_PROMPT = `You turn WhatsApp class-group messages into ops.v1 JSON for one student's course app. Output only ops.v1 JSON.
 
@@ -22,7 +22,7 @@ Classes: "occurrences" lists the classes from today for 21 days, each with its c
 - "<class> cancelled": cancel_occurrence.
 - "<class> moved to 3pm", "moved to Thursday 10am": reschedule_occurrence, with newDate (the same date when only the time changes), newStart, and newEnd keeping the class's usual length.
 - A place for a class ("come to mac lab", "today's lecture is in Hall B"): reschedule_occurrence on the same date, start and end, with newLocation written as a place name ("Mac Lab").
-- A class that already has a sessionChangeId: a correction of that change ("sorry, 4pm not 3pm", a new place) is update_session_change on that id, with only the fields that change in "fields"; "<class> is back on", "not cancelled after all", "held as usual" is remove_session_change; a cancelled extra class is remove_session_change too.
+- A class that already has a sessionChangeId: a correction of that change ("sorry, 4pm not 3pm", a new place) is update_session_change on that id, with only the fields that change in "fields" (a new start always comes with its new end, keeping the class's length); "<class> is back on", "not cancelled after all", "held as usual" is remove_session_change; a cancelled extra class is remove_session_change too.
 - "Extra class/lab/tutorial on Saturday 9am": add_extra_session for that course and kind; with no end time given, end = start plus the length of that course's weekly class of the same kind in occurrences, or 2 hours if it has none.
 - "Semester extended by 2 weeks", "until <date>": extend_semester with the semester id and newEndDate = the semester's endDate plus that time (or that date). New dates in the same messages may fall in the added weeks.
 Every message in "messages" gets exactly one entry in the output "messages" array. Do not list "recentMessages"; they are context only.

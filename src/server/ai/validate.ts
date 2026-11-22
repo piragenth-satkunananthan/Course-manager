@@ -2,8 +2,8 @@
 // then volume. Pure, so it's unit-tested (90% branch coverage target).
 import * as z from "zod";
 import { titleKey } from "@/server/domain/auto-change";
-import { addDays } from "@/server/domain/time";
-import { type Operation, opsV1 } from "@/shared/schemas/ai-ops";
+import { addDays, weekdayOf } from "@/server/domain/time";
+import { CHANGE_KIND, type Operation, opsV1 } from "@/shared/schemas/ai-ops";
 import type { AiContext } from "./context";
 
 export const MAX_OPERATIONS = 10;
@@ -16,8 +16,6 @@ export const isHandled = (reason: string) => reason === REPEATS || reason === SU
 export type Validated =
   | { ok: false; error: string }
   | { ok: true; decisions: Map<string, Decision>; valid: Operation[]; dropped: Dropped[]; overflow: Operation[]; unknownCourses: z.infer<typeof opsV1>["unknownCourses"] };
-
-const KIND = { cancelled: "cancel", rescheduled: "reschedule", extra: "extra" } as const;
 
 export function validateOutput(raw: string, ctx: AiContext): Validated {
   let data: unknown;
@@ -38,7 +36,11 @@ export function validateOutput(raw: string, ctx: AiContext): Validated {
   const sem = ctx.semester && { ...ctx.semester, endDate: [ctx.semester.endDate, ...extensions].sort().at(-1)! };
   const inSemester = (d: string | null | undefined, exam = false) => !d || !sem || (d >= sem.startDate && d <= (exam ? addDays(sem.endDate, 60) : sem.endDate));
   // A weekly class is named by its original date; a rescheduled one shows on its new date with originalDate set.
-  const isClass = (classSessionId: string, date: string) => ctx.occurrences.some((o) => o.classSessionId === classSessionId && (o.originalDate ?? o.date) === date);
+  // Weeks an extension in this batch adds aren't in the context yet: there, a class is its usual weekday.
+  const weekday = new Map(ctx.occurrences.flatMap((o) => (o.classSessionId && o.status === "normal" ? [[o.classSessionId, weekdayOf(o.date)] as const] : [])));
+  const isClass = (classSessionId: string, date: string) =>
+    ctx.occurrences.some((o) => o.classSessionId === classSessionId && (o.originalDate ?? o.date) === date) ||
+    (!!ctx.semester && date > ctx.semester.endDate && date <= sem!.endDate && weekday.get(classSessionId) === weekdayOf(date));
   const changes = new Map(ctx.occurrences.flatMap((o) => (o.sessionChangeId ? [[o.sessionChangeId, o] as const] : [])));
   const times = (start: string | null | undefined, end: string | null | undefined) => (start && end && end <= start ? "the end is before the start" : null);
   const same = (entityType: "assignment" | "exam", courseId: string, title: string, date: string | null | undefined) => (x: { courseId: string; title: string; date?: string | null; dueDate?: string | null }) =>
@@ -55,11 +57,12 @@ export function validateOutput(raw: string, ctx: AiContext): Validated {
         return times(op.newStart, op.newEnd) ?? (inSemester(op.newDate) ? null : "date outside the Semester");
       case "add_extra_session":
         if (!courses.has(op.courseId)) return "unknown Course";
+        if (ctx.occurrences.some((o) => o.status === "extra" && o.courseId === op.courseId && o.date === op.date && o.start === op.start)) return REPEATS;
         return times(op.start, op.end) ?? (inSemester(op.date) ? null : "date outside the Semester");
       case "update_session_change": {
         const c = changes.get(op.sessionChangeId);
         if (!c) return "unknown Session Change";
-        const kind = op.fields.kind ? KIND[op.fields.kind] : c.status === "extra" ? "extra" : c.status === "cancelled" ? "cancel" : "reschedule";
+        const kind = op.fields.kind ? CHANGE_KIND[op.fields.kind] : c.status === "extra" ? "extra" : c.status === "cancelled" ? "cancel" : "reschedule";
         if ((c.status === "extra") !== (kind === "extra")) return "an extra session can't become a change to a weekly class";
         if (kind === "cancel") return null;
         // The change as it would be: a cancelled one has no new date or times of its own yet.

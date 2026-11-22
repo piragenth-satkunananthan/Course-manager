@@ -92,7 +92,7 @@ describe("validateOutput: the timetable and the Semester (#16)", () => {
     { op: "cancel_occurrence", classSessionId: "s1", date: "2026-11-23", ...src },
     { op: "cancel_occurrence", classSessionId: "s1", date: "2026-12-07", ...src }, // a rescheduled one, by its original date
     { op: "reschedule_occurrence", classSessionId: "s1", date: "2026-11-23", newDate: "2026-11-24", newStart: "13:00", newEnd: "15:00", ...src },
-    { op: "add_extra_session", courseId: "c1", kind: "lecture", date: "2026-11-28", start: "09:00", end: "11:00", ...src },
+    { op: "add_extra_session", courseId: "c1", kind: "lecture", date: "2026-11-28", start: "13:00", end: "15:00", ...src },
     { op: "update_session_change", sessionChangeId: "sc1", fields: { kind: "rescheduled", newDate: "2026-12-01", newStart: "08:00", newEnd: "10:00" }, ...src },
     { op: "update_session_change", sessionChangeId: "sc3", fields: { newStart: "14:00", newEnd: "16:00" }, ...src },
     { op: "update_session_change", sessionChangeId: "sc2", fields: { newLocation: "Lab 2" }, ...src },
@@ -137,11 +137,23 @@ describe("validateOutput: the timetable and the Semester (#16)", () => {
     ]);
   });
 
+  const extend = (newEndDate: string, semesterId = "sem") => ({ op: "extend_semester", semesterId, newEndDate, ...src });
   it("extends the Semester only later, and checks the batch's other dates against the extended end", () => {
-    const extend = (newEndDate: string, semesterId = "sem") => ({ op: "extend_semester", semesterId, newEndDate, ...src });
     const late = create({ dueDate: "2026-12-30" });
     expect(reasons(validateOutput(out([late]), ctx))).toEqual(["date outside the Semester"]);
     expect(reasons(validateOutput(out([late, extend("2027-01-01")]), ctx))).toEqual([]);
     expect(reasons(validateOutput(out([extend("2026-12-10"), extend("2027-01-01", "other")]), ctx))).toEqual(["the Semester can only end later", "unknown Semester"]);
+  });
+
+  it("knows a weekly class in the weeks an extension in the same batch adds, by its usual weekday", () => {
+    const cancel = (date: string) => ({ op: "cancel_occurrence", classSessionId: "s1", date, ...src }); // s1 is on Mondays
+    expect(reasons(validateOutput(out([cancel("2026-12-28")]), ctx))).toEqual(["not a class in the timetable"]);
+    expect(reasons(validateOutput(out([extend("2027-01-08"), cancel("2026-12-28")]), ctx))).toEqual([]);
+    expect(reasons(validateOutput(out([extend("2027-01-08"), cancel("2026-12-29")]), ctx))).toEqual(["not a class in the timetable"]);
+  });
+
+  it("treats an extra class already in the timetable as a repeat", () => {
+    const extra = (start: string) => ({ op: "add_extra_session", courseId: "c1", kind: "lab", date: "2026-11-28", start, end: "12:00", ...src });
+    expect(reasons(validateOutput(out([extra("09:00"), extra("10:00")]), ctx))).toEqual(["repeats an existing item"]);
   });
 });

@@ -8,7 +8,8 @@ import { riskOf } from "@/server/domain/auto-change";
 import { formatDate } from "@/lib/format";
 import { activeChangeFor, checkSessionChange } from "@/server/data/timetable";
 import { type EntityType, snapshot, writeEntity } from "@/server/data/write-entity";
-import type { Operation } from "@/shared/schemas/ai-ops";
+import { AppError } from "@/server/http/errors";
+import { CHANGE_KIND, type Operation } from "@/shared/schemas/ai-ops";
 
 type When = { date: string | null; time: string | null };
 const when = (d: string | null | undefined, t: string | null | undefined): string => (d ? `${formatDate(d)}${t ? `, ${t}` : ""}` : "date TBA");
@@ -62,7 +63,6 @@ async function applyAssessment(tx: Tx, base: Base, op: AssessmentOp): Promise<Do
 
 // ---- The timetable and the Semester (#16) ----
 
-const KIND = { cancelled: "cancel", rescheduled: "reschedule", extra: "extra" } as const;
 type ChangeRow = typeof sessionChange.$inferSelect;
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
 
@@ -127,7 +127,9 @@ async function applyTimetable(tx: Tx, base: Base, op: TimetableOp): Promise<Done
     case "update_session_change": {
       const f = op.fields;
       kind = "update";
-      const proposed = { kind: f.kind && KIND[f.kind], newDate: f.newDate, newStartTime: f.newStart, newEndTime: f.newEnd, newLocation: f.newLocation };
+      // A change turned into a cancellation drops its new date and times, as cancel_occurrence does.
+      const cancel = f.kind === "cancelled" ? { newDate: null, newStartTime: null, newEndTime: null, newLocation: null } : {};
+      const proposed = { kind: f.kind && CHANGE_KIND[f.kind], newDate: f.newDate, newStartTime: f.newStart, newEndTime: f.newEnd, newLocation: f.newLocation, ...cancel };
       r = await writeEntity(tx, { ...base, entityType: "session_change", op: "update", entityId: op.sessionChangeId, proposed: Object.fromEntries(Object.entries(proposed).filter(([, v]) => v !== undefined)), toDto: noDto });
       break;
     }
@@ -149,6 +151,7 @@ export async function applyOperations(
   a: { studentId: string; batchId: string; operations: Operation[]; sentAt: Map<string, Date>; modelId: string; promptVersion: string },
 ) {
   let applied = 0;
+  const failed: string[] = []; // source messages of operations that couldn't be applied: the caller flags them Possibly Missed
   // Extensions first, so a change in the new weeks passes the Semester check (validation already allowed it).
   const ordered = [...a.operations].sort((x, y) => Number(y.op === "extend_semester") - Number(x.op === "extend_semester"));
   for (const op of ordered) {
@@ -163,7 +166,16 @@ export async function applyOperations(
       ),
     ).toISOString();
     const base = { studentId: a.studentId, actor: "ai" as const, setAt };
-    const done = isAssessmentOp(op) ? await applyAssessment(tx, base, op) : await applyTimetable(tx, base, op);
+    // Each operation in its own savepoint: one that breaks a rule validation couldn't see (a field kept by "most
+    // recently sent wins", a row gone meanwhile) is dropped alone, never the whole batch (design §9, rule 1).
+    let done: Done;
+    try {
+      done = await tx.transaction((sp) => (isAssessmentOp(op) ? applyAssessment(sp, base, op) : applyTimetable(sp, base, op)));
+    } catch (e) {
+      if (!(e instanceof AppError)) throw e;
+      failed.push(...op.sourceMessageIds);
+      continue;
+    }
     if (!done) continue;
 
     const [change] = await tx
@@ -174,8 +186,8 @@ export async function applyOperations(
     await tx
       .update(entityVersion)
       .set({ autoChangeId: change!.id })
-      .where(and(eq(entityVersion.entityType, done.entityType), eq(entityVersion.entityId, done.row.id), eq(entityVersion.version, done.row.version)));
+      .where(and(eq(entityVersion.studentId, a.studentId), eq(entityVersion.entityType, done.entityType), eq(entityVersion.entityId, done.row.id), eq(entityVersion.version, done.row.version)));
     applied++;
   }
-  return applied;
+  return { applied, failed };
 }

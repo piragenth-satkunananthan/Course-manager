@@ -899,7 +899,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings suggests the Course whose code is in the group's name, as a "Link to SWT22022" button; nothing is linked until it's pressed. |
 | U14 | (2026-11-22, product owner) The class keeps one Class Group for the whole degree. Setting a Semester current moves the Class Group's link to it; stored messages keep their Semester, so D1 erasure is unchanged. Archiving a Semester still unlinks its groups. In the Class Group, "<subject> practical…" goes to that subject's Practical Course. |
 | U15 | (2026-11-22, product owner) An extra class announced without an end time lasts as long as that Course's weekly class of the same kind, or 2 hours if it has none. |
-| U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. |
+| U16 | (2026-11-22, product owner) Timetable and Semester-extension Auto Changes get Undo too: Undo restores the class as it was, removes an AI-added extra class, or restores the Semester's end date, under the same Undo rule. It is blocked, with the reason, when the class has another change now, or when classes in the weeks an extension added were changed since. |
 
 ## Risks and Mitigations
 
