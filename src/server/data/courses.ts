@@ -24,6 +24,7 @@ async function toCourses(studentId: string, rows: Row[]): Promise<Course[]> {
     name: r.name,
     lecturerName: r.lecturerName,
     colour: r.colour,
+    practicalOfCourseId: r.practicalOfCourseId,
     archivedAt: iso(r.archivedAt),
     nicknames: nicks.filter((n) => n.courseId === r.id).map((n) => ({ id: n.id, nickname: n.nickname })),
   }));
@@ -38,6 +39,7 @@ async function uniqueCode<T>(write: () => Promise<T>) {
     return await write();
   } catch (e) {
     if (isUniqueViolation(e, "course_code_unique")) throw invalid("code", "This Semester already has a Course with this code");
+    if (isUniqueViolation(e, "course_practical_unique")) throw invalid("practicalOfCourseId", "That Course already has a Practical Course");
     throw e;
   }
 }
@@ -45,6 +47,22 @@ async function uniqueCode<T>(write: () => Promise<T>) {
 async function assertSemester(studentId: string, semesterId: string) {
   const [s] = await db.select({ id: semester.id }).from(semester).where(and(eq(semester.studentId, studentId), eq(semester.id, semesterId)));
   if (!s) throw notFound("Semester");
+}
+
+/** U13: a Practical Course points at a theory Course in its own Semester; neither side may be part of another pair. */
+async function assertPractical(studentId: string, self: { id?: string; semesterId: string; practicalOfCourseId?: string | null }, theoryId: string | null | undefined) {
+  if (!theoryId || theoryId === self.practicalOfCourseId) return; // unchanged
+  const field = "practicalOfCourseId";
+  if (theoryId === self.id) throw invalid(field, "A Course can't be its own Practical Course");
+  const [t] = await db.select().from(course).where(mine(studentId, theoryId));
+  if (!t) throw notFound("Course");
+  if (t.semesterId !== self.semesterId) throw invalid(field, "Choose a Course in the same Semester");
+  if (t.practicalOfCourseId) throw invalid(field, "That Course is itself a Practical Course");
+  if (t.archivedAt) throw invalid(field, "That Course is archived");
+  if (self.id) {
+    const [own] = await db.select({ id: course.id }).from(course).where(and(eq(course.studentId, studentId), eq(course.practicalOfCourseId, self.id)));
+    if (own) throw invalid(field, "This Course has its own Practical Course");
+  }
 }
 
 export async function listCourses(studentId: string, { semesterId }: { semesterId?: string }) {
@@ -61,11 +79,17 @@ export async function getCourse(studentId: string, id: string) {
 
 export async function createCourse(studentId: string, input: CourseCreate) {
   await assertSemester(studentId, input.semesterId);
+  await assertPractical(studentId, { semesterId: input.semesterId }, input.practicalOfCourseId);
   const [row] = await uniqueCode(() => db.insert(course).values({ studentId, ...input }).returning());
   return toCourse(studentId, row!);
 }
 
 export async function updateCourse(studentId: string, id: string, input: CourseUpdate) {
+  if (input.practicalOfCourseId) {
+    const [self] = await db.select({ id: course.id, semesterId: course.semesterId, practicalOfCourseId: course.practicalOfCourseId }).from(course).where(mine(studentId, id));
+    if (!self) throw notFound("Course");
+    await assertPractical(studentId, self, input.practicalOfCourseId);
+  }
   const [row] = Object.keys(input).length
     ? await uniqueCode(() => db.update(course).set(input).where(mine(studentId, id)).returning())
     : await db.select().from(course).where(mine(studentId, id));

@@ -84,7 +84,13 @@ function pgAdapter(db: Tx, studentId: string, groupId: string, batchIds: string[
         db.select().from(course).where(inArray(course.id, ids)),
         db.select().from(courseNickname).where(inArray(courseNickname.courseId, ids)),
       ]);
-      return cs.map((c) => ({ id: c.id, code: c.code, name: c.name, nicknames: nicks.filter((n) => n.courseId === c.id).map((n) => n.nickname) }));
+      return cs.map((c) => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        nicknames: nicks.filter((n) => n.courseId === c.id).map((n) => n.nickname),
+        ...(c.practicalOfCourseId && ids.includes(c.practicalOfCourseId) ? { practicalOf: c.practicalOfCourseId } : {}),
+      }));
     },
     async getOpenAndRecentAssessments() {
       const ids = await courseIds();

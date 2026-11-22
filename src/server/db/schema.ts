@@ -113,11 +113,17 @@ export const course = pgTable(
     name: text("name").notNull(),
     lecturerName: text("lecturer_name"),
     colour: courseColour("colour").notNull(),
+    // The theory Course this is the Practical Course of (U13). Same Semester and no chains: checked in the data layer.
+    practicalOfCourseId: uuid("practical_of_course_id").references((): AnyPgColumn => course.id, { onDelete: "set null" }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("course_code_unique").on(t.studentId, t.semesterId, sql`lower(${t.code})`)],
+  (t) => [
+    uniqueIndex("course_code_unique").on(t.studentId, t.semesterId, sql`lower(${t.code})`),
+    uniqueIndex("course_practical_unique").on(t.practicalOfCourseId), // one Practical Course per theory Course
+    check("course_practical_not_self_chk", sql`${t.practicalOfCourseId} <> ${t.id}`),
+  ],
 );
 
 export const nicknameSource = pgEnum("nickname_source", ["manual", "unknown_course"]);

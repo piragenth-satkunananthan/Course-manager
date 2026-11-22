@@ -265,7 +265,7 @@ PostgreSQL 16, managed by Drizzle migrations. Every table, index, partial index 
 | Table | Key columns | Rules |
 |---|---|---|
 | `semester` | `name`, `start_date`, `end_date`, `is_current`, `archived_at`, `version`, `field_set_at` | Partial unique index: one `is_current` per Student. The AI may change only `end_date` (extensions). |
-| `course` | `semester_id`, `code`, `name`, `lecturer_name`, `colour`, `archived_at` | Unique `(student_id, semester_id, lower(code))`. The AI never writes here. Deleting a Course cascades to its Class Sessions, Session Changes, Assessments, Nicknames, suppressions and Unknown Course mappings, and unlinks its WhatsApp group. |
+| `course` | `semester_id`, `code`, `name`, `lecturer_name`, `colour`, `practical_of_course_id` (nullable, the theory Course this is the Practical Course of; `ON DELETE SET NULL`), `archived_at` | Unique `(student_id, semester_id, lower(code))`. Unique `practical_of_course_id` where not null (one Practical Course per theory Course); a check stops it pointing at itself. The app also requires the same Semester and no chains (a Practical Course can't have its own). The AI never writes here. Deleting a Course cascades to its Class Sessions, Session Changes, Assessments, Nicknames, suppressions and Unknown Course mappings, and unlinks its WhatsApp group. |
 | `course_nickname` | `course_id`, `nickname` (stored lowercase), `source` (`manual` or `unknown_course`) | Unique `(student_id, course_id, nickname)`. Matching considers only Courses in the current Semester. |
 | `class_session` | `course_id`, `kind` (`lecture`, `tutorial` or `lab`), `weekday` (1–7, ISO), `start_time`, `end_time`, `location` | Repeats every week of the Semester. M2 adds alternate weeks, start weeks and Session Groups as new columns (decision U8). |
 | `session_change` | `course_id`, `class_session_id` (null for extras), `kind` (`cancel`, `reschedule` or `extra`), `original_date`, `new_date`, `new_start_time`, `new_end_time`, `new_location`, `deleted_at`, `version`, `field_set_at` | Partial unique index on `(class_session_id, original_date)` where `deleted_at` is null and `kind` is cancel or reschedule. Each occurrence has at most one active change, which is **updated** (never duplicated) when a correction arrives. |
@@ -341,6 +341,7 @@ An Auto Change writes a field only if its message's time is later than that fiel
 ```text
 user (Student) 1───* semester 1───* course 1───* class_session 1───* session_change
                                        │  1───* course_nickname
+                                       │  0..1 ◀── course (Practical Course, practical_of_course_id)
                                        │  1───* assignment ─┐
                                        │  1───* exam ───────┤
                                        │                    └─ 1───* entity_version
@@ -449,9 +450,9 @@ The main ones:
 | `GET /api/v1/semesters` · `POST /api/v1/semesters` | `{name, startDate, endDate}` | list · created Semester |
 | `PATCH /api/v1/semesters/:id` | `{expectedVersion, name?, startDate?, endDate?}` | Semester |
 | `POST /api/v1/semesters/:id/set-current` · `POST /api/v1/semesters/:id/archive` | none | Semester (archiving erases stored message text, as decided in D1) |
-| `GET /api/v1/courses` · `POST /api/v1/courses` | `{semesterId, code, name, lecturerName?, colour}` | list · Course |
+| `GET /api/v1/courses` · `POST /api/v1/courses` | `{semesterId, code, name, lecturerName?, colour, practicalOfCourseId?}` | list · Course (with `practicalOfCourseId`) |
 | `GET /api/v1/courses/:id` | none | Course with Class Sessions, Assessments and Nicknames |
-| `PATCH /api/v1/courses/:id` | `{code?, name?, lecturerName?, colour?}` | Course (the AI never writes Courses, so no version check) |
+| `PATCH /api/v1/courses/:id` | `{code?, name?, lecturerName?, colour?, practicalOfCourseId?}` (`null` clears it) | Course (the AI never writes Courses, so no version check) |
 | `POST /api/v1/courses/:id/archive` · `DELETE /api/v1/courses/:id?confirmCode=CS2010` | none | Course · 204 |
 | `POST /api/v1/courses/:id/nicknames` · `DELETE /api/v1/nicknames/:id` | `{nickname}` | Nickname · 204 |
 | `POST /api/v1/courses/:id/class-sessions` | `{kind, weekday, startTime, endTime, location?}` | Class Session |
@@ -591,7 +592,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - the current Semester's start and end dates.
 - **Courses:**
   - the Student's Courses in the current Semester, with ids, codes, names and Nicknames;
-  - which Course or Semester the group is linked to.
+  - which Course or Semester the group is linked to, and for a Course Group, its Practical Course's id (`linkedTo: {courseId, practicalCourseId?}`). Each Course carries `practicalOf` when it is a Practical Course.
 - **The timetable:** Class Session Occurrences for the next 21 days, with `classSessionId`, date and time, and any existing Session Change with its id.
 - **Assessments:**
   - open Assignments and Exams for those Courses (id, title, due date and time);
@@ -611,6 +612,8 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - Relative dates ("tomorrow", "next Friday") resolve against the message's `sent_at`, in Asia/Colombo.
   - Clock times with no am/pm (decision U12): hours 1–7 mean pm ("4.30" → 16:30), hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm", "evening" or "tonight" override this.
   - A due date with no time leaves `dueTime` out (the 23:59 rule applies).
+  - "Before <date>" ("submit before 27th") makes that date the due date: it is the last day (product owner, 2026-11-22).
+- **Practical Courses:** in a Course Group, a message about the practical (the word "practical", or a lab room such as "mac lab") applies to `linkedTo.practicalCourseId`; every other message applies to `linkedTo.courseId`. With no Practical Course linked, a practical message produces no operation and gets `decision = possibly_missed`, with "<code> has no Practical Course" as the reason.
 - **Session Groups (decision U11):** M1 has none. A message that names a group ("Group B lab cancelled") produces **no operation**. It gets `decision = possibly_missed`, with the group name in the reason.
 - **Output:** only `ops.v1` JSON.
 
@@ -891,6 +894,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U10 | Unlinked chats are dropped inside Baileys, before decryption. The first messages of a group linked later may fail to decrypt until WhatsApp re-sends its keys; tested in M0. |
 | U11 | Until Session Groups exist (M2), messages for one group ("Group B lab cancelled") go to Possibly Missed and are not applied. |
 | U12 | Clock times with no am/pm: hours 1–7 mean pm, hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm" or "tonight" override this. |
+| U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings suggests the Course whose code is in the group's name, as a "Link to SWT22022" button; nothing is linked until it's pressed. |
 
 ## Risks and Mitigations
 

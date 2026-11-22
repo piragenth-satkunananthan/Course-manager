@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Course } from "@/shared/schemas/course";
 import type { Semester } from "@/shared/schemas/semester";
 import { CourseForm } from "./course-form";
 import { ResponsiveDialog } from "./responsive-dialog";
@@ -32,7 +33,7 @@ export function SemesterPicker({ semesters, selectedId }: { semesters: Semester[
   );
 }
 
-export function AddCourseButton({ semesters, semesterId }: { semesters: Semester[]; semesterId: string }) {
+export function AddCourseButton({ semesters, semesterId, courses }: { semesters: Semester[]; semesterId: string; courses: Course[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   return (
@@ -42,7 +43,7 @@ export function AddCourseButton({ semesters, semesterId }: { semesters: Semester
         Add Course
       </Button>
       <ResponsiveDialog open={open} onOpenChange={setOpen} title="Add Course">
-        <CourseForm semesters={semesters.filter((s) => !s.archivedAt)} defaultSemesterId={semesterId} onDone={() => (setOpen(false), router.refresh())} />
+        <CourseForm semesters={semesters.filter((s) => !s.archivedAt)} defaultSemesterId={semesterId} semesterCourses={courses} onDone={() => (setOpen(false), router.refresh())} />
       </ResponsiveDialog>
     </>
   );

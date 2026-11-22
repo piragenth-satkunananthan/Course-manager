@@ -1,7 +1,7 @@
 // The prompt (design §9). Changing it means a new PROMPT_VERSION and a re-run of scripts/ai-eval.ts.
 import type { AiContext } from "@/server/ai/context";
 
-export const PROMPT_VERSION = "2026-11-21.3";
+export const PROMPT_VERSION = "2026-11-22.1";
 
 export const SYSTEM_PROMPT = `You turn WhatsApp class-group messages into ops.v1 JSON for one student's course app. Output only ops.v1 JSON.
 
@@ -15,7 +15,9 @@ The context's assignments and exams are the truth: an announcement of an item th
 Relative dates ("tomorrow", "next Friday") resolve against the message's sentAt, in Asia/Colombo.
 Clock times with no am/pm: hours 1-7 mean pm ("4.30" is 16:30), hours 8-11 mean am, 12 means noon. "morning", "am", "pm", "evening", "tonight" override this.
 A due date with no time: leave dueTime out.
+"Before <date>" ("submit before 27th") means the due date is that date: it is the last day, not the day before.
 A message naming a lab or tutorial group ("Group B lab cancelled") produces no operation: decision "possibly_missed", with the group name in the reason.
+Practical Courses: a course with "practicalOf" is the practical part of that theory course and has no group of its own. Practical messages never mention its code. In a group linked to a course (linkedTo.courseId), a message is about the practical if it contains the word "practical" anywhere ("practical report due 27th", "tomorrow practical is cancelled"), or names a lab as a place to go ("come to mac lab"). Every operation from such a message uses courseId = linkedTo.practicalCourseId, never linkedTo.courseId. A lab named as a piece of work ("Lab 4 report", "lab sheet 5") is not the practical: it is ordinary work of linkedTo.courseId, like every other message. If linkedTo has no practicalCourseId, a message about the practical (either form above) produces no operation: decision "possibly_missed", reason "<linked course code> has no Practical Course".
 Every message in "messages" gets exactly one entry in the output "messages" array. Do not list "recentMessages"; they are context only.
 Dates are YYYY-MM-DD and times HH:mm, both Asia/Colombo.
 

@@ -39,20 +39,20 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
     <>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold md:text-display">Courses</h1>
-        {!selected.archivedAt && active.length > 0 && <AddCourseButton semesters={semesters} semesterId={selected.id} />}
+        {!selected.archivedAt && active.length > 0 && <AddCourseButton semesters={semesters} semesterId={selected.id} courses={courses} />}
       </div>
       <div className="mt-4">
         <SemesterPicker semesters={semesters} selectedId={selected.id} />
       </div>
 
       {active.length === 0 ? (
-        <EmptyState icon={BookOpen} action={!selected.archivedAt && <AddCourseButton semesters={semesters} semesterId={selected.id} />}>
+        <EmptyState icon={BookOpen} action={!selected.archivedAt && <AddCourseButton semesters={semesters} semesterId={selected.id} courses={courses} />}>
           {selected.archivedAt ? "No Courses in this Semester." : "No Courses yet. Add your first Course."}
         </EmptyState>
       ) : (
         <ul className="mt-6 space-y-2 rounded-md border border-border bg-card p-2" aria-label="Courses">
           {active.map((c) => (
-            <CourseRow key={c.id} course={c} />
+            <CourseRow key={c.id} course={c} practicalOf={courses.find((t) => t.id === c.practicalOfCourseId)} />
           ))}
         </ul>
       )}
@@ -62,7 +62,7 @@ export default async function CoursesPage({ searchParams }: { searchParams: Prom
           <summary className="flex min-h-11 cursor-pointer items-center px-3 font-semibold">Archived ({archived.length})</summary>
           <ul className="space-y-2" aria-label="Archived Courses">
             {archived.map((c) => (
-              <CourseRow key={c.id} course={c} />
+              <CourseRow key={c.id} course={c} practicalOf={courses.find((t) => t.id === c.practicalOfCourseId)} />
             ))}
           </ul>
         </details>

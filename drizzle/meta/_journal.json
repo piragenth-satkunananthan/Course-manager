@@ -64,6 +64,13 @@
       "when": 1795272856556,
       "tag": "0008_change_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795323460164,
+      "tag": "0009_practical_course",
+      "breakpoints": true
     }
   ]
 }

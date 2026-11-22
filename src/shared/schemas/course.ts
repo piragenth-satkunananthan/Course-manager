@@ -14,9 +14,15 @@ const lecturerName = z
   .nullish()
   .transform((v) => v || null);
 
-export const CourseCreate = z.strictObject({ semesterId: z.uuid({ error: "Choose a Semester" }), code, name, lecturerName, colour: CourseColour });
+/** The theory Course this is the Practical Course of (U13); empty or null means none. */
+const practicalOfCourseId = z
+  .union([Id, z.literal("")])
+  .nullish()
+  .transform((v) => v || null);
+
+export const CourseCreate = z.strictObject({ semesterId: z.uuid({ error: "Choose a Semester" }), code, name, lecturerName, colour: CourseColour, practicalOfCourseId });
 export type CourseCreate = z.output<typeof CourseCreate>;
-export const CourseUpdate = z.strictObject({ code, name, lecturerName, colour: CourseColour }).partial();
+export const CourseUpdate = z.strictObject({ code, name, lecturerName, colour: CourseColour, practicalOfCourseId }).partial();
 export type CourseUpdate = z.output<typeof CourseUpdate>;
 export const CourseListQuery = z.strictObject({ semesterId: Id.optional() });
 export const CourseDeleteQuery = z.strictObject({ confirmCode: z.string().default("") });
@@ -41,6 +47,7 @@ export const Course = z.object({
   name: z.string(),
   lecturerName: z.string().nullable(),
   colour: CourseColour,
+  practicalOfCourseId: Id.nullable(),
   archivedAt: z.string().nullable(),
   nicknames: z.array(Nickname),
 });

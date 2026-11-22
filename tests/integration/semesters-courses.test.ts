@@ -121,6 +121,62 @@ describe("Courses", () => {
   });
 });
 
+describe("Practical Courses (#26)", () => {
+  const patch = (id: string, body: unknown) => api(course.PATCH, "PATCH", `/courses/${id}`, { params: { id }, body });
+  const fieldError = (res: { status: number; json: { error: { fieldErrors: Record<string, unknown> } } }) => {
+    expect(res.status).toBe(400);
+    return res.json.error.fieldErrors.practicalOfCourseId;
+  };
+
+  it("creates a Practical Course of a theory Course, then clears it", async () => {
+    const s = await newSemester();
+    const theory = await newCourse(s.id, "SWT22022");
+    const res = await api(courses.POST, "POST", "/courses", {
+      body: { semesterId: s.id, code: "SWT22032", name: "IAD Practical", colour: "blue", practicalOfCourseId: theory.id },
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.practicalOfCourseId).toBe(theory.id);
+    expect(theory.practicalOfCourseId).toBeNull();
+    expect((await patch(res.json.id, { practicalOfCourseId: null })).json.practicalOfCourseId).toBeNull();
+  });
+
+  it("refuses itself, another Semester, a Practical Course, a second practical, and a theory Course becoming a practical", async () => {
+    const s = await newSemester();
+    const theory = await newCourse(s.id, "T1");
+    const practical = await newCourse(s.id, "P1");
+    const other = await newCourse(s.id, "P2");
+    const elsewhere = await newCourse((await newSemester("Other")).id, "T9");
+    expect((await patch(practical.id, { practicalOfCourseId: theory.id })).status).toBe(200);
+
+    expect(fieldError(await patch(other.id, { practicalOfCourseId: other.id }))).toBeTruthy();
+    expect(fieldError(await patch(other.id, { practicalOfCourseId: elsewhere.id }))).toBeTruthy();
+    expect(fieldError(await patch(other.id, { practicalOfCourseId: practical.id }))).toBeTruthy();
+    expect(fieldError(await patch(other.id, { practicalOfCourseId: theory.id }))).toBeTruthy();
+    expect(fieldError(await patch(theory.id, { practicalOfCourseId: other.id }))).toBeTruthy();
+  });
+
+  it("refuses an archived theory Course, but keeps an existing link to one", async () => {
+    const s = await newSemester();
+    const theory = await newCourse(s.id, "T3");
+    const practical = await newCourse(s.id, "P4");
+    const late = await newCourse(s.id, "P5");
+    await patch(practical.id, { practicalOfCourseId: theory.id });
+    await api(courseArchive.POST, "POST", `/courses/${theory.id}/archive`, { params: { id: theory.id } });
+    expect((await patch(practical.id, { practicalOfCourseId: theory.id, name: "Renamed" })).status).toBe(200);
+    await patch(practical.id, { practicalOfCourseId: null });
+    expect(fieldError(await patch(late.id, { practicalOfCourseId: theory.id }))).toBe("That Course is archived");
+  });
+
+  it("clears the link when the theory Course is deleted", async () => {
+    const s = await newSemester();
+    const theory = await newCourse(s.id, "T2");
+    const practical = await newCourse(s.id, "P3");
+    await patch(practical.id, { practicalOfCourseId: theory.id });
+    await api(course.DELETE, "DELETE", `/courses/${theory.id}`, { params: { id: theory.id }, query: { confirmCode: "T2" } });
+    expect((await api(course.GET, "GET", `/courses/${practical.id}`, { params: { id: practical.id } })).json.practicalOfCourseId).toBeNull();
+  });
+});
+
 describe("Nicknames", () => {
   it("stores them lowercase, unique per Course, and removes them", async () => {
     const s = await newSemester();

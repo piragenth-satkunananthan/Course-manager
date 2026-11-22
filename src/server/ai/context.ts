@@ -6,8 +6,9 @@ export type AiContext = {
   now: string; // local Asia/Colombo date-time, "YYYY-MM-DD HH:mm"
   timeZone: typeof APP_TIME_ZONE;
   semester: { id: string; startDate: string; endDate: string } | null;
-  linkedTo: { courseId: string } | { semester: true };
-  courses: { id: string; code: string; name: string; nicknames: string[] }[];
+  // A Course Group also covers its Course's Practical Course (U13); buildContext fills practicalCourseId.
+  linkedTo: { courseId: string; practicalCourseId?: string } | { semester: true };
+  courses: { id: string; code: string; name: string; nicknames: string[]; practicalOf?: string }[];
   assignments: { id: string; courseId: string; title: string; dueDate: string; dueTime: string | null; status: string }[];
   exams: { id: string; courseId: string; title: string; kindLabel: string | null; date: string | null; startTime: string | null }[];
   suppressions: { courseId: string; entityType: "assignment" | "exam"; title: string; dueDate: string | null }[];
@@ -36,11 +37,13 @@ export async function buildContext(adapter: ContextAdapter, batch: { now: Date; 
     adapter.getRecentMessages(),
   ]);
   const local = instantToLocal(batch.now);
+  const linked = batch.linkedTo;
+  const practical = "courseId" in linked ? courses.find((c) => c.practicalOf === linked.courseId) : undefined;
   return {
     now: `${local.date} ${local.time}`,
     timeZone: APP_TIME_ZONE,
     semester,
-    linkedTo: batch.linkedTo,
+    linkedTo: practical ? { ...linked, practicalCourseId: practical.id } : linked,
     courses,
     ...assessments,
     suppressions,

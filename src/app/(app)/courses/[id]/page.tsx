@@ -7,7 +7,7 @@ import { NicknameEditor } from "@/components/app/nickname-editor";
 import { WeeklyClasses } from "@/components/app/weekly-classes";
 import { Badge } from "@/components/ui/badge";
 import { COLOUR_BG } from "@/lib/course-colours";
-import { getCourse } from "@/server/data/courses";
+import { getCourse, listCourses } from "@/server/data/courses";
 import { listClassSessions } from "@/server/data/timetable";
 import { AppError } from "@/server/http/errors";
 import { requireStudentId } from "@/server/session";
@@ -21,6 +21,9 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   });
+  const semesterCourses = await listCourses(studentId, { semesterId: course.semesterId });
+  const practicalOf = semesterCourses.find((c) => c.id === course.practicalOfCourseId);
+  const practical = semesterCourses.find((c) => c.practicalOfCourseId === course.id);
 
   return (
     <>
@@ -34,6 +37,8 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
           <h1 className="text-2xl font-bold md:text-display">{course.code}</h1>
           <p className="text-heading">{course.name}</p>
           {course.lecturerName && <p className="text-sm text-muted-foreground">{course.lecturerName}</p>}
+          {practicalOf && <Link href={`/courses/${practicalOf.id}`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline md:min-h-10">Practical of {practicalOf.code}</Link>}
+          {practical && <Link href={`/courses/${practical.id}`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline md:min-h-10">Practical Course: {practical.code}</Link>}
           {course.archivedAt && (
             <Badge variant="secondary" className="mt-2 text-muted-foreground">
               <Archive aria-hidden="true" />
@@ -41,7 +46,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
             </Badge>
           )}
         </div>
-        <CourseActions course={course} />
+        <CourseActions course={course} semesterCourses={semesterCourses} />
       </div>
       <div className="mt-6 space-y-6">
         <WeeklyClasses courseId={course.id} code={course.code} sessions={await listClassSessions(studentId, course.id)} />
