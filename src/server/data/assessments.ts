@@ -1,7 +1,7 @@
 // Assignments and Exams, scoped to the Student (design files 42, 43). Writes go through writeEntity.
-import { and, asc, between, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, between, desc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { assignment, course, exam, semester } from "@/server/db/schema";
+import { assignment, course, entityVersion, exam, semester } from "@/server/db/schema";
 import { effectiveDueInstant } from "@/server/domain/deadlines";
 import { invalid, notFound } from "@/server/http/errors";
 import type { Assignment, AssignmentCreate, AssignmentUpdate } from "@/shared/schemas/assignment";
@@ -106,7 +106,7 @@ export async function deleteAssignment(studentId: string, id: string, expectedVe
 }
 
 /** The Student owns status: it writes history but never bumps the version, so it never blocks Undo (§3). */
-export async function setAssignmentStatus(studentId: string, id: string, status: Assignment["status"]) {
+export async function setAssignmentStatus(studentId: string, id: string, requested: Assignment["status"] | "unsubmitted") {
   return db.transaction(async (tx) => {
     const [row] = await tx
       .select()
@@ -114,6 +114,19 @@ export async function setAssignmentStatus(studentId: string, id: string, status:
       .where(and(eq(assignment.id, id), eq(assignment.studentId, studentId), isNull(assignment.deletedAt)))
       .for("update");
     if (!row) throw notFound("Assignment");
+    // Unsubmitting goes back to what it was before the last submit, from the history: To do or In progress.
+    let status: Assignment["status"] = requested === "unsubmitted" ? "todo" : requested;
+    if (requested === "unsubmitted") {
+      if (row.status !== "submitted") return oneAssignment(tx, studentId, id);
+      const [last] = await tx
+        .select({ before: entityVersion.before })
+        .from(entityVersion)
+        .where(and(eq(entityVersion.studentId, studentId), eq(entityVersion.entityType, "assignment"), eq(entityVersion.entityId, id), eq(entityVersion.op, "status"), sql`${entityVersion.after}->>'status' = 'submitted'`))
+        .orderBy(desc(entityVersion.createdAt))
+        .limit(1);
+      const before = (last?.before as { status?: string } | null)?.status;
+      if (before === "in_progress") status = "in_progress";
+    }
     if (row.status !== status) {
       const submittedAt = status === "submitted" ? new Date() : null;
       await tx.update(assignment).set({ status, submittedAt }).where(and(eq(assignment.id, id), eq(assignment.studentId, studentId)));

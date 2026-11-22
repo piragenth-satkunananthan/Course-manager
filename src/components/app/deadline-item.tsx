@@ -16,10 +16,10 @@ import { dueLine, formatDate } from "@/lib/format";
 import { Assignment, ASSIGNMENT_STATUSES } from "@/shared/schemas/assignment";
 
 /** The one place a status is changed from the UI: the Submit checkbox and the status selector. */
-async function putStatus(id: string, title: string, status: Assignment["status"]) {
+async function putStatus(id: string, title: string, status: Assignment["status"] | "unsubmitted") {
   const res = await apiFetch(`/assignments/${id}/status`, { method: "PUT", body: { status }, schema: Assignment });
   if (!res.ok) return (toastApiError(res.error), false);
-  toast.success(status === "submitted" ? `Marked ${title} submitted` : `${title} is ${STATUS_LABEL[status].toLowerCase()}`);
+  toast.success(status === "submitted" ? `Marked ${title} submitted` : status === "unsubmitted" ? `${title} is no longer submitted` : `${title} is ${STATUS_LABEL[status].toLowerCase()}`);
   return true;
 }
 import type { Deadline } from "@/shared/schemas/dashboard";
@@ -54,8 +54,8 @@ export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, co
   const [pending, setPending] = useState(false);
   async function toggleSubmitted(checked: boolean) {
     setPending(true);
-    // shortcut: unticking returns to To do; the detail sheet sets In progress. Upgrade if lists of submitted work (M1b) need the previous status.
-    if (await putStatus(d.item.id, d.item.title, checked ? "submitted" : "todo")) router.refresh();
+    // Unticking restores the status it had before it was submitted (To do or In progress).
+    if (await putStatus(d.item.id, d.item.title, checked ? "submitted" : "unsubmitted")) router.refresh();
     setPending(false);
   }
 

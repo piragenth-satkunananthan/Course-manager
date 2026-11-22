@@ -19,7 +19,8 @@ export const AssignmentCreate = z.strictObject(fields);
 export type AssignmentCreate = z.output<typeof AssignmentCreate>;
 export const AssignmentUpdate = z.strictObject({ expectedVersion: Version, ...z.object(fields).partial().shape, isGroupWork: z.boolean().optional() });
 export type AssignmentUpdate = z.output<typeof AssignmentUpdate>;
-export const AssignmentStatusPut = z.strictObject({ status: AssignmentStatus });
+/** "unsubmitted": back to the status it had before it was submitted (the Submitted checkbox's untick, #21). */
+export const AssignmentStatusPut = z.strictObject({ status: z.union([AssignmentStatus, z.literal("unsubmitted")]) });
 export const AssignmentListQuery = z.strictObject({ courseId: Id.optional(), status: AssignmentStatus.optional(), from: IsoDate.optional(), to: IsoDate.optional() });
 
 export const Assignment = z.object({

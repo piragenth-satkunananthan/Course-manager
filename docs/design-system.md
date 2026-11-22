@@ -486,6 +486,7 @@ Deadlines (M1b)                      Assignment sheet (add / edit)
 - **The Assignment detail sheet** shows every field, a status selector (To do / In progress / Submitted), and where the Assignment came from ("Added by you" or "From CS2010 group, 9 Nov 20:15", which links to the Activity Log entry). Its actions are Edit and Delete.
 - **The Exam form** has the same layout, with Kind, Date ("Leave empty if TBA"), Start time, Location and Topics.
 - **Filters** (status, Course) are kept in the URL.
+- **Groups** (U19): Overdue, This week (today until Sunday), Later, Date TBA and Earlier; the headings stay at the top while their items scroll. Unticking Submitted restores the status it had before.
 
 ### 7.4 Lecture timetable (`/timetable` and `/calendar`)
 
