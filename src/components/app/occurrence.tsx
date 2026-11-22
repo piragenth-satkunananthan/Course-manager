@@ -57,13 +57,12 @@ function RescheduleChangeForm({ o, onDone }: { o: Occurrence; onDone: () => void
   );
 }
 
-export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
+/** A class's sheet (design-system §7.4): its time and place, and the actions that fit its state. */
+export function OccurrenceSheet({ o, open, onOpenChange }: { o: Occurrence; open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"view" | "reschedule">("view");
   const [pending, setPending] = useState(false);
-  const Icon = KIND_ICON[o.kind];
-  const close = () => (setOpen(false), setMode("view"));
+  const close = () => (onOpenChange(false), setMode("view"));
   const refresh = () => (close(), router.refresh());
 
   async function run(action: () => Promise<{ ok: true } | { ok: false; error: ApiError }>, done: string) {
@@ -84,6 +83,55 @@ export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
       return res.ok ? { ok: true as const } : res;
     }, done);
 
+  return (
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={(v) => (v ? onOpenChange(true) : close())}
+      title={mode === "reschedule" ? `Reschedule ${title(o)}` : title(o)}
+      description={`${formatDate(o.date)}, ${o.startTime}–${o.endTime}${o.location ? ` · ${o.location}` : ""}`}
+    >
+      {mode === "reschedule" ? (
+        <RescheduleChangeForm o={o} onDone={refresh} />
+      ) : (
+        <div className="flex flex-col gap-2 pb-4 md:flex-row md:flex-wrap md:justify-end">
+          {o.status === "normal" && (
+            <>
+              <Button variant="outline" disabled={pending} onClick={cancel}>Cancel this class</Button>
+              <Button variant="outline" onClick={() => setMode("reschedule")}>Reschedule</Button>
+            </>
+          )}
+          {o.status === "cancelled" && (
+            <>
+              <Button variant="outline" disabled={pending} onClick={() => removeChange(`${title(o)} is back on`)}>Restore class</Button>
+              <Button variant="outline" onClick={() => setMode("reschedule")}>Reschedule instead</Button>
+            </>
+          )}
+          {o.status === "rescheduled" && (
+            <>
+              <Button variant="outline" disabled={pending} onClick={() => removeChange(`${title(o)} is back at its usual time`)}>Restore usual time</Button>
+              <Button variant="outline" onClick={() => setMode("reschedule")}>Change new time</Button>
+            </>
+          )}
+          {o.status === "extra" && (
+            <>
+              <Button variant="outline" disabled={pending} onClick={() => removeChange("Extra session removed")}>Remove extra session</Button>
+              <Button variant="outline" onClick={() => setMode("reschedule")}>Edit</Button>
+            </>
+          )}
+          {o.classSessionId && (
+            <Button asChild variant="ghost">
+              <Link href={`/courses/${o.courseId}`}>Edit weekly class</Link>
+            </Button>
+          )}
+        </div>
+      )}
+    </ResponsiveDialog>
+  );
+}
+
+export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
+  const [open, setOpen] = useState(false);
+  const Icon = KIND_ICON[o.kind];
   return (
     <li className="flex min-h-14 items-stretch rounded-md border border-border bg-card">
       <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-stretch gap-3 py-2 pr-2 pl-3 text-left">
@@ -117,48 +165,7 @@ export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
           </span>
         </span>
       </button>
-      <ResponsiveDialog
-        open={open}
-        onOpenChange={(v) => (v ? setOpen(true) : close())}
-        title={mode === "reschedule" ? `Reschedule ${title(o)}` : title(o)}
-        description={`${formatDate(o.date)}, ${o.startTime}–${o.endTime}${o.location ? ` · ${o.location}` : ""}`}
-      >
-        {mode === "reschedule" ? (
-          <RescheduleChangeForm o={o} onDone={refresh} />
-        ) : (
-          <div className="flex flex-col gap-2 pb-4 md:flex-row md:flex-wrap md:justify-end">
-            {o.status === "normal" && (
-              <>
-                <Button variant="outline" disabled={pending} onClick={cancel}>Cancel this class</Button>
-                <Button variant="outline" onClick={() => setMode("reschedule")}>Reschedule</Button>
-              </>
-            )}
-            {o.status === "cancelled" && (
-              <>
-                <Button variant="outline" disabled={pending} onClick={() => removeChange(`${title(o)} is back on`)}>Restore class</Button>
-                <Button variant="outline" onClick={() => setMode("reschedule")}>Reschedule instead</Button>
-              </>
-            )}
-            {o.status === "rescheduled" && (
-              <>
-                <Button variant="outline" disabled={pending} onClick={() => removeChange(`${title(o)} is back at its usual time`)}>Restore usual time</Button>
-                <Button variant="outline" onClick={() => setMode("reschedule")}>Change new time</Button>
-              </>
-            )}
-            {o.status === "extra" && (
-              <>
-                <Button variant="outline" disabled={pending} onClick={() => removeChange("Extra session removed")}>Remove extra session</Button>
-                <Button variant="outline" onClick={() => setMode("reschedule")}>Edit</Button>
-              </>
-            )}
-            {o.classSessionId && (
-              <Button asChild variant="ghost">
-                <Link href={`/courses/${o.courseId}`}>Edit weekly class</Link>
-              </Button>
-            )}
-          </div>
-        )}
-      </ResponsiveDialog>
+      <OccurrenceSheet o={o} open={open} onOpenChange={setOpen} />
     </li>
   );
 }

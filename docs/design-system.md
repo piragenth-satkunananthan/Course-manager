@@ -330,7 +330,7 @@ A vertical list of `session-item`s for one day, with "‹ Wed 18 Nov ›" date n
 
 ### 6.8 `week-grid` (desktop, 1024 px and up; M1b)
 
-Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. Each Occurrence is a block with its Course colour bar and code. Deadlines appear as chips in a strip across the top of each day. The current time is marked with a 2 px `--primary` line. The grid scrolls vertically inside the page; it never scrolls sideways.
+Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. It's the timetable's default view from 1024 px; every block is at least 40 px tall (U18), overlapping classes sit side by side, and a class cut at 07:00 or 20:00 shows a small arrow at that edge. Each Occurrence is a block with its Course colour bar and code. Deadlines appear as chips in a strip across the top of each day. The current time is marked with a 2 px `--primary` line. The grid scrolls vertically inside the page; it never scrolls sideways.
 
 ### 6.9 `month-grid` and `day-sheet` (M1b)
 
@@ -352,7 +352,7 @@ Seven columns (Monday–Sunday) by hours 07:00–20:00, 48 px per hour. Each Occ
 - shows **Deadline chips**: on phones, the Course code only; from 768 px up, the code and a shortened title. An Overdue chip has a `--destructive` ring and an icon;
 - marks today with a `--primary` circle around the date. Days outside the month are in muted text.
 
-**`day-sheet`** opens when a day is tapped. It is a bottom sheet on phones and a side panel on desktop, showing that day's `day-list`: its classes first, then its Deadlines. The URL becomes `/calendar?day=YYYY-MM-DD`.
+**`day-sheet`** opens when a day is tapped. It is a bottom sheet under 768 px and a side panel from 768 px (like every other dialog), showing that day's `day-list`: its classes first, then its Deadlines. The URL becomes `/calendar?month=YYYY-MM&day=YYYY-MM-DD`; `/calendar?day=YYYY-MM-DD` alone opens that day's month with the sheet. On phones the grid runs edge to edge, so seven 44 px cells fit at 320 px.
 
 ### 6.10 `banner`
 
@@ -486,6 +486,7 @@ Deadlines (M1b)                      Assignment sheet (add / edit)
 - **The Assignment detail sheet** shows every field, a status selector (To do / In progress / Submitted), and where the Assignment came from ("Added by you" or "From CS2010 group, 9 Nov 20:15", which links to the Activity Log entry). Its actions are Edit and Delete.
 - **The Exam form** has the same layout, with Kind, Date ("Leave empty if TBA"), Start time, Location and Topics.
 - **Filters** (status, Course) are kept in the URL.
+- **Groups** (U19): Overdue, This week (today until Sunday), Later, Date TBA and Earlier; the headings stay at the top while their items scroll. Unticking Submitted restores the status it had before.
 
 ### 7.4 Lecture timetable (`/timetable` and `/calendar`)
 
@@ -583,7 +584,7 @@ This screen is designed now, so M1's navigation already has a place for it. **It
 
 - **Sign-in** (`/login`): a centred card, 400 px at most, with the product name, email, password (with a show/hide toggle), **Sign in**, and a "Forgot password?" link. Errors: "Email or password is incorrect", and for rate limiting, "Too many attempts, try again in a minute". There's no sign-up link: v1 has one Student.
 - **Reset password** (`/reset-password`): a request form that always replies "If the email exists, a link has been sent", and a set-new-password form with the 12-character rule shown as helper text.
-- **Activity** (`/activity`): a feed of `auto-change-item`, `unknown-course-item` and `possibly-missed-item` entries, newest first, with filter chips (All, Changes, Needs attention). M1b adds Undo batch and the event items.
+- **Activity** (`/activity`): a feed of `auto-change-item`, `unknown-course-item` and `possibly-missed-item` entries, newest first, with filter chips (All, Changes, Needs attention; a radio group kept in the URL, drawn as full-radius chips). M1b adds Undo batch, shown only here, and the event items: each kind has an icon and one sentence.
 
 ---
 

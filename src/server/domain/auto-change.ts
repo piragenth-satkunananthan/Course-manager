@@ -7,6 +7,14 @@ export const titleKey = (title: string) => title.toLowerCase().replace(/[^a-z0-9
  * Undo is allowed only if the change isn't undone and nothing has changed the item since: its current version is
  * still the change's after_version. `laterActor` is who made the next version, to explain a blocked Undo.
  */
+/**
+ * In an Undo batch (U20): a change still counts as unchanged since when every later version of its item is a change
+ * this same run has already undone, an Undo, or a status change (which never counts). So a batch that changed one item
+ * twice undoes both, newest first; if the newer one was skipped, the older one is skipped too.
+ */
+export const onlyUndoneInBatch = (later: { op: string; autoChangeId: string | null }[], undoneInRun: ReadonlySet<string>) =>
+  later.length > 0 && later.every((v) => v.op === "undo" || v.op === "status" || (!!v.autoChangeId && undoneInRun.has(v.autoChangeId)));
+
 export function canUndo(change: { undoneAt: Date | null; afterVersion: number }, currentVersion: number, laterActor: "student" | "ai" | "system" | null) {
   if (change.undoneAt) return { ok: false as const, reason: "Already undone" };
   if (currentVersion !== change.afterVersion)

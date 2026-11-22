@@ -1,13 +1,12 @@
-import { ListChecks } from "lucide-react";
-import Link from "next/link";
-import { ComingSoon } from "@/components/app/coming-soon";
+import { DeadlineList } from "@/components/app/deadline-list";
+import type { ListKind } from "@/lib/deadline-list-href";
+import { loadDeadlineList } from "@/server/data/deadline-list";
+import { requireStudentId } from "@/server/session";
 
-// shortcut: placeholder until the Assignment and Exam list pages ship (#21, M1b).
-export default function DeadlinesPage() {
-  return (
-    <ComingSoon title="Deadlines" icon={ListChecks}>
-      Filterable lists of Assignments and Exams are coming. For now, your Deadlines are on the{" "}
-      <Link href="/" className="font-semibold text-primary underline">dashboard</Link>.
-    </ComingSoon>
-  );
+// Deadlines → Assignments (design-system §7.3, #21): ?status=submitted and ?course=<id> are the filters.
+export default async function AssignmentsPage({ searchParams }: { searchParams: Promise<{ status?: string; course?: string }> }) {
+  const kind: ListKind = "assignments";
+  const q = await searchParams;
+  const data = await loadDeadlineList(await requireStudentId(), kind, q);
+  return <DeadlineList kind={kind} {...data} />;
 }
