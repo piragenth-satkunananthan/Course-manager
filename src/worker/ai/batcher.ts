@@ -56,7 +56,7 @@ export async function claimBatch(studentId: string, groupId: string, now: Date) 
       .limit(MAX_BATCH)
       .for("update", { skipLocked: true });
     if (!rows.length) return null;
-    const [batch] = await tx.insert(aiBatch).values({ studentId, waGroupId: groupId, promptVersion: PROMPT_VERSION }).returning({ id: aiBatch.id });
+    const [batch] = await tx.insert(aiBatch).values({ studentId, waGroupId: groupId, promptVersion: PROMPT_VERSION, startedAt: now }).returning({ id: aiBatch.id });
     await tx
       .update(inboxMessage)
       .set({ status: "processing", processingStartedAt: now, batchId: batch!.id })
@@ -93,6 +93,16 @@ async function recordUnknownCourses(tx: Tx, studentId: string, batchId: string, 
         },
       });
   }
+}
+
+/** When the group's current run of AI failures began: its first failed batch after the last applied or rejected one. */
+async function firstFailureSince(groupId: string) {
+  const [answered] = await db.select({ at: sql<string | null>`max(${aiBatch.startedAt})` }).from(aiBatch).where(and(eq(aiBatch.waGroupId, groupId), inArray(aiBatch.status, ["applied", "rejected"])));
+  const [failed] = await db
+    .select({ at: sql<string | null>`min(${aiBatch.startedAt})` })
+    .from(aiBatch)
+    .where(and(eq(aiBatch.waGroupId, groupId), eq(aiBatch.status, "failed"), answered?.at ? sql`${aiBatch.startedAt} > ${answered.at}` : undefined));
+  return failed?.at ? new Date(failed.at) : null;
 }
 
 /** Runs one claimed batch end to end. Returns what happened, for logs and tests. */
@@ -213,9 +223,9 @@ export async function runBatch(batchId: string, ai: AiClient, key: Buffer, now: 
     await db.update(aiBatch).set({ status: "failed", finishedAt: new Date(), error: (e as Error).message.slice(0, 300) }).where(eq(aiBatch.id, batchId));
     if (e instanceof AiFatalError) throw e;
     log.warn("ai call failed; will retry", { batchId, attempts: attempts + 1, error: (e as Error).message });
-    // Failing for over an hour (design §10): measured from the oldest message, which has waited since about the first failure.
-    const oldest = Math.min(...rows.map((r) => +r.receivedAt));
-    if (+now - oldest > OUTAGE_ALERT_MS) await raiseAlert(batch!.studentId, "ai_outage", { attempts: attempts + 1 }, now);
+    // Failing for over an hour (design §8): since this group's first failed batch after its last one that got an answer.
+    const failingSince = await firstFailureSince(batch!.waGroupId);
+    if (failingSince && +now - +failingSince > OUTAGE_ALERT_MS) await raiseAlert(batch!.studentId, "ai_outage", { attempts: attempts + 1 }, now);
     return "retry";
   }
 }

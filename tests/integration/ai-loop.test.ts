@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { loadKey } from "@/server/crypto";
 import { pool } from "@/server/db/client";
 import { startAiLoop } from "../../src/worker/ai/loop";
+import { tick } from "../../src/worker/scheduler/tick";
 import { checkModel, nimClient } from "../../src/worker/ai/nim-client";
 import { resetData, seedStudent } from "./api";
 
@@ -67,6 +68,9 @@ describe("the AI loop (#15)", () => {
     const calls = chats;
     await new Promise((r) => setTimeout(r, 100)); // shorter than the recheck: stopped
     expect(chats).toBe(calls);
+    // The scheduler (reminders) is its own loop and keeps running.
+    await tick(new Date());
+    expect((await pool.query("select last_ok_at is not null as ok from health_signal where component = 'scheduler'")).rows).toEqual([{ ok: true }]);
 
     chatStatus = 200;
     await until(async () => (await pool.query("select status from inbox_message")).rows[0].status === "done");

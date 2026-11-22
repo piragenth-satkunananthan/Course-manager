@@ -13,17 +13,14 @@ export function evaluateHealth(signals: Signals, now: Date, ai: { oldestWaitingM
   const scheduler = !!s?.lastOkAt && +now - +s.lastOkAt <= SCHEDULER_STALE_MS;
   // The last send succeeded, or none was attempted.
   const email = !signals.email?.lastErrorAt || isLater(signals.email.lastOkAt, signals.email.lastErrorAt);
-  // wa_socket: connected, or deliberately unlinked (both record lastOkAt). ai: paused, or its loop is running (no error
-  // since its last OK) and nothing has waited over 30 minutes.
+  // wa_socket: connected, or deliberately unlinked (both record lastOkAt). ai: nothing waits over 30 minutes, or paused.
+  // A stopped AI loop shows here once messages wait; it also alerts at once (design §8).
   const waSocket = isLater(signals.wa_socket?.lastOkAt ?? null, signals.wa_socket?.lastErrorAt ?? null);
-  const a = signals.ai;
-  const aiStopped = !!a?.lastErrorAt && !isLater(a.lastOkAt, a.lastErrorAt);
-  const waitedTooLong = ai.oldestWaitingMs !== null && ai.oldestWaitingMs > 30 * 60_000;
-  const aiOk = ai.paused || (!aiStopped && !waitedTooLong);
+  const aiOk = ai.paused || ai.oldestWaitingMs === null || ai.oldestWaitingMs <= 30 * 60_000;
   const since = (d: Date | null | undefined) => d?.toISOString() ?? null;
   const banners = [
     ...(scheduler ? [] : [{ kind: "worker_unhealthy" as const, since: since(s?.lastOkAt) }]),
-    ...(aiOk ? [] : [{ kind: "ai_unavailable" as const, since: aiStopped ? since(a?.lastErrorAt) : new Date(+now - ai.oldestWaitingMs!).toISOString() }]),
+    ...(aiOk ? [] : [{ kind: "ai_unavailable" as const, since: new Date(+now - ai.oldestWaitingMs!).toISOString() }]),
     ...(ai.paused ? [{ kind: "auto_changes_paused" as const, since: null }] : []),
   ];
   return { scheduler, email, pingReminders: scheduler && email, pingCapture: waSocket && aiOk, banners };

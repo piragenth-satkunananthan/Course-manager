@@ -4,36 +4,36 @@ import { CirclePause, TriangleAlert, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { instantToLocal } from "@/server/domain/time";
 import type { Banner } from "@/shared/schemas/dashboard";
-import { ResumeButton } from "./auto-changes-section";
+import { ResumeButton } from "./auto-changes";
 
-const TEXT: Partial<Record<Banner["kind"], (b: Banner) => string>> = {
-  whatsapp_disconnected: (b) => `WhatsApp disconnected${b.since ? ` since ${instantToLocal(new Date(b.since)).time}` : ""}. New announcements aren't being read.`,
-  worker_unhealthy: () => "Reminders may be delayed. We've been alerted.",
-  ai_unavailable: () => "Auto Changes are delayed. Messages are queued and will be processed.",
-  auto_changes_paused: () => "Auto Changes are paused.",
+type Kind = Banner["kind"];
+/** Each kind's sentence, icon and action (design-system §6.10). */
+const BANNER: Record<Kind, { text: (b: Banner) => string; icon: typeof TriangleAlert; action?: React.ReactNode }> = {
+  whatsapp_disconnected: {
+    text: (b) => `WhatsApp disconnected${b.since ? ` since ${instantToLocal(new Date(b.since)).time}` : ""}. New announcements aren't being read.`,
+    icon: WifiOff,
+    action: <Link href="/settings#whatsapp" className="inline-flex min-h-11 items-center font-semibold underline md:min-h-10">Re-link</Link>,
+  },
+  worker_unhealthy: { text: () => "Reminders may be delayed. We've been alerted.", icon: TriangleAlert },
+  ai_unavailable: { text: () => "Auto Changes are delayed. Messages are queued and will be processed.", icon: TriangleAlert },
+  auto_changes_paused: { text: () => "Auto Changes are paused.", icon: CirclePause, action: <ResumeButton /> },
 };
-const ICON = { whatsapp_disconnected: WifiOff, auto_changes_paused: CirclePause } as Partial<Record<Banner["kind"], typeof TriangleAlert>>;
 
+/** `banners` comes from getBanners: at most two, most severe first. */
 export function Banners({ banners }: { banners: Banner[] }) {
-  const shown = banners.filter((b) => TEXT[b.kind]).slice(0, 2);
-  if (!shown.length) return null;
+  if (!banners.length) return null;
   return (
     <div className="mb-4 space-y-2">
-      {shown.map((b) => (
-        <div key={b.kind} role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-warning-subtle p-3 text-sm font-medium text-warning">
-          <BannerIcon kind={b.kind} />
-          <span className="min-w-0 flex-1">{TEXT[b.kind]!(b)}</span>
-          {b.kind === "whatsapp_disconnected" && (
-            <Link href="/settings#whatsapp" className="inline-flex min-h-11 items-center font-semibold underline md:min-h-10">Re-link</Link>
-          )}
-          {b.kind === "auto_changes_paused" && <ResumeButton />}
-        </div>
-      ))}
+      {banners.map((b) => {
+        const { text, icon: Icon, action } = BANNER[b.kind];
+        return (
+          <div key={b.kind} role="status" className="flex flex-wrap items-center gap-2 rounded-md bg-warning-subtle p-3 text-sm font-medium text-warning">
+            <Icon size={20} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+            <span className="min-w-0 flex-1">{text(b)}</span>
+            {action}
+          </div>
+        );
+      })}
     </div>
   );
-}
-
-function BannerIcon({ kind }: { kind: Banner["kind"] }) {
-  const Icon = ICON[kind] ?? TriangleAlert;
-  return <Icon size={20} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />;
 }

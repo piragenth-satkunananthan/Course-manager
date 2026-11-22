@@ -275,6 +275,21 @@ describe("pause, outages and limits (#15)", () => {
     expect(await inbox()).toMatchObject([{ status: "done", decision: "applied" }]);
   });
 
+  it("counts the hour from the first failure: messages that waited through a long pause don't alert on one failure", async () => {
+    await pool.query("update \"user\" set auto_changes_paused = true");
+    await say("Lab due Friday");
+    await aiTick(fakeAi((ctx) => ops(ctx, [])), key, later(90)); // paused: nothing runs
+    await pool.query("update \"user\" set auto_changes_paused = false");
+    await aiTick(down, key, later(95));
+    expect(await alerts()).toEqual([]);
+  });
+
+  it("alerts when a batch asks for more than 10 changes", async () => {
+    await say("a long list");
+    await aiTick(fakeAi((ctx) => ops(ctx, Array.from({ length: 11 }, (_, i) => create(ctx, { title: `Lab ${10 + i}` })))), key, later());
+    expect(await alerts()).toEqual(["ai_overflow"]);
+  });
+
   it("a fatal error (key refused, model gone) leaves the messages untouched and stops the tick", async () => {
     await say("Lab due Friday");
     const refused: AiClient = { model: "fake", complete: async () => Promise.reject(new AiFatalError("NIM refused the key (401)")) };

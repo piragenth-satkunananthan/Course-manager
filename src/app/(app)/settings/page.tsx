@@ -1,5 +1,4 @@
 import { AccountSection } from "@/components/app/account-section";
-import { AutoChangesSection } from "@/components/app/auto-changes-section";
 import { SemesterManager } from "@/components/app/semester-manager";
 import { WhatsAppSection } from "@/components/app/whatsapp-section";
 import { listCourses } from "@/server/data/courses";
@@ -8,7 +7,7 @@ import { listSemesters } from "@/server/data/semesters";
 import { getSettings } from "@/server/data/settings";
 import { requireStudentEmail, requireStudentId } from "@/server/session";
 
-// Semesters, WhatsApp, the Auto Changes switch (#15) and Account (sign out). Password and deletion (#17) join later.
+// Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (sign out). Password and deletion (#17) join later.
 export default async function SettingsPage() {
   const studentId = await requireStudentId();
   const [semesters, email, whatsapp, settings] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId)]);
@@ -24,9 +23,9 @@ export default async function SettingsPage() {
         <WhatsAppSection
           initial={whatsapp}
           semester={current && { id: current.id, label: current.name }}
+          autoChangesPaused={settings.autoChangesPaused}
           courses={courses.map((c) => ({ id: c.id, label: `${c.code} ${c.name}`, code: c.practicalOfCourseId ? undefined : c.code }))}
         />
-        <AutoChangesSection paused={settings.autoChangesPaused} />
         <AccountSection email={email} />
       </div>
     </>

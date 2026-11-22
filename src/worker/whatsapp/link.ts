@@ -5,7 +5,8 @@ import makeWASocket, { jidNormalizedUser, makeCacheableSignalKeyStore, type WASo
 import { eq } from "drizzle-orm";
 import pino from "pino";
 import { db } from "@/server/db/client";
-import { healthSignal, waGroup, waSession } from "@/server/db/schema";
+import { recordHealth } from "@/server/data/health";
+import { waGroup, waSession } from "@/server/db/schema";
 import { log } from "@/server/log";
 import { raiseAlert } from "../scheduler/alerts";
 import { loadAuthState, wipeAuth } from "./auth-store";
@@ -193,9 +194,7 @@ export class WhatsAppLink {
     return db.update(waSession).set({ status, ...extra }).where(eq(waSession.studentId, this.studentId));
   }
 
-  private async health(ok: boolean, detail?: string) {
-    const now = new Date();
-    const set = ok ? { lastOkAt: now, detail: detail ?? null } : { lastErrorAt: now, detail: detail ?? null };
-    await db.insert(healthSignal).values({ component: "wa_socket", ...set }).onConflictDoUpdate({ target: healthSignal.component, set });
+  private health(ok: boolean, detail?: string) {
+    return recordHealth("wa_socket", ok, detail ?? null);
   }
 }

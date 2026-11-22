@@ -566,7 +566,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
 - **One transaction per batch:** applying the operations, writing `auto_change` and `activity_event`, and marking the messages done all commit together (§2).
 - **NIM failures:**
   - **Timeouts, 429s and 5xx** put the messages back to `pending`, with `next_attempt_at` set at 1, 5, 15 and 60 minutes, then every hour. They never become dead. After 1 hour of failures, an alert is sent. A recovery clears the backlog oldest first.
-  - **401 or 403**, or a pinned model NIM no longer offers (missing from `/models` at startup, or a 404 on a call), stops the AI loop and alerts at once (`ai_auth`); the loop restarts once the key or model is fixed. The messages stay `pending`, untouched.
+  - **401 or 403**, or a missing pinned model (not listed by `/models` at startup, or NIM answering 404 for it on a call), stops the AI loop and alerts at once (`ai_auth`); the loop restarts once the key or model is fixed. The messages stay `pending`, untouched.
 - **Validation failures:** when the model's output fails the schema, the same input is retried once, with the validation errors added to the prompt. If it fails again, the batch's messages are marked `decision = rejected` and `possibly_missed = true`, so the Student sees their text. An `activity_event` of kind `ai_output_rejected` is also written.
 
 **Scheduler details (a 60-second tick, idempotent)**
@@ -719,7 +719,7 @@ Every change is logged and can be undone, singly or by batch. Risky ones are hig
   | Signal | Healthy when |
   |---|---|
   | `wa_socket` | connected, or deliberately unlinked |
-  | `ai` | Auto Changes are paused, **or** the AI loop is running (no error recorded since its last OK; each tick records OK) and no `pending` or `processing` message is older than 30 minutes |
+  | `ai` | no `pending` or `processing` message is older than 30 minutes, **or** Auto Changes are paused |
   | `scheduler` | ticked within the last 3 minutes |
   | `email` | the last send succeeded, or no send was attempted |
   | `backup` | `ops/backup.sh` recorded success within the last 26 hours |
@@ -736,7 +736,7 @@ Every change is logged and can be undone, singly or by batch. Risky ones are hig
 - **Direct alerts from the worker.** For causes the Student must act on, the worker also sends its own email naming the cause, and writes an `activity_event` of kind `alert` with `payload.cause`. The causes are:
   - WhatsApp logged out;
   - `connectionReplaced`;
-  - NIM failing with 401 or 403, or missing the pinned model (`ai_auth`), or failing for more than 1 hour (`ai_outage`, measured from the oldest waiting message);
+  - NIM failing with 401 or 403, or missing the pinned model (`ai_auth`), or failing for more than 1 hour (`ai_outage`, counted from the group's first failed call since its last answered one);
   - AI output overflow;
   - a Final Reminder that couldn't be sent before its due instant.
 

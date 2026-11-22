@@ -3,7 +3,8 @@
 import { Client } from "pg";
 import { loadKey } from "@/server/crypto";
 import { db } from "@/server/db/client";
-import { healthSignal, user, waSession } from "@/server/db/schema";
+import { recordHealth } from "@/server/data/health";
+import { user, waSession } from "@/server/db/schema";
 import { startAiLoop } from "./ai/loop";
 import { checkModel, nimClient } from "./ai/nim-client";
 import { startPoller } from "./poller";
@@ -75,7 +76,7 @@ async function startWhatsApp() {
     const detail = (e as Error).message;
     log("error", "whatsapp loop not started; checking again in 5 minutes", { error: detail });
     const now = new Date();
-    await db.insert(healthSignal).values({ component: "wa_socket", lastErrorAt: now, detail }).onConflictDoUpdate({ target: healthSignal.component, set: { lastErrorAt: now, detail } }).catch(() => {});
+    await recordHealth("wa_socket", false, detail, now).catch(() => {});
     const students = await db.select({ id: user.id }).from(user).catch(() => []);
     if (students.length === 1) await raiseAlert(students[0]!.id, "whatsapp_not_started", { error: detail }, now).catch(() => {});
     setTimeout(startWhatsApp, 5 * 60_000);

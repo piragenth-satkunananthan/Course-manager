@@ -31,10 +31,11 @@ describe("evaluateHealth", () => {
     const base = { scheduler: { lastOkAt: ago(1), lastErrorAt: null }, wa_socket: { lastOkAt: ago(5), lastErrorAt: null }, ai: { lastOkAt: ago(1), lastErrorAt: null } };
     const ai = (oldestWaitingMs: number | null, paused = false) => ({ oldestWaitingMs, paused });
 
-    it("pings capture while WhatsApp and the AI are healthy; a message waiting over 30 minutes or a stopped AI loop stops it", () => {
+    it("pings capture while WhatsApp and the AI are healthy; a message waiting over 30 minutes stops it", () => {
       expect(evaluateHealth(base, NOW, ai(29 * 60_000)).pingCapture).toBe(true);
       expect(evaluateHealth(base, NOW, ai(31 * 60_000)).pingCapture).toBe(false);
-      expect(evaluateHealth({ ...base, ai: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(null)).pingCapture).toBe(false);
+      // A stopped AI loop with nothing waiting is still healthy here: it alerts by itself (design §8).
+      expect(evaluateHealth({ ...base, ai: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(null)).pingCapture).toBe(true);
       expect(evaluateHealth({ ...base, wa_socket: { lastOkAt: ago(10), lastErrorAt: ago(5) } }, NOW, ai(null)).pingCapture).toBe(false);
     });
 
