@@ -1,22 +1,27 @@
 "use client";
-// One Auto Change (design-system §6.5): summary, risk badge, source message, and Undo or the reason it's blocked.
-import { ArrowRightLeft, Ban, CircleCheck, Sparkles, Undo2 } from "lucide-react";
+// One Auto Change (design-system §6.5): summary, risk badge, source message, and Undo or the reason it's blocked;
+// when its batch made several changes still in place, Undo batch too (#22).
+import { ArrowRightLeft, Ban, CircleCheck, LoaderCircle, Sparkles, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch, toastApiError } from "@/lib/api-fetch";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import { instantToLocal } from "@/server/domain/time";
-import { AutoChangeItem as Item } from "@/shared/schemas/activity";
+import { BatchUndoResult, AutoChangeItem as Item } from "@/shared/schemas/activity";
 
 const when = (iso: string) => {
   const l = instantToLocal(new Date(iso));
   return `${formatDate(l.date)}, ${l.time}`;
 };
 
-export function AutoChangeItem({ item }: { item: Item }) {
+/** `batchUndo`: offer Undo batch (the Activity Log, #22); the dashboard's copies keep only Undo. */
+export function AutoChangeItem({ item, batchUndo = false }: { item: Item; batchUndo?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -29,6 +34,22 @@ export function AutoChangeItem({ item }: { item: Item }) {
       return router.refresh(); // blocked meanwhile: show why
     }
     toast.success(`Undone: ${item.summary}`);
+    router.refresh();
+  }
+
+  const [confirming, setConfirming] = useState(false);
+  async function undoBatch() {
+    setPending(true);
+    const res = await apiFetch(`/ai-batches/${item.batchId}/undo`, { method: "POST", schema: BatchUndoResult });
+    setPending(false);
+    setConfirming(false);
+    if (!res.ok) return toastApiError(res.error);
+    const { undone, skipped } = res.data;
+    const message = `Undid ${plural(undone.length, "change")}${skipped.length ? `; skipped ${skipped.length}` : ""}`;
+    const why = skipped.map((s) => `${s.summary}: ${s.reason}`).join(". ");
+    // The usual 5-second toast (design-system §5): skipped changes also keep their reason under their own Undo.
+    if (skipped.length) toast.warning(message, { description: why });
+    else toast.success(message);
     router.refresh();
   }
 
@@ -49,15 +70,39 @@ export function AutoChangeItem({ item }: { item: Item }) {
       ))}
       {!item.undoneAt && (
         <div className="mt-2 flex flex-col items-end gap-1">
-          <Button variant="outline" onClick={undo} disabled={!item.canUndo || pending} aria-describedby={item.canUndo ? undefined : reasonId}>
-            <Undo2 size={20} strokeWidth={1.75} aria-hidden="true" />
-            Undo
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {batchUndo && item.batchOpen > 1 && (
+              <Button variant="ghost" onClick={() => setConfirming(true)} disabled={pending}>
+                Undo batch ({item.batchOpen})
+              </Button>
+            )}
+            <Button variant="outline" onClick={undo} disabled={!item.canUndo || pending} aria-describedby={item.canUndo ? undefined : reasonId}>
+              <Undo2 size={20} strokeWidth={1.75} aria-hidden="true" />
+              Undo
+            </Button>
+          </div>
           {!item.canUndo && item.undoBlockedReason && (
             <p id={reasonId} className="text-sm text-muted-foreground">{item.undoBlockedReason}</p>
           )}
         </div>
       )}
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undo all {item.batchOpen} changes from this batch?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They came from the same messages. Newest first, each is undone unless something changed it since; you&apos;ll see which were skipped and why.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button onClick={undoBatch} disabled={pending}>
+              {pending && <LoaderCircle size={20} className="animate-spin" aria-hidden="true" />}
+              Undo {plural(item.batchOpen, "change")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   );
 }

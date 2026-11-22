@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import * as activity from "@/app/api/v1/activity/route";
 import * as assignment from "@/app/api/v1/assignments/[id]/route";
 import * as assignments from "@/app/api/v1/assignments/route";
+import * as batchUndo from "@/app/api/v1/ai-batches/[id]/undo/route";
 import * as undo from "@/app/api/v1/auto-changes/[id]/undo/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as dashboard from "@/app/api/v1/dashboard/route";
@@ -193,5 +194,81 @@ describe("Unknown Courses (#14)", () => {
     await process("ENG essay due 28th", mention("ENG", (id) => [essay(id)]));
     expect((await feed()).filter((i: { type: string }) => i.type === "unknown_course")).toMatchObject([{ status: "ignored", operations: 1 }]);
     expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual([]);
+  });
+});
+
+describe("Undo batch (#22)", () => {
+  /** One message whose batch makes several changes. */
+  async function batch(text: string, ops: (ctx: AiContext) => object[]) {
+    await ingest.handle("messages.upsert", {
+      type: "notify",
+      messages: [{ key: { remoteJid: GROUP, id: `M${++seq}`, fromMe: false }, messageTimestamp: Math.floor(Date.now() / 1000) + 5, pushName: "Kasun", message: { conversation: text } }],
+    });
+    await aiTick(ai((ctx) => ops(ctx).map((o) => ({ ...o, sourceMessageIds: [ctx.messages[0]!.id] }))), key, later());
+  }
+  const undoAll = (batchId: string, who = a) => who(batchUndo.POST, "POST", `/ai-batches/${batchId}/undo`, { params: { id: batchId } });
+
+  it("undoes each change newest first, skipping the one the Student edited since, and says why", async () => {
+    const lab = (await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 4", dueDate: "2026-11-27" } })).json;
+    await batch("Lab 4 is now Lab 4 report, due 30th; Lab 5 due Dec 4", () => [
+      { op: "update_assignment", assignmentId: lab.id, fields: { dueDate: "2026-11-30" } },
+      { op: "update_assignment", assignmentId: lab.id, fields: { title: "Lab 4 report" } },
+      { op: "create_assignment", courseId, title: "Lab 5", dueDate: "2026-12-04" },
+    ]);
+    const changes = (await feed()).filter((i: { type: string }) => i.type === "auto_change");
+    expect(changes).toHaveLength(3);
+    expect(changes.every((c: { batchId: string; batchOpen: number }) => c.batchId === changes[0].batchId && c.batchOpen === 3)).toBe(true);
+    // The Student edits Lab 5 afterwards: that change can't be undone any more.
+    const lab5 = (await a(assignments.GET, "GET", "/assignments")).json.find((x: { title: string }) => x.title === "Lab 5");
+    await a(assignment.PATCH, "PATCH", `/assignments/${lab5.id}`, { params: { id: lab5.id }, body: { expectedVersion: lab5.version, title: "Lab 5 (mine)" } });
+
+    expect((await undoAll(changes[0].batchId, b)).status).toBe(404);
+    const res = await undoAll(changes[0].batchId);
+    expect(res.status).toBe(200);
+    expect(res.json.undone.map((u: { summary: string }) => u.summary).sort()).toEqual(["Lab 4 report updated", "Lab 4: Fri 27 Nov → Mon 30 Nov"]);
+    expect(res.json.skipped).toEqual([{ autoChangeId: expect.any(String), summary: "Lab 5: due Fri 4 Dec", reason: "You edited this after the change" }]);
+    // Both of Lab 4's changes are undone, even though they touched the same item.
+    expect((await a(assignments.GET, "GET", "/assignments")).json).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "Lab 4", dueDate: "2026-11-27" }), expect.objectContaining({ title: "Lab 5 (mine)" })]),
+    );
+    const after = (await feed()).filter((i: { type: string }) => i.type === "auto_change");
+    expect(after.map((c: { undoneAt: string | null }) => !!c.undoneAt).sort()).toEqual([false, true, true]);
+    expect(after.every((c: { batchOpen: number }) => c.batchOpen === 1)).toBe(true);
+  });
+
+  it("filters the feed: changes only, or what needs attention", async () => {
+    await announce("Lab 6 due Dec 4", () => ({ op: "create_assignment", courseId, title: "Lab 6", dueDate: "2026-12-04" }));
+    const studentId = (await pool.query("select id from \"user\" where email = 'a@example.com'")).rows[0].id;
+    await pool.query("insert into activity_event (student_id, kind, payload) values ($1, 'stuck_messages', '{\"count\": 3}'), ($1, 'file_too_large', '{\"fileName\": \"notes.pdf\"}')", [studentId]);
+    const kinds = async (filter?: string) => ((await a(activity.GET, "GET", "/activity", { query: filter ? { filter } : {} })).json.items as { type: string }[]).map((i) => i.type).sort();
+    expect(await kinds()).toEqual(["auto_change", "event", "event"]);
+    expect(await kinds("changes")).toEqual(["auto_change"]);
+    expect(await kinds("attention")).toEqual(["event", "event"]);
+    // "change kept" is information, not something to act on: not under Needs attention (U20)
+    await pool.query("insert into activity_event (student_id, kind, payload) values ($1, 'change_kept', '{}')", [studentId]);
+    expect(await kinds("attention")).toEqual(["event", "event"]);
+    expect(await kinds()).toEqual(["auto_change", "event", "event", "event"]);
+    expect((await a(activity.GET, "GET", "/activity", { query: { filter: "nope" } })).status).toBe(400);
+  });
+});
+
+describe("paging the Activity Log (#22)", () => {
+  it("never loses the rest of a batch when a page ends inside it: one batch's changes share a time", async () => {
+    const studentId = (await pool.query("select id from \"user\" where email = 'a@example.com'")).rows[0].id;
+    const group = (await pool.query("select id from wa_group limit 1")).rows[0].id;
+    const batch = (await pool.query("insert into ai_batch (student_id, wa_group_id) values ($1, $2) returning id", [studentId, group])).rows[0].id;
+    // One statement, one transaction: all 51 get the same created_at, like an applied batch.
+    await pool.query(
+      "insert into auto_change (student_id, batch_id, entity_type, entity_id, op, after_version, summary) select $1, $2, 'assignment', gen_random_uuid(), 'create', 1, 'Lab ' || n from generate_series(1, 51) n",
+      [studentId, batch],
+    );
+    const page1 = (await a(activity.GET, "GET", "/activity", { query: { filter: "changes" } })).json;
+    expect(page1.items).toHaveLength(50);
+    expect(page1.nextCursor).toMatch(/\|/);
+    const page2 = (await a(activity.GET, "GET", "/activity", { query: { filter: "changes", cursor: page1.nextCursor } })).json;
+    const seen = [...page1.items, ...page2.items].map((i: { summary: string }) => i.summary);
+    expect(new Set(seen).size).toBe(51);
+    expect(page2.nextCursor).toBeNull();
+    expect((await a(activity.GET, "GET", "/activity", { query: { cursor: "2026-11-22T10:00:00Z" } })).status).toBe(400);
   });
 });

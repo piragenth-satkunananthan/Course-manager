@@ -13,6 +13,8 @@ export const AutoChangeItem = z.object({
   undoneAt: z.string().nullable(),
   entityType: z.enum(["assignment", "exam", "session_change", "semester"]),
   entityId: Id,
+  batchId: Id,
+  batchOpen: z.number(), // changes of this batch not undone yet: "Undo batch" shows when there's more than one
   canUndo: z.boolean(),
   undoBlockedReason: z.string().nullable(),
   sources: z.array(Message),
@@ -35,7 +37,21 @@ export const ActivityItem = z.discriminatedUnion("type", [
 ]);
 export type ActivityItem = z.infer<typeof ActivityItem>;
 export const ActivityPage = z.object({ items: z.array(ActivityItem), nextCursor: z.string().nullable() });
-export const ActivityQuery = z.strictObject({ cursor: z.iso.datetime().optional() });
+/** Filter chips (design-system §7.7): everything, Auto Changes only, or what needs the Student's attention. */
+export const ACTIVITY_FILTERS = ["all", "changes", "attention"] as const;
+export type ActivityFilter = (typeof ACTIVITY_FILTERS)[number];
+/** `cursor`: the last item's time and id ("<ISO time>|<uuid>"), from the previous page's nextCursor. */
+export const ActivityQuery = z.strictObject({
+  cursor: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[0-9a-f-]{36}$/, "Not a page cursor").optional(),
+  filter: z.enum(ACTIVITY_FILTERS).optional(),
+});
+
+/** Undo batch (#22): what was undone and what was skipped, with the reason. */
+export const BatchUndoResult = z.object({
+  undone: z.array(z.object({ autoChangeId: Id, summary: z.string() })),
+  skipped: z.array(z.object({ autoChangeId: Id, summary: z.string(), reason: z.string() })),
+});
+export type BatchUndoResult = z.infer<typeof BatchUndoResult>;
 
 /** Add course (in the current Semester), Nickname of an existing Course, or Ignore (design file 46). */
 export const UnknownCourseResolve = z.discriminatedUnion("action", [

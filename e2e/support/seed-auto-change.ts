@@ -1,7 +1,7 @@
 // Makes a real Auto Change for end-to-end tests: a message in a linked group, processed by the real AI batch with a
 // fake AI that creates one Assignment. Usage: tsx e2e/support/seed-auto-change.ts <email> <courseId> <title> <dueDate> [mode]
 // Mode "missed": the AI calls the message possibly missed (no Practical Course). Mode "unknown": `title` is an
-// Unknown Course, with one proposed Assignment (#14).
+// Unknown Course, with one proposed Assignment (#14). Mode "batch": one message, two Assignments (`title` A and B, #22).
 import { eq } from "drizzle-orm";
 import { loadKey } from "@/server/crypto";
 import { db, pool } from "@/server/db/client";
@@ -35,6 +35,8 @@ await aiTick(
       const reply =
         mode === "missed"
           ? { messages: ids.map((id) => ({ id, decision: "possibly_missed", reason: `${code} has no Practical Course` })), operations: [], unknownCourses: [] }
+          : mode === "batch"
+            ? { messages: ids.map((id) => ({ id, decision: "applied", reason: "e2e" })), operations: [{ ...assignment, title: `${title} A` }, { ...assignment, title: `${title} B` }], unknownCourses: [] }
           : mode === "unknown"
             ? { messages: ids.map((id) => ({ id, decision: "unknown_course", reason: "e2e" })), operations: [], unknownCourses: [{ name: title, messageIds: ids, proposedOperations: [{ ...assignment, courseId: null, title: `${title} essay` }] }] }
             : { messages: ids.map((id) => ({ id, decision: "applied", reason: "e2e" })), operations: [assignment], unknownCourses: [] };

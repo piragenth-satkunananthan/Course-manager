@@ -434,7 +434,7 @@ The main ones:
 | `Assignment` | `id, courseId, courseCode, title, description, dueDate, dueTime, timeAnnounced, dueAt, status, submittedAt, submitWhere, isGroupWork, source, version` |
 | `Exam` | `id, courseId, courseCode, title, kindLabel, date, startTime, location, topics, dueAt, source, version` |
 | `Deadline` | `{type: "assignment"\|"exam", item: Assignment\|Exam}` |
-| `AutoChangeItem` | `id, createdAt, summary, risk, undoneAt, entityType, entityId, canUndo, undoBlockedReason, sources[{senderName, sentAt, text}]` |
+| `AutoChangeItem` | `id, createdAt, summary, risk, undoneAt, entityType, entityId, batchId, batchOpen (the batch's changes not undone yet), canUndo, undoBlockedReason, sources[{senderName, sentAt, text, groupSubject}]` |
 | `ActivityItem` | `{type: "auto_change", ...AutoChangeItem}` \| `{type: "unknown_course", id, name, status, operations, firstMessage, createdAt}` \| `{type: "possibly_missed", inboxMessageId, senderName, sentAt, text, groupSubject, reason, courseId, createdAt}` (`reason` is the AI's when it decided `possibly_missed`; `courseId` is the group's Course) \| `{type: "event", id, kind, payload, createdAt}` |
 | `Banner` | `{kind: "whatsapp_disconnected"\|"worker_unhealthy"\|"auto_changes_paused"\|"ai_unavailable", since}` |
 | `CalendarMonth` | `month ("YYYY-MM"), days: [{date, occurrences: Occurrence[], deadlines: Deadline[]}]`. It covers every day in the 6 displayed weeks, including the padding days from the months either side. |
@@ -465,9 +465,9 @@ The main ones:
 | `PUT /api/v1/assignments/:id/status` | `{status}` (no version check; the Student owns status) | Assignment |
 | `DELETE /api/v1/assignments/:id?expectedVersion=N` | none | 204 (soft delete) |
 | `GET /api/v1/exams?…` · `POST /api/v1/exams` · `PATCH /api/v1/exams/:id` · `DELETE /api/v1/exams/:id?expectedVersion=N` | same pattern as Assignments | |
-| `GET /api/v1/activity?cursor=` | none | Auto Changes, Unknown Courses, Possibly Missed messages, rejected AI output, alerts; newest first, 50 per page |
+| `GET /api/v1/activity?cursor=&filter=` | `filter`: `all` (default), `changes` (Auto Changes only) or `attention` (Possibly Missed messages, open Unknown Courses, events other than "change kept"; U20); `cursor`: the previous page's `nextCursor` (`<time>\|<id>`) | Auto Changes, Unknown Courses, Possibly Missed messages, events; newest first, 50 per page |
 | `POST /api/v1/auto-changes/:id/undo` | none | the restored entity, or 409 `UNDO_BLOCKED` |
-| `POST /api/v1/ai-batches/:id/undo` | none | `{undone[], skipped[{autoChangeId, reason}]}` |
+| `POST /api/v1/ai-batches/:id/undo` | none | `{undone[{autoChangeId, summary}], skipped[{autoChangeId, summary, reason}]}` |
 | `POST /api/v1/unknown-courses/:id/resolve` | `{action:"add", code, name, colour, lecturerName?, practicalOfCourseId?}` or `{action:"nickname", courseId}` or `{action:"ignore"}` | `{applied, possiblyMissed, course}`; 409 once resolved |
 | `POST /api/v1/possibly-missed/:inboxMessageId/dismiss` | none | 204; the message leaves the Activity Log and the digest |
 | `GET /api/v1/whatsapp` | none | `{status, pairingCode?, lastError?, lastEventAt, groups[{id, subject, linkedCourseId?, linkedSemesterId?}]}`, polled every 2 s while pairing |
@@ -903,6 +903,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U17 | (2026-11-22, product owner) Changing the password in Settings signs out every other device (`revokeOtherSessions`), as a reset does. |
 | U18 | (2026-11-22, product owner) In the week grid every class block is at least 40 px tall (the desktop tap target), so a class under 50 minutes looks a little longer than it is; its times are written on it. Keyboard use is Tab, Enter and Escape; no arrow keys inside the grid. |
 | U19 | (2026-11-22, product owner) The Deadlines lists group items as Overdue, This week (today until Sunday), Later, Date TBA (Exams with no date) and Earlier (submitted Assignments and Exams already held). Unticking Submitted restores the status the Assignment had before it was submitted (To do or In progress), from its history. |
+| U20 | (2026-11-23, product owner) Undo batch undoes a batch that changed one item twice: an older change still counts as unchanged when the only later versions are changes this run has just undone (and their Undos, or status changes). The Activity Log's "Needs attention" chip shows Possibly Missed messages, open Unknown Courses and problem events, not "change kept" notes. |
 
 ## Risks and Mitigations
 
@@ -1519,7 +1520,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
       - Possibly Missed `inbox_message` rows;
       - `activity_event`.
     - **`undoAutoChange`:** `canUndo`, then `writeEntity` with `op = undo` and `actor = student`, then sets `undone_at`.
-    - **`undoBatch`:** goes through the batch's changes newest `auto_change` first, and reports which ones it skipped and why.
+    - **`undoBatch`:** goes through the batch's changes newest `auto_change` first, and reports which ones it skipped and why. Within it, a later change of the same item that this same run has just undone (and that Undo) doesn't count as "changed since", so a batch that changed one item twice undoes both; if the newer one was skipped, so is the older one (U20, #22).
     - **`resolveUnknownCourse`:**
       - "add" creates the Course in the **current** Semester, and adds `name_key` as its Nickname (`source = unknown_course`) when it differs from the code and the name, so the next message using it is understood.
       - "nickname" adds `name_key` as a Nickname of the chosen Course, with `source = unknown_course`.

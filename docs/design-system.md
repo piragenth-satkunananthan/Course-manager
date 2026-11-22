@@ -584,7 +584,7 @@ This screen is designed now, so M1's navigation already has a place for it. **It
 
 - **Sign-in** (`/login`): a centred card, 400 px at most, with the product name, email, password (with a show/hide toggle), **Sign in**, and a "Forgot password?" link. Errors: "Email or password is incorrect", and for rate limiting, "Too many attempts, try again in a minute". There's no sign-up link: v1 has one Student.
 - **Reset password** (`/reset-password`): a request form that always replies "If the email exists, a link has been sent", and a set-new-password form with the 12-character rule shown as helper text.
-- **Activity** (`/activity`): a feed of `auto-change-item`, `unknown-course-item` and `possibly-missed-item` entries, newest first, with filter chips (All, Changes, Needs attention). M1b adds Undo batch and the event items.
+- **Activity** (`/activity`): a feed of `auto-change-item`, `unknown-course-item` and `possibly-missed-item` entries, newest first, with filter chips (All, Changes, Needs attention; a radio group kept in the URL, drawn as full-radius chips). M1b adds Undo batch, shown only here, and the event items: each kind has an icon and one sentence.
 
 ---
 
