@@ -12,18 +12,26 @@ import { Course, COURSE_COLOURS, CourseCreate } from "@/shared/schemas/course";
 import type { Semester } from "@/shared/schemas/semester";
 import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } from "./form";
 
-const LABELS = { semesterId: "Semester", code: "Code", name: "Name", lecturerName: "Lecturer", colour: "Colour" };
+const LABELS = { semesterId: "Semester", code: "Code", name: "Name", lecturerName: "Lecturer", colour: "Colour", practicalOfCourseId: "Practical of" };
+const NONE = "none"; // Radix Select items can't have an empty value
 
-type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; onDone: (course: Course) => void };
+/** `others`: the Courses that may be picked as "Practical of" (U13), filtered here to the chosen Semester. */
+type Props = { semesters: Semester[]; defaultSemesterId?: string; course?: Course; others: Course[]; onDone: (course: Course) => void };
 
-export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Props) {
+export function CourseForm({ semesters, defaultSemesterId, course, others, onDone }: Props) {
   const form = useAppForm(
     CourseCreate,
     course
-      ? { semesterId: course.semesterId, code: course.code, name: course.name, lecturerName: course.lecturerName ?? "", colour: course.colour }
-      : { semesterId: defaultSemesterId ?? "", code: "", name: "", lecturerName: "", colour: undefined },
+      ? { semesterId: course.semesterId, code: course.code, name: course.name, lecturerName: course.lecturerName ?? "", colour: course.colour, practicalOfCourseId: course.practicalOfCourseId }
+      : { semesterId: defaultSemesterId ?? "", code: "", name: "", lecturerName: "", colour: undefined, practicalOfCourseId: null },
   );
   const { isSubmitting, errors, submitCount } = form.formState;
+  const semesterId = form.watch("semesterId");
+  // A theory Course with its own Practical Course can't become one; a candidate is a theory Course without one yet.
+  const isTheory = !!course && others.some((o) => o.practicalOfCourseId === course.id);
+  const candidates = others.filter(
+    (o) => o.semesterId === semesterId && o.id !== course?.id && !o.archivedAt && !o.practicalOfCourseId && !others.some((p) => p.practicalOfCourseId === o.id && p.id !== course?.id),
+  );
 
   async function onSubmit({ semesterId, ...rest }: CourseCreate) {
     const res = course
@@ -62,6 +70,30 @@ export function CourseForm({ semesters, defaultSemesterId, course, onDone }: Pro
       <TextField control={form.control} name="code" label="Code" required help="For example CS2010" />
       <TextField control={form.control} name="name" label="Name" required />
       <TextField control={form.control} name="lecturerName" label="Lecturer" />
+      {!isTheory && (
+        <Controller
+          control={form.control}
+          name="practicalOfCourseId"
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="practicalOfCourseId">Practical of</FieldLabel>
+              <Select value={field.value ?? NONE} onValueChange={(v) => field.onChange(v === NONE ? null : v)}>
+                <SelectTrigger id="practicalOfCourseId" className="w-full" aria-invalid={fieldState.invalid} aria-describedby="practicalOfCourseId-help">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>None (not a Practical Course)</SelectItem>
+                  {candidates.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.code} {c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p id="practicalOfCourseId-help" className="text-sm text-muted-foreground">If this is the practical part of a theory Course, its notices come in that Course&apos;s WhatsApp group.</p>
+              {fieldState.error && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+      )}
       <Controller
         control={form.control}
         name="colour"

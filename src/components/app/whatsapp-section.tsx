@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch, toastApiError } from "@/lib/api-fetch";
+import { suggestCourse } from "@/lib/suggest-course";
 import { PairingRequest, WaGroup, WhatsAppStatus } from "@/shared/schemas/whatsapp";
 import { applyServerError, ErrorSummary, SaveButton, TextField, useAppForm } from "./form";
 
-type Option = { id: string; label: string };
+/** `code` is set on Courses a group may be named after (not Practical Courses), for the suggestion. */
+type Option = { id: string; label: string; code?: string };
 const PAIRING_SECONDS = 180;
 
 function PairingForm({ onStarted, retry }: { onStarted: (s: WhatsAppStatus) => void; retry: boolean }) {
@@ -71,9 +73,18 @@ function GroupRow({ group, courses, semester }: { group: WaGroup; courses: Optio
     router.refresh();
   }
   const id = `group-${group.id}`;
+  // Only a suggestion: nothing is read until the Student confirms it (U13).
+  const suggested = value === "none" ? suggestCourse(group.subject, courses.filter((c): c is Option & { code: string } => !!c.code)) : undefined;
   return (
     <li className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
-      <label htmlFor={id} className="font-medium">{group.subject}</label>
+      <div className="flex flex-col items-start gap-1">
+        <label htmlFor={id} className="font-medium">{group.subject}</label>
+        {suggested && (
+          <Button variant="outline" size="sm" className="min-h-11 md:min-h-10" onClick={() => change(suggested.id)}>
+            Link to {suggested.code}
+          </Button>
+        )}
+      </div>
       <Select value={value} onValueChange={change}>
         <SelectTrigger id={id} className="w-full sm:w-64">
           <SelectValue />

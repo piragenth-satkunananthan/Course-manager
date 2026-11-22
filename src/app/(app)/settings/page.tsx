@@ -22,7 +22,7 @@ export default async function SettingsPage() {
         <WhatsAppSection
           initial={whatsapp}
           semester={current && { id: current.id, label: current.name }}
-          courses={courses.map((c) => ({ id: c.id, label: `${c.code} ${c.name}` }))}
+          courses={courses.map((c) => ({ id: c.id, label: `${c.code} ${c.name}`, code: c.practicalOfCourseId ? undefined : c.code }))}
         />
         <AccountSection email={email} />
       </div>

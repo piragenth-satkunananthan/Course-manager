@@ -7,7 +7,7 @@ import { NicknameEditor } from "@/components/app/nickname-editor";
 import { WeeklyClasses } from "@/components/app/weekly-classes";
 import { Badge } from "@/components/ui/badge";
 import { COLOUR_BG } from "@/lib/course-colours";
-import { getCourse } from "@/server/data/courses";
+import { getCourse, listCourses } from "@/server/data/courses";
 import { listClassSessions } from "@/server/data/timetable";
 import { AppError } from "@/server/http/errors";
 import { requireStudentId } from "@/server/session";
@@ -21,6 +21,9 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   });
+  const others = await listCourses(studentId, { semesterId: course.semesterId });
+  const practicalOf = others.find((c) => c.id === course.practicalOfCourseId);
+  const practical = others.find((c) => c.practicalOfCourseId === course.id);
 
   return (
     <>
@@ -34,6 +37,8 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
           <h1 className="text-2xl font-bold md:text-display">{course.code}</h1>
           <p className="text-heading">{course.name}</p>
           {course.lecturerName && <p className="text-sm text-muted-foreground">{course.lecturerName}</p>}
+          {practicalOf && <p className="text-sm text-muted-foreground">Practical of <Link href={`/courses/${practicalOf.id}`} className="underline">{practicalOf.code}</Link></p>}
+          {practical && <p className="text-sm text-muted-foreground">Practical Course: <Link href={`/courses/${practical.id}`} className="underline">{practical.code}</Link></p>}
           {course.archivedAt && (
             <Badge variant="secondary" className="mt-2 text-muted-foreground">
               <Archive aria-hidden="true" />
@@ -41,7 +46,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
             </Badge>
           )}
         </div>
-        <CourseActions course={course} />
+        <CourseActions course={course} others={others} />
       </div>
       <div className="mt-6 space-y-6">
         <WeeklyClasses courseId={course.id} code={course.code} sessions={await listClassSessions(studentId, course.id)} />

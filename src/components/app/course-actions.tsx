@@ -16,7 +16,7 @@ import { Course } from "@/shared/schemas/course";
 import { CourseForm } from "./course-form";
 import { ResponsiveDialog } from "./responsive-dialog";
 
-export function CourseActions({ course }: { course: Course }) {
+export function CourseActions({ course, others }: { course: Course; others: Course[] }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"edit" | "archive" | "delete" | null>(null);
   const [typed, setTyped] = useState("");
@@ -58,7 +58,7 @@ export function CourseActions({ course }: { course: Course }) {
       </DropdownMenu>
 
       <ResponsiveDialog open={dialog === "edit"} onOpenChange={(o) => !o && close()} title={`Edit ${course.code}`}>
-        <CourseForm semesters={[]} course={course} onDone={() => (close(), router.refresh())} />
+        <CourseForm semesters={[]} course={course} others={others} onDone={() => (close(), router.refresh())} />
       </ResponsiveDialog>
 
       <AlertDialog open={dialog === "archive"} onOpenChange={(o) => !o && close()}>

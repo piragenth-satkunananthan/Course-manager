@@ -13,7 +13,9 @@ test("pair with a code, link a group to a Course, and see the banner after a log
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await seedCourse(page, code); // the newest Semester isn't current, so make it current below
   const studentId = (await pool.query("select id from \"user\" where email = 'student@example.com'")).rows[0].id;
-  await pool.query("update semester set is_current = (name = $2) where student_id = $1", [studentId, `Sem ${code}`]);
+  // Two steps: the one-current index is checked row by row, so a single swap can collide.
+  await pool.query("update semester set is_current = false where student_id = $1", [studentId]);
+  await pool.query("update semester set is_current = true where student_id = $1 and name = $2", [studentId, `Sem ${code}`]);
   await pool.query("update wa_session set status = 'unlinked', pairing_code = null, last_error = null where student_id = $1", [studentId]);
 
   await page.goto("/settings#whatsapp");
@@ -43,7 +45,20 @@ test("pair with a code, link a group to a Course, and see the banner after a log
   await expect(page.getByText(`${code} group is linked`)).toBeVisible();
   const linked = (await pool.query("select linked_course_id is not null as linked from wa_group where wa_jid = $1", [`${code}@g.us`])).rows[0];
   expect(linked.linked).toBe(true);
+
+  // A group named after the Course code suggests it, but stays unlinked until confirmed (#26)
+  const named = `${code}/(22/23)`;
+  await pool.query("insert into wa_group (student_id, wa_jid, subject) values ($1, $2, $3) on conflict do nothing", [studentId, `${code}-n@g.us`, named]);
+  await page.reload();
+  const suggestion = section.getByRole("button", { name: `Link to ${code}` });
+  await expect(suggestion).toBeVisible();
+  const unlinked = async () => (await pool.query("select linked_course_id is null as v from wa_group where wa_jid = $1", [`${code}-n@g.us`])).rows[0].v;
+  expect(await unlinked()).toBe(true);
   expect((await auditLayout(page, phone ? 44 : 40)).small).toEqual([]);
+  await suggestion.click();
+  await expect(page.getByText(`${named} is linked`)).toBeVisible();
+  expect(await unlinked()).toBe(false);
+  await expect(suggestion).toBeHidden();
 
   // A logout shows the banner with Re-link on every page
   await pool.query("update wa_session set status = 'logged_out', disconnected_at = now() where student_id = $1", [studentId]);

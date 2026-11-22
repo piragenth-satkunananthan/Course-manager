@@ -73,6 +73,18 @@ describe("an announcement becomes an Auto Change", () => {
     expect(await inbox()).toEqual([{ status: "done", decision: "applied", possibly_missed: false, attempts: 0 }]);
   });
 
+  it("tells the AI about the linked Course's Practical Course (#26)", async () => {
+    const semesterId = (await pool.query("select semester_id from course where id = $1", [courseId])).rows[0].semester_id;
+    const practicalId = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "CS2011", name: "DS Practical", colour: "blue", practicalOfCourseId: courseId } })).json.id;
+    await say("practical report due Friday");
+    let seen: AiContext | undefined;
+    await aiTick(fakeAi((ctx) => ((seen = ctx), ops(ctx, []))), key, later());
+    expect(seen?.linkedTo).toEqual({ courseId, practicalCourseId: practicalId });
+    expect(seen?.courses).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: practicalId, practicalOf: courseId }), expect.not.objectContaining({ practicalOf: expect.anything() })]),
+    );
+  });
+
   it("waits until the group has been quiet for 2 minutes, or its oldest message is 5 minutes old", async () => {
     await say("first");
     const ai = fakeAi((ctx) => ops(ctx, []));
