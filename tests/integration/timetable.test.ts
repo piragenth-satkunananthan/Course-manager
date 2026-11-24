@@ -138,6 +138,7 @@ describe("the dashboard", () => {
     const cid = (await a(courses.POST, "POST", "/courses", { body: { semesterId, code: "NOW1", name: "Now", colour: "pink" } })).json.id;
     await a(classSessions.POST, "POST", `/courses/${cid}/class-sessions`, { params: { id: cid }, body: { kind: "lab", weekday: weekdayOf(today), startTime: "00:00", endTime: "23:59" } });
     const d = (await a(dashboard.GET, "GET", "/dashboard")).json;
-    expect(d.todaySessions).toMatchObject([{ courseCode: "NOW1", date: today, kind: "lab", status: "normal" }]);
+    // only this Course's: another test seeds a class on a fixed date, which may be today
+    expect(d.todaySessions.filter((s: { courseCode: string }) => s.courseCode === "NOW1")).toMatchObject([{ courseCode: "NOW1", date: today, kind: "lab", status: "normal" }]);
   });
 });
