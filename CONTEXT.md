@@ -14,7 +14,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 
 - v1 has one Student: the product owner. There is no sign-up and there are no invites. Every record still carries its Student, so friends can be added later without reworking the data.
 - Login is email + password, with password reset by email.
-- First login opens a setup wizard: Semester, then Courses, then Class Sessions, then linking WhatsApp groups.
+- First login opens a setup wizard: Semester, then Courses, then Class Sessions (with Session Groups), then the Deadlines already open, then linking WhatsApp groups. The same wizard can be run again from Settings when a new Semester starts.
 
 ## Requirements
 
@@ -73,7 +73,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - Edited messages are processed again. A deleted message undoes its Auto Change, unless the Student has edited that item since.
 - Messages are sent to the AI in batches: one call per group every few minutes.
 - PDF and Office files posted in a linked Course Group are saved as Attachments on that Course's "From WhatsApp" Note. Duplicates (same file contents) are skipped. Files over 20 MB are listed in the Activity Log, not saved. Images and video are not saved.
-- The text of every message from a linked group is kept, encrypted, until its Semester is archived, then erased. Messages that look like a deadline but caused no change are flagged "Possibly missed" in the Activity Log, with "Add Assignment", "Add Exam" and "Dismiss".
+- The text of every message from a linked group is kept, encrypted, until its Semester is archived, then erased. Messages that look like a deadline but caused no change are flagged "Possibly missed" in the Activity Log, with "Add Assignment", "Add Exam" and "Dismiss". A message for another Session Group of that Course (one the Student has set up, but not theirs) is ignored quietly.
 - The AI runs on NVIDIA NIM. The product owner has confirmed that classmates and lecturers accept their messages being processed this way. The Class Representative pins a notice in each linked group saying messages are kept until the end of the Semester.
 - **Gate (run in M0):** before Auto Changes go live, the AI must handle a test set of about 50 real messages from the product owner's groups correctly. The set includes times like "4.30", relative dates, Session Group messages, duplicate announcements, mixed English, and deletions.
 
@@ -86,8 +86,9 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - WhatsApp session keys are encrypted when stored. The encryption key is kept off the database, in a root-only secret file on the VM, with an offline copy kept by the product owner.
 - Attachments are served through short-lived links.
 - Nightly backups, kept for 7 days. Restoring has been tested once and is documented.
-- "Export my data" downloads everything as JSON plus the files.
-- "Delete my account" unlinks WhatsApp and deletes all data and files. Backups age out within 7 days.
+- Attachments are kept in their own private storage, with 3 copies kept by Azure. A deleted Attachment can be recovered for 7 days, and the Attachments are downloaded each month along with the backups.
+- "Export my data" downloads, as JSON plus the files, everything the Student made or can see in the app: Semesters, Courses, Nicknames, classes, Session Changes, Assignments, Exams, Attendance, Notes, linked groups and the Activity Log. Internal records (stored WhatsApp messages, AI batches, the email log, version history) are left out.
+- "Delete my account" unlinks WhatsApp and deletes all data and files. Backups and deleted Attachments are erased within 7 days.
 - A health check on the worker sends an email alert if it stops.
 
 ## Hosting and delivery
@@ -125,7 +126,7 @@ Other Students (friends) and sharing between Students, grades, push notification
 - The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
 - Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
 - One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
-- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the rate falls below the minimum.
+- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
 
 ## Open questions
 
