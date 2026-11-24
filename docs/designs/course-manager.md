@@ -550,10 +550,10 @@ That one rule covers pairing, group link changes and account deletion. The web a
 
   | Reason | What happens |
   |---|---|
-  | `loggedOut`, `badSession`, `forbidden` | Status becomes `logged_out`, the credentials are wiped, and an immediate alert is sent. |
+  | `loggedOut`, `forbidden` | Status becomes `logged_out`, the credentials are wiped, and an immediate alert is sent. |
   | `connectionReplaced` | Another instance is connected. This worker stops its WhatsApp loop and alerts; it does not reconnect. |
   | `multideviceMismatch` | Status becomes `error` and an alert is sent; no reconnect. |
-  | any other reason | Reconnect with backoff: 5 s, 30 s, 2 min, then every 5 min. |
+  | any other reason, including `badSession` (U39) | Reconnect with backoff: 5 s, 30 s, 2 min, then every 5 min. After an hour of failures the wa_socket health check alerts. |
 
 **AI processor details (§9)**
 
@@ -922,6 +922,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U36 | (2026-11-24, product owner, M2) Dark mode follows the device's light or dark setting, with no switch. |
 | U37 | (2026-11-24, product owner, M2) The Calendar Feed link is shown only once, when made or reset; only its hash is stored. |
 | U38 | (2026-11-24, product owner, M2) "Export my data" covers what the Student made or can see, not internal records. |
+| U39 | (2026-11-24, product owner, #65) `badSession` (code 500) reconnects with backoff instead of logging out. Baileys reports any unknown stream error from WhatsApp as 500, and treating it as a logout wiped the keys while the phone was still linked. Only `loggedOut` and `forbidden` wipe the keys. |
 
 ## Risks and Mitigations
 

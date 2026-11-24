@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { disconnectAction } from "@/worker/whatsapp/disconnect";
 
 describe("disconnectAction (design §8 table)", () => {
-  it("logs out and wipes on loggedOut, badSession and forbidden", () => {
-    for (const code of [401, 500, 403]) expect(disconnectAction(code, 0)).toEqual({ action: "logged_out" });
+  it("logs out and wipes only on loggedOut and forbidden", () => {
+    for (const code of [401, 403]) expect(disconnectAction(code, 0)).toEqual({ action: "logged_out" });
+  });
+  it("reconnects with backoff on badSession, which Baileys reports for any unknown stream error (U39, #65)", () => {
+    expect([0, 3].map((n) => disconnectAction(500, n))).toEqual([5_000, 300_000].map((delayMs) => ({ action: "reconnect", delayMs })));
   });
   it("stops without reconnecting when replaced or on a multidevice mismatch", () => {
     expect(disconnectAction(440, 0)).toEqual({ action: "replaced" });
