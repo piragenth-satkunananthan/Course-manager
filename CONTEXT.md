@@ -13,16 +13,8 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 ## Users
 
 - v1 has one Student: the product owner. There is no sign-up and there are no invites. Every record still carries its Student, so friends can be added later without reworking the data.
-<<<<<<< HEAD
 - Login is email + password, with password reset by email and a password change in Settings (which signs out other devices).
-- In M1, setup happens in Settings and on the Courses page: Semester, then Courses, then Class Sessions, then linking WhatsApp groups (`docs/runbooks/student-setup.md`). A first-login setup wizard comes in M2.
-||||||| 471fd95
-- Login is email + password, with password reset by email.
-- First login opens a setup wizard: Semester, then Courses, then Class Sessions, then linking WhatsApp groups.
-=======
-- Login is email + password, with password reset by email.
-- First login opens a setup wizard: Semester, then Courses, then Class Sessions (with Session Groups), then the Deadlines already open, then linking WhatsApp groups. The same wizard can be run again from Settings when a new Semester starts.
->>>>>>> origin/main
+- In M1, setup happens in Settings and on the Courses page: Semester, then Courses, then Class Sessions, then linking WhatsApp groups (`docs/runbooks/student-setup.md`). In M2, first login opens a setup wizard: Semester, then Courses, then Class Sessions (with Session Groups), then the Deadlines already open, then linking WhatsApp groups. The same wizard can be run again from Settings when a new Semester starts.
 
 ## Requirements
 
@@ -38,7 +30,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
 - Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
 - One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
-- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the rate falls below the minimum.
+- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
 
 ### Assessments
 - An Assignment is something you hand in by a due date (report, lab sheet, project). It has a title, due date and time, description, and a status of To do, In progress or Submitted. Two optional fields: where to submit it, and whether it's a group or individual piece of work.
@@ -101,20 +93,10 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - WhatsApp session keys are encrypted when stored. The encryption key is kept off the database, in a root-only secret file on the VM, with an offline copy kept by the product owner.
 - Attachments are served through short-lived links.
 - Nightly backups, kept for 7 days. Restoring has been tested once and is documented.
-<<<<<<< HEAD
-- "Export my data" downloads everything as JSON plus the files.
-- "Delete my account" unlinks WhatsApp and deletes all data and files. Backups age out within 7 days.
-- Failures can't stay silent: healthchecks.io emails the Student when the worker's reminders or capture heartbeat, or the nightly backup, stops checking in, and the worker emails a direct alert for causes the Student must act on (WhatsApp logged out, the AI key refused or failing for an hour, too many changes in one batch, a reminder that couldn't be sent).
-||||||| 471fd95
-- "Export my data" downloads everything as JSON plus the files.
-- "Delete my account" unlinks WhatsApp and deletes all data and files. Backups age out within 7 days.
-- A health check on the worker sends an email alert if it stops.
-=======
 - Attachments are kept in their own private storage, with 3 copies kept by Azure. A deleted Attachment can be recovered for 7 days, and the Attachments are downloaded each month along with the backups.
 - "Export my data" downloads, as JSON plus the files, everything the Student made or can see in the app: Semesters, Courses, Nicknames, classes, Session Changes, Assignments, Exams, Attendance, Notes, linked groups and the Activity Log. Internal records (stored WhatsApp messages, AI batches, the email log, version history) are left out.
 - "Delete my account" unlinks WhatsApp and deletes all data and files. Backups and deleted Attachments are erased within 7 days.
-- A health check on the worker sends an email alert if it stops.
->>>>>>> origin/main
+- Failures can't stay silent: healthchecks.io emails the Student when the worker's reminders or capture heartbeat, or the nightly backup, stops checking in, and the worker emails a direct alert for causes the Student must act on (WhatsApp logged out, the AI key refused or failing for an hour, too many changes in one batch, a reminder that couldn't be sent).
 
 ## Hosting and delivery
 
@@ -147,22 +129,6 @@ Other Students (friends) and sharing between Students, grades, push notification
 - Images and voice notes through NIM's vision and speech models.
 - Searching inside PDFs. Lecturer contact details and office hours.
 
-<<<<<<< HEAD
-||||||| 471fd95
-### Attendance
-- The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
-- Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
-- One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
-- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the rate falls below the minimum.
-
-=======
-### Attendance
-- The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
-- Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
-- One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
-- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
-
->>>>>>> origin/main
 ## Open questions
 
 - NIM's free limits, the chosen model and the email provider's free tier: see `docs/m0-report.md`.
