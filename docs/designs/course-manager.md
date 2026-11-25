@@ -924,6 +924,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U38 | (2026-11-24, product owner, M2) "Export my data" covers what the Student made or can see, not internal records. |
 | U39 | (2026-11-24, product owner, #65) `badSession` (code 500) reconnects with backoff instead of logging out. Baileys reports any unknown stream error from WhatsApp as 500, and treating it as a logout wiped the keys while the phone was still linked. Only `loggedOut` and `forbidden` wipe the keys. |
 | U40 | (2026-11-25, product owner, #67) A NIM call may take up to 180 s, not 60 s. NIM writes about 63 tokens/s, so a full 4,096-token answer takes about 65 s; with 60 s, a message that draws a long answer timed out on every hourly retry. 180 s covers a full answer at 25 tokens/s, and two calls still fit inside the 10-minute stale reset. |
+| U41 | (2026-11-25, product owner, #69) A class change the AI can't match to exactly one class (the Class Group with no Course named, or a Course with several classes that day and no kind given) is flagged Possibly Missed instead of ignored. A stated end time ("8.30 to 10.30") is kept; with only a start, the class's usual length is kept. In a Course Group, a time for a day with no class of that Course adds an extra lecture. |
 
 ## Risks and Mitigations
 

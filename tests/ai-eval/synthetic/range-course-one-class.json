@@ -1,0 +1,97 @@
+{
+  "id": "range-course-one-class",
+  "category": "timetable time range",
+  "now": "2026-11-23T18:00:00+05:30",
+  "fixture": {
+    "semester": {
+      "id": "sem",
+      "startDate": "2026-08-03",
+      "endDate": "2026-12-18"
+    },
+    "linkedTo": {
+      "courseId": "c-iad"
+    },
+    "courses": [
+      {
+        "id": "c-ds",
+        "code": "CS2010",
+        "name": "Data Structures",
+        "nicknames": [
+          "ds"
+        ]
+      },
+      {
+        "id": "c-iad",
+        "code": "SWT22022",
+        "name": "Internet Application Development",
+        "nicknames": [
+          "iad"
+        ]
+      },
+      {
+        "id": "c-iadp",
+        "code": "SWT22032",
+        "name": "IAD Practical",
+        "nicknames": [],
+        "practicalOf": "c-iad"
+      }
+    ],
+    "occurrences": [
+      {
+        "classSessionId": "s-iad-lec",
+        "courseId": "c-iad",
+        "kind": "lecture",
+        "date": "2026-11-24",
+        "start": "13:00",
+        "end": "16:00",
+        "location": "Hall B",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lec",
+        "courseId": "c-ds",
+        "kind": "lecture",
+        "date": "2026-11-24",
+        "start": "08:00",
+        "end": "10:00",
+        "location": "Hall A",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      }
+    ],
+    "assignments": [],
+    "exams": [],
+    "suppressions": [],
+    "recentMessages": []
+  },
+  "thread": [
+    {
+      "id": "m1",
+      "senderName": "Lecturer",
+      "sentAt": "2026-11-23T17:30:00+05:30",
+      "kind": "text",
+      "text": "tomorrow class 8.30 am to 10.30am"
+    }
+  ],
+  "expected": {
+    "operations": [
+      {
+        "op": "reschedule_occurrence",
+        "classSessionId": "s-iad-lec",
+        "date": "2026-11-24",
+        "newDate": "2026-11-24",
+        "newStart": "08:30",
+        "newEnd": "10:30",
+        "sourceMessageIds": [
+          "m1"
+        ]
+      }
+    ],
+    "decisions": {
+      "m1": "applied"
+    }
+  }
+}
