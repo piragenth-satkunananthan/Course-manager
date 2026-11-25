@@ -923,6 +923,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U37 | (2026-11-24, product owner, M2) The Calendar Feed link is shown only once, when made or reset; only its hash is stored. |
 | U38 | (2026-11-24, product owner, M2) "Export my data" covers what the Student made or can see, not internal records. |
 | U39 | (2026-11-24, product owner, #65) `badSession` (code 500) reconnects with backoff instead of logging out. Baileys reports any unknown stream error from WhatsApp as 500, and treating it as a logout wiped the keys while the phone was still linked. Only `loggedOut` and `forbidden` wipe the keys. |
+| U40 | (2026-11-25, product owner, #67) A NIM call may take up to 180 s, not 60 s. NIM writes about 63 tokens/s, so a full 4,096-token answer takes about 65 s; with 60 s, a message that draws a long answer timed out on every hourly retry. 180 s covers a full answer at 25 tokens/s, and two calls still fit inside the 10-minute stale reset. |
 
 ## Risks and Mitigations
 
@@ -1705,7 +1706,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
       - The context it builds is described in §9.
     - **`prompt.ts`:** the §9 prompt rules and `PROMPT_VERSION`.
     - **`nim-client.ts`:**
-      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 60-second timeout, and guided JSON if M0 shows it is supported.
+      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 180-second timeout (U40), and guided JSON if M0 shows it is supported.
       - Records tokens in `ai_batch`.
       - 401 and 403 raise a fatal error that stops the AI loop; 429, 5xx and timeouts are retried.
     - **`validate.ts`:** schema, then rule 1, then rule 2 from §9. Returns `{valid[], dropped[{op, reason, messageIds}], overflow[]}`.
