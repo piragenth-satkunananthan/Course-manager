@@ -13,8 +13,8 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 ## Users
 
 - v1 has one Student: the product owner. There is no sign-up and there are no invites. Every record still carries its Student, so friends can be added later without reworking the data.
-- Login is email + password, with password reset by email.
-- First login opens a setup wizard: Semester, then Courses, then Class Sessions (with Session Groups), then the Deadlines already open, then linking WhatsApp groups. The same wizard can be run again from Settings when a new Semester starts.
+- Login is email + password, with password reset by email and a password change in Settings (which signs out other devices).
+- In M1, setup happens in Settings and on the Courses page: Semester, then Courses, then Class Sessions, then linking WhatsApp groups (`docs/runbooks/student-setup.md`). In M2, first login opens a setup wizard: Semester, then Courses, then Class Sessions (with Session Groups), then the Deadlines already open, then linking WhatsApp groups. The same wizard can be run again from Settings when a new Semester starts.
 
 ## Requirements
 
@@ -25,6 +25,12 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - Class Sessions (Lecture, Tutorial or Lab) repeat between the Semester's start and end dates, skipping Break Weeks and Holidays. A Class Session can repeat every week or every 2 weeks, can start in week N, and can be tied to a Session Group.
 - The Student picks their Session Group for each Course and only sees sessions for that group plus sessions open to everyone.
 - Session Changes cancel or reschedule a single occurrence, or add a one-off extra session.
+
+### Attendance (M2)
+- The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
+- Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
+- One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
+- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
 
 ### Assessments
 - An Assignment is something you hand in by a due date (report, lab sheet, project). It has a title, due date and time, description, and a status of To do, In progress or Submitted. Two optional fields: where to submit it, and whether it's a group or individual piece of work.
@@ -48,7 +54,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - Light and dark mode.
 
 ### Daily Digest
-- Sent to the Student's email (the product owner uses Gmail, which they check daily).
+- Sent to the Student's email through Resend (see ADR-0005; the product owner uses Gmail, which they check daily).
 - Each day's digest lists Deadlines due in the next 2 days, plus Deadlines that were added or moved since the last digest. It's sent at 07:00 in the Student's time zone and skipped when there's nothing to list.
 - A Final Reminder email is sent 4 hours before each Deadline. If the Deadline moves, the reminder moves with it.
 - Reminders stop once an Assignment is marked Submitted.
@@ -57,7 +63,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - A private calendar link that contains the Student's Class Sessions (Session Changes applied) and Deadlines. The Student can reset the link if it leaks.
 
 ### WhatsApp Link and AI (see ADR-0002)
-- A live link on the Student's personal number. It reads only and never sends. Linking fails with a clear message if WhatsApp's linked-device limit is reached.
+- A live link on the Student's personal number. It reads only: it sends no messages, read receipts or presence. Linking fails with a clear message if WhatsApp's linked-device limit is reached.
 - Only explicitly linked groups are processed. Each Course Group is linked to one Course; the Class Group is linked to the Semester. Every other chat is dropped immediately.
 - The class uses one Class Group for the whole degree. Setting a new Semester as current moves the Class Group to it, so it's never left unlinked; messages already stored stay with the Semester they arrived in. In the Class Group, a practical message names the subject ("IAD practical report due 27th") and applies to that subject's Practical Course.
 - A Practical Course shares its theory Course's Course Group. In that group, a message about the practical ("tomorrow practical is cancelled", "come to mac lab") applies to the Practical Course; every other message applies to the theory Course. A practical message in a group whose Course has no Practical Course is flagged Possibly Missed.
@@ -69,7 +75,8 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - Before creating anything, the AI matches existing items, using Course codes, names and Nicknames, so a repeated announcement never makes a duplicate.
 - The AI applies changes directly as Auto Changes: Session Changes, Assignments, Exams and Semester extensions, always inside Courses the Student already has. It never creates Courses.
 - A message about an Unknown Course goes into the Activity Log with three actions: "Add course", "Nickname of…" and "Ignore". Adding or mapping applies the changes the messages asked for, as undoable Auto Changes. After Ignore, that name isn't logged again.
-- Every Auto Change appears in the Activity Log with the message that caused it and an Undo button. Undo is disabled once the Student has edited that item by hand. A later message still overrides a manual edit.
+- Auto Changes can be paused in Settings; messages keep queuing and are processed on Resume (see ADR-0003).
+- Every Auto Change appears in the Activity Log with the message that caused it and an Undo button. Undo is disabled once anything has changed that item since: the Student's own edit or a later message. A later message still overrides a manual edit.
 - Edited messages are processed again. A deleted message undoes its Auto Change, unless the Student has edited that item since.
 - Messages are sent to the AI in batches: one call per group every few minutes.
 - PDF and Office files posted in a linked Course Group are saved as Attachments on that Course's "From WhatsApp" Note. Duplicates (same file contents) are skipped. Files over 20 MB are listed in the Activity Log, not saved. Images and video are not saved.
@@ -89,7 +96,7 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - Attachments are kept in their own private storage, with 3 copies kept by Azure. A deleted Attachment can be recovered for 7 days, and the Attachments are downloaded each month along with the backups.
 - "Export my data" downloads, as JSON plus the files, everything the Student made or can see in the app: Semesters, Courses, Nicknames, classes, Session Changes, Assignments, Exams, Attendance, Notes, linked groups and the Activity Log. Internal records (stored WhatsApp messages, AI batches, the email log, version history) are left out.
 - "Delete my account" unlinks WhatsApp and deletes all data and files. Backups and deleted Attachments are erased within 7 days.
-- A health check on the worker sends an email alert if it stops.
+- Failures can't stay silent: healthchecks.io emails the Student when the worker's reminders or capture heartbeat, or the nightly backup, stops checking in, and the worker emails a direct alert for causes the Student must act on (WhatsApp logged out, the AI key refused or failing for an hour, too many changes in one batch, a reminder that couldn't be sent).
 
 ## Hosting and delivery
 
@@ -122,12 +129,6 @@ Other Students (friends) and sharing between Students, grades, push notification
 - Images and voice notes through NIM's vision and speech models.
 - Searching inside PDFs. Lecturer contact details and office hours.
 
-### Attendance
-- The university requires a minimum Attendance to sit exams. Each Course has a minimum, defaulting to 80%.
-- Each past Class Session occurrence is marked Present, Absent or Excused, with one tap from today's sessions on the dashboard.
-- One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
-- Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
-
 ## Open questions
 
-- Check NVIDIA NIM's current free limits and the email provider's free tier before the spec is finalised.
+- NIM's free limits, the chosen model and the email provider's free tier: see `docs/m0-report.md`.

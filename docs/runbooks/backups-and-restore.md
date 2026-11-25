@@ -120,4 +120,4 @@ It stays encrypted; only `backup.agekey` opens it.
 |---|---|---|---|
 | 2026-11-21 | Laptop rehearsal (production `compose.yaml` Postgres, fake Blob) | `ops/backup.sh` → encrypted upload → download → `age -d` → `pg_restore` into a fresh Postgres 16 | Restored all 16 tables, the user and the Semester; `health_signal(backup)` recorded |
 | _to do_ | The VM | Part 3 against a real nightly backup, before M1a ships | |
-| _to do_ | The VM | Part 1.5: stop the worker, note when the `reminders` email arrives | |
+| 2026-11-22 | The VM | Part 1.5: worker stopped 14:22 UTC, started 15:37 UTC | Both the `reminders` and `capture` emails arrived (M1a release check, #18) |
