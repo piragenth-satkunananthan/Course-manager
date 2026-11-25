@@ -1,5 +1,9 @@
-// The AI client (design file 64): NVIDIA NIM's OpenAI-compatible chat API over fetch, temperature 0, 60 s timeout.
+// The AI client (design file 64): NVIDIA NIM's OpenAI-compatible chat API over fetch, temperature 0, 180 s timeout.
 // 401/403 and a missing model (404) are fatal (the AI loop stops and alerts); 429, 5xx and timeouts are retryable.
+export const MAX_TOKENS = 4096;
+/** Long enough for a full MAX_TOKENS answer at 25 tokens/s (NIM writes about 63): a long answer must not time out every retry (U40). */
+export const NIM_TIMEOUT_MS = 180_000;
+
 export class AiFatalError extends Error {}
 export class AiRetryableError extends Error {}
 
@@ -17,8 +21,8 @@ export function nimClient(model = process.env.NIM_MODEL ?? "", apiKey = process.
         res = await fetch(`${base}/chat/completions`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ model, messages, temperature: 0, max_tokens: 4096, response_format: { type: "json_object" } }),
-          signal: AbortSignal.timeout(60_000),
+          body: JSON.stringify({ model, messages, temperature: 0, max_tokens: MAX_TOKENS, response_format: { type: "json_object" } }),
+          signal: AbortSignal.timeout(NIM_TIMEOUT_MS),
         });
       } catch (e) {
         throw new AiRetryableError(`NIM unreachable: ${(e as Error).message}`);
