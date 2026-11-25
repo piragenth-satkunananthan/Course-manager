@@ -550,10 +550,10 @@ That one rule covers pairing, group link changes and account deletion. The web a
 
   | Reason | What happens |
   |---|---|
-  | `loggedOut`, `badSession`, `forbidden` | Status becomes `logged_out`, the credentials are wiped, and an immediate alert is sent. |
+  | `loggedOut`, `forbidden` | Status becomes `logged_out`, the credentials are wiped, and an immediate alert is sent. |
   | `connectionReplaced` | Another instance is connected. This worker stops its WhatsApp loop and alerts; it does not reconnect. |
   | `multideviceMismatch` | Status becomes `error` and an alert is sent; no reconnect. |
-  | any other reason | Reconnect with backoff: 5 s, 30 s, 2 min, then every 5 min. |
+  | any other reason, including `badSession` (U39) | Reconnect with backoff: 5 s, 30 s, 2 min, then every 5 min. After an hour of failures the wa_socket health check alerts. |
 
 **AI processor details (§9)**
 
@@ -894,7 +894,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U8 | The M2 columns (`repeat_every_weeks`, `starts_week`, `session_group_id`) are added in M2, not now. |
 | U9 | Backups stay in Azure only, and the student downloads the latest one each month. This is an accepted risk. |
 | U10 | Unlinked chats are dropped inside Baileys, before decryption. The first messages of a group linked later may fail to decrypt until WhatsApp re-sends its keys; tested in M0. |
-| U11 | Until Session Groups exist (M2), messages for one group ("Group B lab cancelled") go to Possibly Missed and are not applied. |
+| U11 | Until Session Groups exist (M2), messages for one group ("Group B lab cancelled") go to Possibly Missed and are not applied. (Replaced in M2 by U26, from its ticket on.) |
 | U12 | Clock times with no am/pm: hours 1–7 mean pm, hours 8–11 mean am, and 12 means noon. Words such as "morning", "am", "pm" or "tonight" override this. |
 | U13 | (2026-11-22, product owner) A Practical Course has its own code but shares its theory Course's Course Group. The Student sets "Practical of" once on the Practical Course; at most one per theory Course. In that group, "practical" or a lab room ("come to mac lab") means the Practical Course. A Session Group name ("Group B lab cancelled") still follows U11. Settings suggests the Course whose code is in the group's name, as a "Link to SWT22022" button; nothing is linked until it's pressed. |
 | U14 | (2026-11-22, product owner) The class keeps one Class Group for the whole degree. Setting a Semester current moves the Class Group's link to it; stored messages keep their Semester, so D1 erasure is unchanged. Archiving a Semester still unlinks its groups. In the Class Group, "<subject> practical…" goes to that subject's Practical Course. |
@@ -904,6 +904,26 @@ The author decided each of these after the five-stage review. Each one has been 
 | U18 | (2026-11-22, product owner) In the week grid every class block is at least 40 px tall (the desktop tap target), so a class under 50 minutes looks a little longer than it is; its times are written on it. Keyboard use is Tab, Enter and Escape; no arrow keys inside the grid. |
 | U19 | (2026-11-22, product owner) The Deadlines lists group items as Overdue, This week (today until Sunday), Later, Date TBA (Exams with no date) and Earlier (submitted Assignments and Exams already held). Unticking Submitted restores the status the Assignment had before it was submitted (To do or In progress), from its history. |
 | U20 | (2026-11-23, product owner) Undo batch undoes a batch that changed one item twice: an older change still counts as unchanged when the only later versions are changes this run has just undone (and their Undos, or status changes). The Activity Log's "Needs attention" chip shows Possibly Missed messages, open Unknown Courses and problem events, not "change kept" notes. |
+| U21 | (2026-11-24, product owner, M2) Attendance: "you can miss N more" counts the whole Semester and assumes the Student attends every class left. A Course turns red only when its minimum can no longer be reached; the rate and the minimum are shown side by side. |
+| U22 | (2026-11-24, product owner, M2) Attendance catch-up: a "Mark all shown as Present" button on the To mark list, with a confirm; it respects the Course filter and every mark can still be changed. |
+| U23 | (2026-11-24, product owner, M2) The dashboard's Attendance section goes after Today: Overdue → Today → Attendance → Due soon → TBA Exams → Check these → Recent changes. A "Continue setup" banner sits above everything. |
+| U24 | (2026-11-24, product owner, M2) Extra sessions count toward the Attendance rate like any Lecture, Tutorial or Lab. |
+| U25 | (2026-11-24, product owner, M2) Teaching Weeks skip Break Weeks: the week after a 1-week break carries on the count, and every-2-weeks classes keep their rhythm. |
+| U26 | (2026-11-24, product owner, M2) A message for another Session Group that the Student has set up on that Course is ignored quietly: no change, no Possibly Missed, not in the digest. An unknown group name still goes to Possibly Missed. |
+| U27 | (2026-11-24, product owner, M2) Session Groups are stored in the session_group table, as reserved in §3. |
+| U28 | (2026-11-24, product owner, M2) Notes use a formatted-text (what-you-see) editor, Tiptap, stored as structured data the server checks. |
+| U29 | (2026-11-24, product owner, M2) Notes autosave 1.5 s after typing stops. On a conflict a banner offers "Keep mine" or "Load the other version". This replaces U7's reload-and-toast for Notes only. |
+| U30 | (2026-11-24, product owner, M2) Attachments go in a new storage account used only for them, separate from the backups. Creating it is a production action that needs its own go-ahead. |
+| U31 | (2026-11-24, product owner, M2) Attachments may be PDF, Word, Excel, PowerPoint, PNG or JPEG, up to 20 MB each. |
+| U32 | (2026-11-24, product owner, M2) Attachments are protected by Azure's 3 copies (LRS) and 7-day soft delete, and are downloaded each month with the backups (runbook step, encrypted with the backup age key). |
+| U33 | (2026-11-24, product owner, M2) Search covers every Semester; results from other Semesters show the Semester's name. |
+| U34 | (2026-11-24, product owner, M2) The setup wizard has five steps: Semester, Courses, Class Sessions (with Session Groups), open Deadlines, WhatsApp. |
+| U35 | (2026-11-24, product owner, M2) The setup wizard can be run again from Settings → Semesters for a new Semester. |
+| U36 | (2026-11-24, product owner, M2) Dark mode follows the device's light or dark setting, with no switch. |
+| U37 | (2026-11-24, product owner, M2) The Calendar Feed link is shown only once, when made or reset; only its hash is stored. |
+| U38 | (2026-11-24, product owner, M2) "Export my data" covers what the Student made or can see, not internal records. |
+| U39 | (2026-11-24, product owner, #65) `badSession` (code 500) reconnects with backoff instead of logging out. Baileys reports any unknown stream error from WhatsApp as 500, and treating it as a logout wiped the keys while the phone was still linked. Only `loggedOut` and `forbidden` wipe the keys. |
+| U40 | (2026-11-25, product owner, #67) A NIM call may take up to 180 s, not 60 s. NIM writes about 63 tokens/s, so a full 4,096-token answer takes about 65 s; with 60 s, a message that draws a long answer timed out on every hourly retry. 180 s covers a full answer at 25 tokens/s, and two calls still fit inside the 10-minute stale reset. |
 
 ## Risks and Mitigations
 
@@ -1686,7 +1706,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
       - The context it builds is described in §9.
     - **`prompt.ts`:** the §9 prompt rules and `PROMPT_VERSION`.
     - **`nim-client.ts`:**
-      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 60-second timeout, and guided JSON if M0 shows it is supported.
+      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 180-second timeout (U40), and guided JSON if M0 shows it is supported.
       - Records tokens in `ai_batch`.
       - 401 and 403 raise a fatal error that stops the AI loop; 429, 5xx and timeouts are retried.
     - **`validate.ts`:** schema, then rule 1, then rule 2 from §9. Returns `{valid[], dropped[{op, reason, messageIds}], overflow[]}`.

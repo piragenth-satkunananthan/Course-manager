@@ -6,8 +6,8 @@ export type DisconnectAction = { action: "logged_out" } | { action: "replaced" }
 export function disconnectAction(code: number | undefined, attempt: number): DisconnectAction {
   switch (code) {
     case 401: // loggedOut
-    case 500: // badSession
     case 403: // forbidden
+    // 500 (badSession) is not here: Baileys reports any unknown stream error as 500, so it reconnects (U39).
       return { action: "logged_out" };
     case 440: // connectionReplaced: another instance is connected
       return { action: "replaced" };

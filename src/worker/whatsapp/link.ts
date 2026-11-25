@@ -136,7 +136,7 @@ export class WhatsAppLink {
   private async closed(code: number | undefined, message: string | undefined) {
     const pairing = this.pairingPhone !== null;
     const action = disconnectAction(code, this.attempt);
-    log.warn("whatsapp closed", { code, action: action.action });
+    log.warn("whatsapp closed", { code, action: action.action, reason: message });
 
     // While pairing, restartRequired is the normal next step; any other close ends the attempt with a readable error.
     if (pairing && !(action.action === "reconnect" && action.delayMs === 0)) {
