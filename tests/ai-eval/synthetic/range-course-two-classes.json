@@ -1,0 +1,85 @@
+{
+  "id": "range-course-two-classes",
+  "category": "timetable time range",
+  "now": "2026-11-24T18:00:00+05:30",
+  "fixture": {
+    "semester": {
+      "id": "sem",
+      "startDate": "2026-08-03",
+      "endDate": "2026-12-18"
+    },
+    "linkedTo": {
+      "courseId": "c-ds"
+    },
+    "courses": [
+      {
+        "id": "c-ds",
+        "code": "CS2010",
+        "name": "Data Structures",
+        "nicknames": [
+          "ds"
+        ]
+      },
+      {
+        "id": "c-iad",
+        "code": "SWT22022",
+        "name": "Internet Application Development",
+        "nicknames": [
+          "iad"
+        ]
+      },
+      {
+        "id": "c-iadp",
+        "code": "SWT22032",
+        "name": "IAD Practical",
+        "nicknames": [],
+        "practicalOf": "c-iad"
+      }
+    ],
+    "occurrences": [
+      {
+        "classSessionId": "s-ds-lec2",
+        "courseId": "c-ds",
+        "kind": "lecture",
+        "date": "2026-11-25",
+        "start": "13:00",
+        "end": "15:00",
+        "location": "Hall A",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      },
+      {
+        "classSessionId": "s-ds-lab",
+        "courseId": "c-ds",
+        "kind": "lab",
+        "date": "2026-11-25",
+        "start": "15:00",
+        "end": "17:00",
+        "location": "Mac Lab",
+        "status": "normal",
+        "originalDate": null,
+        "sessionChangeId": null
+      }
+    ],
+    "assignments": [],
+    "exams": [],
+    "suppressions": [],
+    "recentMessages": []
+  },
+  "thread": [
+    {
+      "id": "m1",
+      "senderName": "Lecturer",
+      "sentAt": "2026-11-24T17:30:00+05:30",
+      "kind": "text",
+      "text": "tomorrow class 8.30 am to 10.30am"
+    }
+  ],
+  "expected": {
+    "operations": [],
+    "decisions": {
+      "m1": "possibly_missed"
+    }
+  }
+}
