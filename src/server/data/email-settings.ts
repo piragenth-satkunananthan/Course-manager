@@ -1,9 +1,9 @@
 // Settings → Email (U46, #82): emails go to a confirmed address. A new address gets a one-use link valid for 24 hours;
 // only a hash of its token is stored. Sign-in, password resets and the account-deleted email keep the login email.
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { user } from "@/server/db/schema";
+import { emailLog, user } from "@/server/db/schema";
 import { sendEmail } from "@/server/email/resend";
 import { confirmEmailEmail } from "@/server/email/templates/confirm-email";
 import { AppError, notFound } from "@/server/http/errors";
@@ -17,35 +17,40 @@ export async function getEmailSetting(studentId: string): Promise<EmailSetting> 
   return { address: u.notify ?? u.email, pending: u.pending, loginEmail: u.email };
 }
 
-// At most 3 confirmation emails an hour. shortcut: per web process (one web container).
-const sends = new Map<string, number[]>();
-
 export async function requestEmail(studentId: string, email: string): Promise<EmailSetting> {
   const current = await getEmailSetting(studentId);
-  if (email === current.loginEmail) return clearEmail(studentId);
-  const recent = (sends.get(studentId) ?? []).filter((t) => Date.now() - t < 3_600_000);
-  if (recent.length >= 3) throw new AppError("RATE_LIMITED", "Too many confirmation emails. Try again in an hour.");
-  sends.set(studentId, [...recent, Date.now()]);
+  if (email === current.loginEmail.toLowerCase()) return clearEmail(studentId);
+  if (email === current.address.toLowerCase()) return current; // already in use: nothing to confirm
+  // At most 3 confirmation emails an hour, counted in the email log so it holds across restarts.
+  const [sent] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(emailLog)
+    .where(and(eq(emailLog.studentId, studentId), eq(emailLog.kind, "email_confirm"), gt(emailLog.createdAt, new Date(Date.now() - 3_600_000))));
+  if ((sent?.n ?? 0) >= 3) throw new AppError("RATE_LIMITED", "Too many confirmation emails. Try again in an hour.");
   const token = randomBytes(32).toString("base64url");
   await db
     .update(user)
     .set({ notifyEmailPending: email, notifyEmailTokenHash: hash(token), notifyEmailExpiresAt: new Date(Date.now() + 86_400_000) })
     .where(eq(user.id, studentId));
-  const url = `${process.env.APP_ORIGIN ?? ""}/api/v1/email-confirm?token=${token}`;
-  await sendEmail(studentId, "email_confirm", { to: email, ...confirmEmailEmail(url) });
+  // The link opens a page with a Confirm button: mail scanners that open links can't confirm on their own.
+  const url = `${process.env.APP_ORIGIN ?? ""}/confirm-email?token=${token}`;
+  const res = await sendEmail(studentId, "email_confirm", { to: email, ...confirmEmailEmail(url) });
+  if (!res.ok) {
+    await db.update(user).set({ notifyEmailPending: null, notifyEmailTokenHash: null, notifyEmailExpiresAt: null }).where(eq(user.id, studentId));
+    throw new AppError("INTERNAL", "Couldn't send the confirmation email. Try again.");
+  }
   return getEmailSetting(studentId);
 }
 
 /** Opening the link: the pending address becomes the one emails go to. True when it was valid. */
 export async function confirmEmail(token: string, now = new Date()) {
-  const [row] = await db
+  // One statement: the link is used up and the address takes over together.
+  const rows = await db
     .update(user)
-    .set({ notifyEmailTokenHash: null, notifyEmailExpiresAt: null })
-    .where(and(eq(user.notifyEmailTokenHash, hash(token)), gt(user.notifyEmailExpiresAt, now)))
-    .returning({ id: user.id, pending: user.notifyEmailPending });
-  if (!row?.pending) return false;
-  await db.update(user).set({ notifyEmail: row.pending, notifyEmailPending: null }).where(eq(user.id, row.id));
-  return true;
+    .set({ notifyEmail: sql`${user.notifyEmailPending}`, notifyEmailPending: null, notifyEmailTokenHash: null, notifyEmailExpiresAt: null })
+    .where(and(eq(user.notifyEmailTokenHash, hash(token)), gt(user.notifyEmailExpiresAt, now), sql`${user.notifyEmailPending} is not null`))
+    .returning({ id: user.id });
+  return rows.length > 0;
 }
 
 export async function clearEmail(studentId: string): Promise<EmailSetting> {

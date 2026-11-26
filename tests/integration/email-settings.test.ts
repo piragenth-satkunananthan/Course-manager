@@ -39,8 +39,9 @@ beforeEach(async () => {
   studentId = me.id;
   a = client(me.cookie);
 });
-const tokenIn = (text: string) => new URL(text.match(/https?:\/\/\S+email-confirm\S*/)![0]).searchParams.get("token")!;
-const open = (token: string) => client("")(confirm.GET, "GET", "/email-confirm", { query: { token }, origin: null });
+const tokenIn = (text: string) => new URL(text.match(/https?:\/\/\S+confirm-email\S*/)![0]).searchParams.get("token")!;
+// Opening the link shows a Confirm page; its button POSTs the token (mail scanners only GET links).
+const open = (token: string) => client("")(confirm.POST, "POST", "/email-confirm", { body: { token } });
 
 describe("sending emails to another address (#82)", () => {
   it("is used only after its link is opened; until then emails go to the login email", async () => {
@@ -55,10 +56,10 @@ describe("sending emails to another address (#82)", () => {
     await runFinalReminders(new Date("2027-01-15T13:00:00+05:30"));
     expect(sent.at(-1)!.to).toEqual(["login@example.com"]);
 
-    expect((await open("not-the-token")).status).toBe(303);
+    expect((await open("not-the-token-at-all-0000000")).status).toBe(400);
     expect((await a(settings.GET, "GET", "/settings")).json.email).toMatchObject({ address: "login@example.com", pending: "inbox@example.com" });
 
-    expect((await open(tokenIn(sent[0]!.text))).status).toBe(303);
+    expect((await open(tokenIn(sent[0]!.text))).status).toBe(200);
     expect((await a(settings.GET, "GET", "/settings")).json.email).toEqual({ address: "inbox@example.com", pending: null, loginEmail: "login@example.com" });
     await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "Lab 2", dueDate: "2027-01-15", dueTime: "16:45" } });
     await runFinalReminders(new Date("2027-01-15T13:00:00+05:30"));
@@ -92,3 +93,13 @@ describe("turning alerts off (#82)", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("the confirmation email's limits (#82 review)", () => {
+  it("sends at most 3 an hour, counted in the database; the address already in use sends nothing", async () => {
+    for (const n of [1, 2, 3]) expect((await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: `x${n}@example.com` } })).status).toBe(200);
+    expect((await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: "x4@example.com" } })).status).toBe(429);
+    expect(sent).toHaveLength(3);
+    expect((await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: "LOGIN@example.com" } })).json).toMatchObject({ address: "login@example.com", pending: null });
+  });
+});
+

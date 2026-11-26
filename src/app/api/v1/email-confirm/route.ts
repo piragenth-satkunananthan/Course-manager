@@ -1,10 +1,11 @@
-// The link in the confirmation email (#82). It works signed out (it may be opened on another device): the token is
-// the proof. Always redirects to Settings, which says whether it worked.
+// Confirming an email address (#82): the Confirm button on /confirm-email posts the token from the link. It works
+// signed out (the link may be opened on another device): the token is the proof.
+import * as z from "zod";
 import { confirmEmail } from "@/server/data/email-settings";
 
-export const dynamic = "force-dynamic";
-export async function GET(req: Request) {
-  const token = new URL(req.url).searchParams.get("token") ?? "";
-  const ok = token.length >= 20 && token.length <= 100 && (await confirmEmail(token));
-  return new Response(null, { status: 303, headers: { location: `${process.env.APP_ORIGIN ?? ""}/settings?email=${ok ? "confirmed" : "link-invalid"}#email` } });
+const Body = z.object({ token: z.string().min(20).max(100) });
+export async function POST(req: Request) {
+  const body = Body.safeParse(await req.json().catch(() => null));
+  const ok = body.success && (await confirmEmail(body.data.token));
+  return Response.json(ok ? { confirmed: true } : { error: { code: "VALIDATION", message: "This link has expired or was already used. Ask for a new one in Settings." } }, { status: ok ? 200 : 400 });
 }

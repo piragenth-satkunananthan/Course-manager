@@ -2,8 +2,8 @@
 // Settings → Email and alerts (U46, #82): send emails to a confirmed address, and turn alert kinds off. Alerts turned
 // off still show in the Activity Log; the reminder-failure alert and healthchecks.io's emails can't be turned off.
 import { Mail } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,17 +19,11 @@ const ALERTS: Record<(typeof ALERT_GROUP_IDS)[number], string> = {
 
 export function EmailAlertsSection({ email, alertsOff }: { email: EmailSetting; alertsOff: string[] }) {
   const router = useRouter();
-  const params = useSearchParams();
   const fieldId = useId();
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [off, setOff] = useState(new Set(alertsOff));
-  const linkResult = params.get("email");
-  useEffect(() => {
-    if (linkResult === "confirmed") toast.success("Email confirmed. Reminders and alerts now go there.");
-    else if (linkResult === "link-invalid") toast.error("That confirmation link has expired or was already used. Ask for a new one.");
-  }, [linkResult]);
 
   async function request(e: React.FormEvent) {
     e.preventDefault();

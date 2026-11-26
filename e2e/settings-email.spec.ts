@@ -23,8 +23,11 @@ test("send emails to another address once its link is opened, go back, and turn 
   // Open the link from the email
   const emails = (await (await request.get(`http://127.0.0.1:${EMAIL_PORT}/emails`)).json()) as { to: string[]; text: string }[];
   const mail = emails.filter((e) => e.to.includes(address)).at(-1)!;
-  await page.goto(mail.text.match(/https?:\/\/\S+email-confirm\S*/)![0]);
-  await expect(page.getByText("Email confirmed. Reminders and alerts now go there.")).toBeVisible();
+  await page.goto(mail.text.match(/https?:\/\/\S+confirm-email\S*/)![0]);
+  await expect(page.getByRole("heading", { level: 1, name: "Confirm your email" })).toBeVisible(); // nothing changes until Confirm
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("status")).toContainText("Email confirmed.");
+  await page.goto("/settings#email");
   await expect(section).toContainText(`go to ${address}.`);
   expect(await auditLayout(page, info.project.name === "phone" ? 44 : 40)).toMatchObject({ sidewaysScroll: 0, small: [] });
   await page.screenshot({ path: `test-results/screenshots/${info.project.name}-settings-email.png`, fullPage: true });
