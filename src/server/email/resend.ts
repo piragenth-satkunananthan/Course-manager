@@ -9,7 +9,7 @@ import { log } from "@/server/log";
 export type Message = { to: string; subject: string; html: string; text: string };
 
 /** For one-off emails from the web app (password reset, account deletion in #17): log the row, then send. */
-export async function sendEmail(studentId: string, kind: "alert" | "password_reset" | "account_deleted", msg: Message) {
+export async function sendEmail(studentId: string, kind: "alert" | "password_reset" | "account_deleted" | "email_confirm", msg: Message) {
   const [row] = await db.insert(emailLog).values({ studentId, kind, subject: msg.subject, status: "sending", attempts: 1, attemptedAt: new Date() }).returning({ id: emailLog.id });
   return deliver(row!.id, msg);
 }

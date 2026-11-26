@@ -69,7 +69,7 @@ test("an empty account: empty states, layout, navigation and sign out", async ({
 
   // Sign out from Settings; protected pages are closed again.
   await page.goto("/settings");
-  await expect(page.getByText(EMPTY_STUDENT.email)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Account" }).getByText(EMPTY_STUDENT.email)).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/courses");

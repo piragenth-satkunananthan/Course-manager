@@ -99,6 +99,13 @@
       "when": 1795695886892,
       "tag": "0013_settings_ai_key",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795698726532,
+      "tag": "0014_settings_email_alerts",
+      "breakpoints": true
     }
   ]
 }

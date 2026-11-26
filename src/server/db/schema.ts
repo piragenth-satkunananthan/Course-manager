@@ -29,6 +29,12 @@ export const user = pgTable("user", {
   nimApiKeyEnc: bytea("nim_api_key_enc"),
   nimModel: text("nim_model"),
   nimModelPrevious: text("nim_model_previous"), // for "Switch back"
+  // Email and alerts (U46, #82): a confirmed address for emails, a pending one with its link, and alert kinds off.
+  notifyEmail: text("notify_email"),
+  notifyEmailPending: text("notify_email_pending"),
+  notifyEmailTokenHash: text("notify_email_token_hash"),
+  notifyEmailExpiresAt: timestamp("notify_email_expires_at", { withTimezone: true }),
+  alertsOff: text("alerts_off").array().default(sql`'{}'::text[]`).notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -281,7 +287,7 @@ export const sessionChange = pgTable(
 );
 
 // Email and health (§3, #9).
-export const emailKind = pgEnum("email_kind", ["digest", "final_reminder", "alert", "password_reset", "account_deleted", "second_reminder"]);
+export const emailKind = pgEnum("email_kind", ["digest", "final_reminder", "alert", "password_reset", "account_deleted", "second_reminder", "email_confirm"]);
 export const emailStatus = pgEnum("email_status", ["sending", "sent", "failed", "skipped"]);
 
 /** Written before every provider call; its id is the Idempotency-Key, so a resend never duplicates. */

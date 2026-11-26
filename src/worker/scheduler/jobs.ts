@@ -5,6 +5,7 @@ import { loadOpenDeadlines } from "@/server/data/assessments";
 import { db } from "@/server/db/client";
 import { autoChange, emailLog, entityVersion, inboxMessage, unknownCourseMention, user, waGroup } from "@/server/db/schema";
 import { type CheckTheseInput, isDigestWindow, selectDigest } from "@/server/domain/digest";
+import { recipient } from "@/server/domain/email-settings";
 import { remindersDue } from "@/server/domain/reminders";
 import { getNotify } from "@/server/data/settings";
 import { todayIn } from "@/server/domain/time";
@@ -15,7 +16,12 @@ import { raiseAlert } from "./alerts";
 import { claimAndSend, lastDigestAt, recordSkippedDigest } from "./claim";
 
 const origin = () => process.env.APP_ORIGIN ?? "";
-const students = () => db.select({ id: user.id, email: user.email, paused: user.autoChangesPaused }).from(user);
+// `email`: where this Student's emails go (a confirmed address, else the login email; #82).
+const students = () =>
+  db
+    .select({ id: user.id, login: user.email, notifyEmail: user.notifyEmail, paused: user.autoChangesPaused })
+    .from(user)
+    .then((rows) => rows.map((r) => ({ ...r, email: recipient({ email: r.login, notifyEmail: r.notifyEmail }) })));
 
 /** Check these (#14): risky changes not undone and Possibly Missed messages since the last digest, and every open Unknown Course. */
 async function loadCheckThese(studentId: string, since: Date, paused: boolean): Promise<CheckTheseInput> {

@@ -3,6 +3,7 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { activityEvent, user } from "@/server/db/schema";
+import { alertEmailed, recipient } from "@/server/domain/email-settings";
 import { sendEmail } from "@/server/email/resend";
 import { alertEmail } from "@/server/email/templates/alert";
 
@@ -57,9 +58,11 @@ export async function raiseAlert(studentId: string, cause: AlertCause, detail: R
     return row!.id;
   });
   if (!raised) return false;
-  const [s] = await db.select({ email: user.email }).from(user).where(eq(user.id, studentId));
+  const [s] = await db.select({ email: user.email, notifyEmail: user.notifyEmail, alertsOff: user.alertsOff }).from(user).where(eq(user.id, studentId));
+  // A kind the Student turned off stays in the Activity Log, unemailed (#82).
+  if (s && !alertEmailed(cause, s.alertsOff)) return true;
   const { title, whatToDo } = CAUSES[cause];
-  const res = s ? await sendEmail(studentId, "alert", { to: s.email, ...alertEmail(title, whatToDo, process.env.APP_ORIGIN ?? "") }) : null;
+  const res = s ? await sendEmail(studentId, "alert", { to: recipient(s), ...alertEmail(title, whatToDo, process.env.APP_ORIGIN ?? "") }) : null;
   // If the email didn't go out and a later tick will raise this cause again, forget it so that tick retries;
   // one-off causes (a logout) stay recorded in the Activity Log either way.
   if (res && !res.ok && RETRIED_BY_TICK.has(cause)) await db.delete(activityEvent).where(eq(activityEvent.id, raised));

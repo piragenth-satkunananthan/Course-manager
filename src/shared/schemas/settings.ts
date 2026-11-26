@@ -17,7 +17,15 @@ export const NotifySettings = z.object({
 });
 export type NotifySettings = z.infer<typeof NotifySettings>;
 
-export const Settings = z.object({ autoChangesPaused: z.boolean(), notify: NotifySettings });
+// Email and alerts (U46, #82)
+export const ALERT_GROUP_IDS = ["whatsapp", "ai", "overflow"] as const;
+export const EmailSetting = z.object({ address: z.string(), pending: z.string().nullable(), loginEmail: z.string() });
+export type EmailSetting = z.infer<typeof EmailSetting>;
+export const EmailUpdate = z.strictObject({ email: z.string({ error: "Enter an email address" }).trim().toLowerCase().pipe(z.email("Enter an email address like name@example.com")) });
+
+export const Settings = z.object({ autoChangesPaused: z.boolean(), notify: NotifySettings, alertsOff: z.array(z.enum(ALERT_GROUP_IDS)), email: EmailSetting });
 export type Settings = z.infer<typeof Settings>;
-export const SettingsUpdate = z.strictObject({ autoChangesPaused: z.boolean({ error: "Choose on or off" }), notify: NotifySettings.strict().partial() }).partial();
+export const SettingsUpdate = z
+  .strictObject({ autoChangesPaused: z.boolean({ error: "Choose on or off" }), notify: NotifySettings.strict().partial(), alertsOff: z.array(z.enum(ALERT_GROUP_IDS, { error: "Choose from the listed alerts" })) })
+  .partial();
 export type SettingsUpdate = z.infer<typeof SettingsUpdate>;

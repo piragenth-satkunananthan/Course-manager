@@ -1,5 +1,6 @@
 import { AccountSection } from "@/components/app/account-section";
 import { AiSection } from "@/components/app/ai-section";
+import { EmailAlertsSection } from "@/components/app/email-alerts-section";
 import { getAiStatus } from "@/server/data/ai-status";
 import { getAiKeyView } from "@/server/data/nim";
 import { NotificationsSection } from "@/components/app/notifications-section";
@@ -12,10 +13,11 @@ import { getSettings } from "@/server/data/settings";
 import { requireStudentEmail, requireStudentId } from "@/server/session";
 
 // Settings (docs/designs/settings.md): a section list (a side list on desktop, a jump list on phones), then
-// Notifications (#79), AI (#80), Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (#17).
+// Notifications (#79), AI (#80, #81), Email and alerts (#82), Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (#17).
 const SECTIONS = [
   { id: "notifications", label: "Notifications" },
   { id: "ai", label: "AI" },
+  { id: "email", label: "Email and alerts" },
   { id: "semesters", label: "Semesters" },
   { id: "whatsapp", label: "WhatsApp" },
   { id: "account", label: "Account" },
@@ -46,6 +48,7 @@ export default async function SettingsPage() {
         <div className="min-w-0 space-y-6">
         <NotificationsSection initial={settings.notify} />
         <AiSection status={ai} keyView={aiKey} />
+        <EmailAlertsSection email={settings.email} alertsOff={settings.alertsOff} />
         <SemesterManager semesters={semesters} />
         <WhatsAppSection
           initial={whatsapp}
