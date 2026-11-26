@@ -1,4 +1,5 @@
 import { AccountSection } from "@/components/app/account-section";
+import { NotificationsSection } from "@/components/app/notifications-section";
 import { SemesterManager } from "@/components/app/semester-manager";
 import { WhatsAppSection } from "@/components/app/whatsapp-section";
 import { listCourses } from "@/server/data/courses";
@@ -7,7 +8,15 @@ import { listSemesters } from "@/server/data/semesters";
 import { getSettings } from "@/server/data/settings";
 import { requireStudentEmail, requireStudentId } from "@/server/session";
 
-// Semesters, WhatsApp (with the Auto Changes switch, #15), Account (password, sign out) and the danger zone (#17).
+// Settings (docs/designs/settings.md): a section list (a side list on desktop, a jump list on phones), then
+// Notifications (#79), Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (#17).
+const SECTIONS = [
+  { id: "notifications", label: "Notifications" },
+  { id: "semesters", label: "Semesters" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "account", label: "Account" },
+];
+
 export default async function SettingsPage() {
   const studentId = await requireStudentId();
   const [semesters, email, whatsapp, settings] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId)]);
@@ -18,7 +27,20 @@ export default async function SettingsPage() {
     <>
       <h1 className="text-2xl font-bold md:text-display">Settings</h1>
       <p className="mt-1 text-sm text-muted-foreground">Times are in Sri Lanka time (Asia/Colombo).</p>
-      <div className="mt-6 space-y-6">
+      <div className="mt-6 md:grid md:grid-cols-[12rem_1fr] md:gap-8">
+        <nav aria-label="Settings sections" className="mb-6 md:sticky md:top-4 md:mb-0 md:self-start">
+          <ul className="flex flex-wrap gap-2 md:flex-col md:gap-1">
+            {SECTIONS.map((x) => (
+              <li key={x.id}>
+                <a href={`#${x.id}`} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:border max-md:border-input md:min-h-10 md:w-full">
+                  {x.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div className="min-w-0 space-y-6">
+        <NotificationsSection initial={settings.notify} />
         <SemesterManager semesters={semesters} />
         <WhatsAppSection
           initial={whatsapp}
@@ -27,6 +49,7 @@ export default async function SettingsPage() {
           courses={courses.map((c) => ({ id: c.id, label: `${c.code} ${c.name}`, code: c.practicalOfCourseId ? undefined : c.code }))}
         />
         <AccountSection email={email} />
+        </div>
       </div>
     </>
   );

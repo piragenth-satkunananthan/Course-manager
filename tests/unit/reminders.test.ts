@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isDigestWindow, selectDigest } from "@/server/domain/digest";
-import { dueForFinalReminder } from "@/server/domain/reminders";
+import { dueForFinalReminder, notifyProblems, type NotifyPrefs, remindersDue } from "@/server/domain/reminders";
 
 const NOW = new Date("2026-11-20T04:30:00Z"); // Fri 20 Nov, 10:00 Colombo
 const NOTHING = { riskyChanges: [], possiblyMissed: [], unknownCourses: [], paused: false };
@@ -52,5 +52,54 @@ describe("selectDigest", () => {
       "Auto Changes are paused: new announcements aren't applied",
     ]);
     expect(selectDigest([], new Set(), "2026-11-20", { ...NOTHING, paused: true })).not.toBeNull();
+  });
+});
+
+// #79 (U44): the Student's notification settings. Colombo = UTC+5:30.
+describe("notification settings", () => {
+  const prefs: NotifyPrefs = { digestOn: true, digestTime: "07:00", digestDays: 2, reminderHours: 4, secondReminderHours: null, quietStart: null, quietEnd: null };
+  const at = (colombo: string) => new Date(Date.parse(`2026-11-20T${colombo}:00+05:30`));
+
+  it("sends the digest from its chosen time for two hours, never when it's off", () => {
+    const p = { ...prefs, digestTime: "09:30" };
+    expect([at("09:29"), at("09:30"), at("11:29"), at("11:30")].map((n) => isDigestWindow(n, p))).toEqual([false, true, true, false]);
+    expect(isDigestWindow(at("09:30"), { ...p, digestOn: false })).toBe(false);
+  });
+
+  it("lists the chosen number of days in Due soon", () => {
+    const open = [d("today", null, "2026-11-20"), d("in-4", null, "2026-11-24"), d("in-5", null, "2026-11-25")];
+    expect(selectDigest(open, new Set(), "2026-11-20", NOTHING, 4)!.dueSoon.map((x) => x.id)).toEqual(["today", "in-4"]);
+  });
+
+  it("uses the chosen lead time for the Final Reminder", () => {
+    const deadlines = [d("in-1h", "2026-11-20T05:30:00Z"), d("in-2h", "2026-11-20T06:30:00Z")];
+    expect(dueForFinalReminder(deadlines, NOW, { ...prefs, reminderHours: 1 }).map((x) => x.id)).toEqual(["in-1h"]);
+  });
+
+  const kinds = (deadlines: ReturnType<typeof d>[], now: Date, p: NotifyPrefs) => remindersDue(deadlines, now, p).map((r) => `${r.item.id}:${r.kind}`);
+
+  it("sends a second reminder once, from its lead time until the Final Reminder takes over", () => {
+    const p = { ...prefs, secondReminderHours: 24 };
+    const tomorrowNoon = d("report", "2026-11-21T06:30:00Z"); // Sat 21 Nov, 12:00 Colombo
+    expect(kinds([tomorrowNoon], at("11:59"), p)).toEqual([]);
+    expect(kinds([tomorrowNoon], at("12:00"), p)).toEqual(["report:second"]);
+    expect(kinds([tomorrowNoon], new Date("2026-11-21T02:30:00Z"), p)).toEqual(["report:final"]); // 08:00 on the day
+  });
+
+  it("brings a reminder that would fall in quiet hours forward to just before they start", () => {
+    const p = { ...prefs, quietStart: "22:00", quietEnd: "06:00" };
+    const early = d("early", "2026-11-20T21:30:00Z"); // Sat 21 Nov, 03:00 Colombo: due 4 h earlier is 23:00, inside quiet hours
+    expect(kinds([early], at("21:59"), p)).toEqual([]);
+    expect(kinds([early], at("22:00"), p)).toEqual(["early:final"]); // as quiet hours start, not at 23:00
+    expect(kinds([early], at("18:00"), { ...p, quietStart: null })).toEqual([]); // with no quiet hours, still 23:00
+  });
+
+  it("refuses a digest time inside quiet hours, half-set quiet hours, and a second reminder no earlier than the Final Reminder", () => {
+    expect(notifyProblems(prefs)).toEqual({});
+    expect(notifyProblems({ ...prefs, quietStart: "06:00", quietEnd: "08:00" })).toEqual({ digestTime: "The digest can't be sent during quiet hours" });
+    expect(notifyProblems({ ...prefs, digestOn: false, quietStart: "06:00", quietEnd: "08:00" })).toEqual({});
+    expect(notifyProblems({ ...prefs, quietStart: "22:00" })).toEqual({ quietEnd: "Choose when quiet hours end" });
+    expect(notifyProblems({ ...prefs, quietStart: "22:00", quietEnd: "22:00" })).toEqual({ quietEnd: "Quiet hours must end at a different time" });
+    expect(notifyProblems({ ...prefs, reminderHours: 24, secondReminderHours: 24 })).toEqual({ secondReminderHours: "The second reminder must come before the Final Reminder" });
   });
 });

@@ -8,6 +8,7 @@ import * as assignments from "@/app/api/v1/assignments/route";
 import * as courses from "@/app/api/v1/courses/route";
 import * as exams from "@/app/api/v1/exams/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import * as settings from "@/app/api/v1/settings/route";
 import { encrypt, loadKey } from "@/server/crypto";
 import { pool } from "@/server/db/client";
 import { runDigest, runFinalReminders } from "../../src/worker/scheduler/jobs";
@@ -210,4 +211,54 @@ describe("the worker process", () => {
     await pool.query("select pg_terminate_backend(pid) from pg_locks where locktype = 'advisory' and pid <> pg_backend_pid()");
     expect(await firstExit).toBe(1);
   }, 60_000);
+});
+
+describe("notification settings (#79, U44)", () => {
+  const save = (body: object) => a(settings.PATCH, "PATCH", "/settings", { body });
+
+  it("start at today's behaviour, save, and refuse bad or clashing values", async () => {
+    expect((await a(settings.GET, "GET", "/settings")).json).toEqual({
+      autoChangesPaused: false,
+      notify: { digestOn: true, digestTime: "07:00", digestDays: 2, reminderHours: 4, secondReminderHours: null, quietStart: null, quietEnd: null },
+    });
+    expect((await save({ notify: { digestTime: "06:30", reminderHours: 8 } })).json.notify).toMatchObject({ digestTime: "06:30", reminderHours: 8, digestDays: 2 });
+    expect((await save({ notify: { reminderHours: 3 } })).status).toBe(400);
+    expect((await save({ notify: { digestTime: "04:00" } })).status).toBe(400); // before 05:00
+    const clash = await save({ notify: { quietStart: "06:00", quietEnd: "08:00" } });
+    expect(clash).toMatchObject({ status: 400, json: { error: { fieldErrors: { digestTime: "The digest can't be sent during quiet hours" } } } });
+    expect((await a(settings.GET, "GET", "/settings")).json.notify).toMatchObject({ quietStart: null, digestTime: "06:30" }); // nothing saved
+  });
+
+  it("send the digest at the chosen time with the chosen range, and not at all when it's off", async () => {
+    await newAssignment({ title: "In 4 days", dueDate: "2027-01-19" });
+    await save({ notify: { digestTime: "09:30", digestDays: 4 } });
+    await runDigest(at("07:00"));
+    expect(sent).toEqual([]);
+    await runDigest(at("09:30"));
+    expect(sent.map((m) => m.text)).toEqual([expect.stringContaining("In 4 days")]);
+    await save({ notify: { digestOn: false } });
+    await runDigest(at("09:30", "2027-01-16"));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("send the Final Reminder at the chosen lead time and a second reminder once", async () => {
+    await save({ notify: { reminderHours: 1, secondReminderHours: 24 } });
+    await newAssignment({ dueDate: "2027-01-16", dueTime: "12:00" });
+    await runFinalReminders(at("12:00"));
+    await runFinalReminders(at("12:05"));
+    await runFinalReminders(at("10:30", "2027-01-16"));
+    expect(sent.map((m) => m.subject)).toEqual(["Due in 1 day: Lab 4 report (CS2010)"]);
+    await runFinalReminders(at("11:00", "2027-01-16"));
+    await runFinalReminders(at("11:01", "2027-01-16"));
+    expect(sent.map((m) => m.subject)).toEqual(["Due in 1 day: Lab 4 report (CS2010)", "Due in 1 hour: Lab 4 report (CS2010)"]);
+  });
+
+  it("bring a reminder that would fall in quiet hours forward to their start", async () => {
+    await save({ notify: { quietStart: "22:00", quietEnd: "06:00" } });
+    await newAssignment({ dueDate: "2027-01-16", dueTime: "03:00" }); // 4 h before is 23:00, inside quiet hours
+    await runFinalReminders(at("21:59"));
+    expect(sent).toEqual([]);
+    await runFinalReminders(at("22:00"));
+    expect(sent.map((m) => m.subject)).toEqual(["Due in 5 hours: Lab 4 report (CS2010)"]);
+  });
 });

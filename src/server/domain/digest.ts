@@ -1,11 +1,9 @@
 // The Daily Digest (design file 26): Due soon, Added or moved, and Check these (#14).
-import { addDays, instantToLocal } from "./time";
+import { DEFAULT_NOTIFY, isDigestDue } from "./reminders";
+import { addDays } from "./time";
 
-/** 07:00–08:59 Asia/Colombo. */
-export const isDigestWindow = (now: Date) => {
-  const { time } = instantToLocal(now);
-  return time >= "07:00" && time < "09:00";
-};
+/** Two hours from the chosen digest time (07:00–08:59 by default), Asia/Colombo; never when the digest is off. */
+export const isDigestWindow = isDigestDue;
 
 export type CheckTheseInput = {
   riskyChanges: { summary: string; risk: "normal" | "moved_later" | "cancelled" }[];
@@ -26,9 +24,9 @@ function checkThese(c: CheckTheseInput) {
   ];
 }
 
-/** Due soon is today, tomorrow and the day after; Added or moved is what changed since the last digest. Null when there's nothing to say. */
-export function selectDigest<T extends { id: string; localDate: string | null }>(open: T[], changedIds: ReadonlySet<string>, today: string, check: CheckTheseInput) {
-  const last = addDays(today, 2);
+/** Due soon is today and the chosen days after it (2 by default); Added or moved is what changed since the last digest. Null when there's nothing to say. */
+export function selectDigest<T extends { id: string; localDate: string | null }>(open: T[], changedIds: ReadonlySet<string>, today: string, check: CheckTheseInput, days = DEFAULT_NOTIFY.digestDays) {
+  const last = addDays(today, days);
   const dueSoon = open.filter((d) => d.localDate !== null && d.localDate >= today && d.localDate <= last);
   const addedOrMoved = open.filter((d) => changedIds.has(d.id));
   const lines = checkThese(check);

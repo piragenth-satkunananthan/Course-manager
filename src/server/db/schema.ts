@@ -15,6 +15,14 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   autoChangesPaused: boolean("auto_changes_paused").default(false).notNull(),
+  // Notification settings (U44, #79): defaults are the original fixed behaviour.
+  digestOn: boolean("digest_on").default(true).notNull(),
+  digestTime: text("digest_time").default("07:00").notNull(),
+  digestDays: integer("digest_days").default(2).notNull(),
+  reminderHours: integer("reminder_hours").default(4).notNull(),
+  secondReminderHours: integer("second_reminder_hours"),
+  quietStart: text("quiet_start"),
+  quietEnd: text("quiet_end"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -267,7 +275,7 @@ export const sessionChange = pgTable(
 );
 
 // Email and health (§3, #9).
-export const emailKind = pgEnum("email_kind", ["digest", "final_reminder", "alert", "password_reset", "account_deleted"]);
+export const emailKind = pgEnum("email_kind", ["digest", "final_reminder", "alert", "password_reset", "account_deleted", "second_reminder"]);
 export const emailStatus = pgEnum("email_status", ["sending", "sent", "failed", "skipped"]);
 
 /** Written before every provider call; its id is the Idempotency-Key, so a resend never duplicates. */
@@ -293,6 +301,9 @@ export const emailLog = pgTable(
   (t) => [
     uniqueIndex("email_log_one_digest_per_day").on(t.studentId, t.digestDate).where(sql`${t.kind} = 'digest'`),
     uniqueIndex("email_log_one_final_reminder").on(t.entityType, t.entityId, t.dueAt).where(sql`${t.kind} = 'final_reminder'`),
+    // One reminder of each kind per Deadline and due instant. No kind in the condition: Drizzle applies migrations in one
+    // transaction, where the new second_reminder value can't be used yet.
+    uniqueIndex("email_log_one_reminder_per_kind").on(t.kind, t.entityType, t.entityId, t.dueAt).where(sql`${t.dueAt} is not null`),
   ],
 );
 
