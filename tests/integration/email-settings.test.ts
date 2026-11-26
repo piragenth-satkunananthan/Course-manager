@@ -101,5 +101,14 @@ describe("the confirmation email's limits (#82 review)", () => {
     expect(sent).toHaveLength(3);
     expect((await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: "LOGIN@example.com" } })).json).toMatchObject({ address: "login@example.com", pending: null });
   });
+
+  it("two requests at the same moment can't both pass the limit, and asking for the address in use cancels an unopened link", async () => {
+    for (const n of [1, 2]) await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: `y${n}@example.com` } });
+    const both = await Promise.all([3, 4].map((n) => a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: `y${n}@example.com` } })));
+    expect(both.map((r) => r.status).sort()).toEqual([200, 429]);
+    const pendingToken = tokenIn(sent.at(-1)!.text);
+    await a(emailSetting.PUT, "PUT", "/settings/email", { body: { email: "login@example.com" } });
+    expect((await open(pendingToken)).status).toBe(400);
+  });
 });
 
