@@ -35,6 +35,9 @@ export const user = pgTable("user", {
   notifyEmailTokenHash: text("notify_email_token_hash"),
   notifyEmailExpiresAt: timestamp("notify_email_expires_at", { withTimezone: true }),
   alertsOff: text("alerts_off").array().default(sql`'{}'::text[]`).notNull(),
+  // Dashboard (U47, #84): Due soon's range, and the sections' order and hidden ones ({ order, hidden }).
+  dueSoonDays: integer("due_soon_days").default(14).notNull(),
+  dashboardLayout: jsonb("dashboard_layout").$type<{ order: string[]; hidden: string[] }>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

@@ -21,5 +21,7 @@ export const Dashboard = z.object({
   highlightedChanges: z.array(AutoChangeItem),
   recentAutoChanges: z.array(AutoChangeItem),
   banners: z.array(Banner),
+  dueSoonDays: z.number(), // #84: how many days Due soon covers
+  sections: z.array(z.enum(["overdue", "today", "dueSoon", "tbaExams", "checkThese", "recent"])), // #84: shown, in order
 });
 export type Dashboard = z.infer<typeof Dashboard>;

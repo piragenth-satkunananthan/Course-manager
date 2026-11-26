@@ -23,9 +23,24 @@ export const EmailSetting = z.object({ address: z.string(), pending: z.string().
 export type EmailSetting = z.infer<typeof EmailSetting>;
 export const EmailUpdate = z.strictObject({ email: z.string({ error: "Enter an email address" }).trim().toLowerCase().pipe(z.email("Enter an email address like name@example.com")) });
 
-export const Settings = z.object({ autoChangesPaused: z.boolean(), notify: NotifySettings, alertsOff: z.array(z.enum(ALERT_GROUP_IDS)), email: EmailSetting });
+// Dashboard (U47, #84)
+export const DASHBOARD_SECTION_IDS = ["overdue", "today", "dueSoon", "tbaExams", "checkThese", "recent"] as const;
+const SectionId = z.enum(DASHBOARD_SECTION_IDS, { error: "Choose from the listed sections" });
+export const DashboardSettings = z.object({
+  dueSoonDays: z.int({ error: "Choose 3 to 30 days" }).min(3, "Choose 3 to 30 days").max(30, "Choose 3 to 30 days"),
+  order: z.array(SectionId).max(DASHBOARD_SECTION_IDS.length),
+  hidden: z.array(SectionId).max(DASHBOARD_SECTION_IDS.length),
+});
+export type DashboardSettings = z.infer<typeof DashboardSettings>;
+
+export const Settings = z.object({ autoChangesPaused: z.boolean(), notify: NotifySettings, alertsOff: z.array(z.enum(ALERT_GROUP_IDS)), email: EmailSetting, dashboard: DashboardSettings });
 export type Settings = z.infer<typeof Settings>;
 export const SettingsUpdate = z
-  .strictObject({ autoChangesPaused: z.boolean({ error: "Choose on or off" }), notify: NotifySettings.strict().partial(), alertsOff: z.array(z.enum(ALERT_GROUP_IDS, { error: "Choose from the listed alerts" })) })
+  .strictObject({
+    autoChangesPaused: z.boolean({ error: "Choose on or off" }),
+    notify: NotifySettings.strict().partial(),
+    alertsOff: z.array(z.enum(ALERT_GROUP_IDS, { error: "Choose from the listed alerts" })),
+    dashboard: DashboardSettings.strict().partial(),
+  })
   .partial();
 export type SettingsUpdate = z.infer<typeof SettingsUpdate>;
