@@ -48,3 +48,4 @@ export async function checkModel(model = process.env.NIM_MODEL, apiKey = process
   const ids = ((await res.json()) as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [];
   if (!ids.includes(model)) throw new AiFatalError(`NIM_MODEL ${model} isn't listed by NIM`);
 }
+

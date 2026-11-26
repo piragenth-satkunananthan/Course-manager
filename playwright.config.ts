@@ -12,6 +12,10 @@ export const E2E_ENV = {
   DATA_ENCRYPTION_KEY: Buffer.from("e2e-key-e2e-key-e2e-key-e2e-key!").toString("base64"),
   EMAIL_API_BASE_URL: `http://127.0.0.1:${EMAIL_PORT}`,
   RESEND_API_KEY: "re_e2e",
+  // "Test AI now" (#80) talks to the same fake server, never to NVIDIA.
+  NIM_BASE_URL: `http://127.0.0.1:${EMAIL_PORT}`,
+  NIM_API_KEY: "nim_e2e",
+  NIM_MODEL: "nvidia/e2e-model",
 };
 
 // Runs against the production build (`npm run build` first).

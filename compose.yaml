@@ -41,6 +41,10 @@ services:
       # The web app sends password-reset links and the account-deleted confirmation itself (#17).
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Course-manager <onboarding@resend.dev>}
+      # Settings → AI: "Test AI now" calls NIM from the web app (#80).
+      NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NIM_API_KEY: ${NIM_API_KEY:-}
+      NIM_MODEL: ${NIM_MODEL:-}
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
