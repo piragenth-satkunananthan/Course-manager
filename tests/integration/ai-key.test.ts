@@ -17,8 +17,8 @@ beforeAll(async () => {
     const key = String(req.headers.authorization ?? "").replace("Bearer ", "");
     seenKeys.push(key);
     req.resume().on("end", () => {
-      if (key !== GOOD && key !== "server-key") return void res.writeHead(401).end("{}");
-      if (req.url === "/models") return void res.end(JSON.stringify({ data: [{ id: "nvidia/server-model" }, { id: "nvidia/other-model" }] }));
+      if (key !== GOOD && key !== "server-key" && !key.includes("limited")) return void res.writeHead(401).end("{}");
+      if (req.url === "/models") return void res.end(JSON.stringify({ data: key.includes("limited") ? [{ id: "nvidia/server-model" }] : [{ id: "nvidia/server-model" }, { id: "nvidia/other-model" }] }));
       res.end(JSON.stringify({ choices: [{ message: { content: "OK" } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }));
     });
   });
@@ -60,7 +60,7 @@ describe("the AI key (#81)", () => {
 
   it("Use the server's key removes the saved one", async () => {
     await save(GOOD);
-    expect((await a(aiKey.DELETE, "DELETE", "/settings/ai-key")).json).toMatchObject({ keySource: "server", keyMasked: "••••-key" });
+    expect((await a(aiKey.DELETE, "DELETE", "/settings/ai-key")).json).toMatchObject({ keySource: "server", keyMasked: null }); // the server's key is never shown, even masked
     expect((await getNimConfig(studentId)).apiKey).toBe("server-key");
   });
 });
@@ -79,3 +79,30 @@ describe("the AI model (#81)", () => {
     expect((await a(aiModel.PUT, "PUT", "/settings/ai-model", { body: { model: "nvidia/made-up" } })).status).toBe(400);
   });
 });
+
+describe("the AI key's safety rails (#81 review)", () => {
+  it("refuses characters no key has, before calling NVIDIA", async () => {
+    seenKeys = [];
+    expect(await save("nvapi key with spaces")).toMatchObject({ status: 400, json: { error: { fieldErrors: { apiKey: "That doesn't look like an NVIDIA key" } } } });
+    expect(seenKeys).toEqual([]);
+  });
+
+  it("allows at most 5 key or model saves a minute", async () => {
+    for (let i = 0; i < 5; i++) expect((await save("nvapi-wrong")).status).toBe(400);
+    expect((await save(GOOD)).status).toBe(429);
+  });
+
+  it("a new key that can't use the chosen model is saved, and the model goes back to the server's (product owner)", async () => {
+    await a(aiModel.PUT, "PUT", "/settings/ai-model", { body: { model: "nvidia/other-model" } });
+    const limited = "nvapi-limited-1111"; // the fake NIM lists only the server's model for this key
+    const res = await save(limited);
+    expect(res).toMatchObject({ status: 200, json: { keySource: "saved", keyMasked: "••••1111", model: "nvidia/server-model", modelReset: "nvidia/other-model" } });
+  });
+
+  it("a saved key that can't be decrypted falls back to the server's key instead of breaking Settings", async () => {
+    await save(GOOD);
+    await pool.query(`update "user" set nim_api_key_enc = '\\x00' where id = $1`, [studentId]);
+    expect(await getNimConfig(studentId)).toMatchObject({ apiKey: "server-key", keySource: "server" });
+  });
+});
+

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDate } from "@/lib/format";
 import { instantToLocal } from "@/server/domain/time";
-import { type AiKeyView, AiModels, type AiState, type AiStatus, AiTestResult } from "@/shared/schemas/ai";
+import { AiKeySaved, type AiKeyView, AiModels, type AiState, type AiStatus, AiTestResult } from "@/shared/schemas/ai";
 
 const when = (iso: string) => {
   const { date, time } = instantToLocal(new Date(iso));
@@ -89,6 +89,7 @@ function KeyAndModel({ keyView, onModelChanged }: { keyView: AiKeyView; onModelC
   const [busy, setBusy] = useState(false);
   const [models, setModels] = useState<string[] | null>(null);
   const [model, setModel] = useState(keyView.model ?? "");
+  const [modelError, setModelError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     void apiFetch("/ai/models", { schema: AiModels }).then((r) => live && setModels(r.ok ? r.data.models : []));
@@ -101,27 +102,30 @@ function KeyAndModel({ keyView, onModelChanged }: { keyView: AiKeyView; onModelC
     e.preventDefault();
     setBusy(true);
     setKeyError(null);
-    const res = await apiFetch("/settings/ai-key", { method: "PUT", body: { apiKey: key } });
+    const res = await apiFetch("/settings/ai-key", { method: "PUT", body: { apiKey: key }, schema: AiKeySaved });
     setBusy(false);
     if (!res.ok) return setKeyError(res.error.fieldErrors?.apiKey ?? res.error.message);
     setKey("");
-    toast.success("Key saved. The AI uses it from its next batch.");
+    if (res.data.modelReset) {
+      setModel(res.data.model ?? "");
+      toast.success(`Key saved. It can't use ${res.data.modelReset}, so the AI went back to the server's model.`);
+    } else toast.success("Key saved. The AI uses it from its next batch.");
     router.refresh();
   }
   async function useServerKey() {
     setBusy(true);
     const res = await apiFetch("/settings/ai-key", { method: "DELETE" });
     setBusy(false);
-    if (res.ok) {
-      toast.success("Using the server's key");
-      router.refresh();
-    }
+    if (!res.ok) return toast.error(res.error.message);
+    toast.success("Using the server's key");
+    router.refresh();
   }
   async function chooseModel(next: string) {
     setBusy(true);
+    setModelError(null);
     const res = await apiFetch("/settings/ai-model", { method: "PUT", body: { model: next } });
     setBusy(false);
-    if (!res.ok) return toast.error(res.error.fieldErrors?.model ?? res.error.message);
+    if (!res.ok) return setModelError(res.error.fieldErrors?.model ?? res.error.message);
     setModel(next);
     toast.success(`Model changed to ${next}`);
     router.refresh();
@@ -160,12 +164,11 @@ function KeyAndModel({ keyView, onModelChanged }: { keyView: AiKeyView; onModelC
       </form>
 
       <div className="space-y-2">
-        <h3 className="font-semibold">Model</h3>
-        <label htmlFor={modelId} className="block text-sm font-medium">
+        <label htmlFor={modelId} className="block font-semibold">
           Model
         </label>
         <Select value={model} onValueChange={chooseModel} disabled={busy || !models?.length}>
-          <SelectTrigger id={modelId} className="w-full" aria-describedby={`${modelId}-help`}>
+          <SelectTrigger id={modelId} className="w-full" aria-invalid={!!modelError} aria-describedby={modelError ? `${modelId}-error` : `${modelId}-help`}>
             <SelectValue placeholder={models === null ? "Loading models…" : "No models available"} />
           </SelectTrigger>
           <SelectContent>
@@ -176,6 +179,11 @@ function KeyAndModel({ keyView, onModelChanged }: { keyView: AiKeyView; onModelC
             ))}
           </SelectContent>
         </Select>
+        {modelError && (
+          <p id={`${modelId}-error`} role="alert" className="text-sm text-destructive">
+            {modelError}
+          </p>
+        )}
         <p id={`${modelId}-help`} className="text-sm text-muted-foreground">
           The AI&apos;s test messages were checked on the server&apos;s model. Another model may read your messages differently: Test AI now runs when you change it, and you can switch back.
         </p>

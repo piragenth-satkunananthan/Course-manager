@@ -10,7 +10,7 @@ test("paste a key (a refused one isn't saved), see it masked, change the model a
   await page.goto("/settings#ai");
   const ai = page.getByRole("region", { name: "AI" });
   await expect(ai.getByText("The server's key")).toBeVisible();
-  await expect(ai.getByText("••••_e2e")).toBeVisible();
+  await expect(ai.getByText(/••••/)).toHaveCount(0); // nothing of the server's key is shown
 
   // A refused key: the field says so and nothing changes
   const field = ai.getByLabel("New NVIDIA API key");
