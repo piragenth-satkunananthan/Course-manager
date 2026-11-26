@@ -1,4 +1,6 @@
 import { AccountSection } from "@/components/app/account-section";
+import { AiSection } from "@/components/app/ai-section";
+import { getAiStatus } from "@/server/data/ai-status";
 import { NotificationsSection } from "@/components/app/notifications-section";
 import { SemesterManager } from "@/components/app/semester-manager";
 import { WhatsAppSection } from "@/components/app/whatsapp-section";
@@ -9,9 +11,10 @@ import { getSettings } from "@/server/data/settings";
 import { requireStudentEmail, requireStudentId } from "@/server/session";
 
 // Settings (docs/designs/settings.md): a section list (a side list on desktop, a jump list on phones), then
-// Notifications (#79), Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (#17).
+// Notifications (#79), AI (#80), Semesters, WhatsApp (with the Auto Changes switch, #15) and Account (#17).
 const SECTIONS = [
   { id: "notifications", label: "Notifications" },
+  { id: "ai", label: "AI" },
   { id: "semesters", label: "Semesters" },
   { id: "whatsapp", label: "WhatsApp" },
   { id: "account", label: "Account" },
@@ -19,7 +22,7 @@ const SECTIONS = [
 
 export default async function SettingsPage() {
   const studentId = await requireStudentId();
-  const [semesters, email, whatsapp, settings] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId)]);
+  const [semesters, email, whatsapp, settings, ai] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId), getAiStatus(studentId)]);
   // Groups link to the current Semester (the Class Group) or one of its Courses.
   const current = semesters.find((s) => s.isCurrent) ?? null;
   const courses = current ? (await listCourses(studentId, { semesterId: current.id })).filter((c) => !c.archivedAt) : [];
@@ -32,7 +35,7 @@ export default async function SettingsPage() {
           <ul className="flex flex-wrap gap-2 md:flex-col md:gap-1">
             {SECTIONS.map((x) => (
               <li key={x.id}>
-                <a href={`#${x.id}`} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:border max-md:border-input md:min-h-10 md:w-full">
+                <a href={`#${x.id}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-3 text-sm font-medium hover:bg-muted md:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:border max-md:border-input md:min-h-10 md:w-full">
                   {x.label}
                 </a>
               </li>
@@ -41,6 +44,7 @@ export default async function SettingsPage() {
         </nav>
         <div className="min-w-0 space-y-6">
         <NotificationsSection initial={settings.notify} />
+        <AiSection status={ai} />
         <SemesterManager semesters={semesters} />
         <WhatsAppSection
           initial={whatsapp}
