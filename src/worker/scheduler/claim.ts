@@ -5,7 +5,7 @@ import { db } from "@/server/db/client";
 import { emailLog } from "@/server/db/schema";
 import { deliver, type Message, reclaim } from "@/server/email/resend";
 
-type Key = { studentId: string; kind: "digest" | "final_reminder"; digestDate?: string; entityType?: "assignment" | "exam"; entityId?: string; dueAt?: Date };
+type Key = { studentId: string; kind: "digest" | "final_reminder" | "second_reminder"; digestDate?: string; entityType?: "assignment" | "exam"; entityId?: string; dueAt?: Date };
 
 export async function claimAndSend(key: Key, msg: Message) {
   const [claimed] = await db
@@ -18,7 +18,7 @@ export async function claimAndSend(key: Key, msg: Message) {
   const where =
     key.kind === "digest"
       ? and(eq(emailLog.studentId, key.studentId), eq(emailLog.kind, "digest"), eq(emailLog.digestDate, key.digestDate!))
-      : and(eq(emailLog.studentId, key.studentId), eq(emailLog.kind, "final_reminder"), eq(emailLog.entityType, key.entityType!), eq(emailLog.entityId, key.entityId!), eq(emailLog.dueAt, key.dueAt!));
+      : and(eq(emailLog.studentId, key.studentId), eq(emailLog.kind, key.kind), eq(emailLog.entityType, key.entityType!), eq(emailLog.entityId, key.entityId!), eq(emailLog.dueAt, key.dueAt!));
   const [existing] = await db.select({ id: emailLog.id }).from(emailLog).where(where);
   if (existing && (await reclaim(existing.id))) return deliver(existing.id, msg);
   return null; // already sent, being sent, or skipped

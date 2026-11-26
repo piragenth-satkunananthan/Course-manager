@@ -97,11 +97,11 @@ describe("pausing Auto Changes and the capture heartbeat (#15)", () => {
   };
 
   it("Settings reads and switches the pause; it's the Student's own and validated", async () => {
-    expect((await a(settings.GET, "GET", "/settings")).json).toEqual({ autoChangesPaused: false });
-    expect((await a(settings.PATCH, "PATCH", "/settings", { body: { autoChangesPaused: true } })).json).toEqual({ autoChangesPaused: true });
+    expect((await a(settings.GET, "GET", "/settings")).json).toMatchObject({ autoChangesPaused: false });
+    expect((await a(settings.PATCH, "PATCH", "/settings", { body: { autoChangesPaused: true } })).json).toMatchObject({ autoChangesPaused: true });
     expect((await a(settings.PATCH, "PATCH", "/settings", { body: { autoChangesPaused: "yes" } })).status).toBe(400);
     const b = client((await seedStudent("b@example.com")).cookie);
-    expect((await b(settings.GET, "GET", "/settings")).json).toEqual({ autoChangesPaused: false });
+    expect((await b(settings.GET, "GET", "/settings")).json).toMatchObject({ autoChangesPaused: false });
   });
 
   it("while paused: the paused banner shows, and capture keeps pinging however long messages wait", async () => {

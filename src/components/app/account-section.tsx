@@ -74,7 +74,7 @@ export function AccountSection({ email }: { email: string }) {
   }
   return (
     <>
-      <section aria-labelledby="account-heading" className="rounded-md border border-border bg-card p-4 md:p-6">
+      <section id="account" aria-labelledby="account-heading" className="scroll-mt-4 rounded-md border border-border bg-card p-4 md:p-6">
         <h2 id="account-heading" className="text-title font-semibold">Account</h2>
         <p className="mt-2 text-sm text-muted-foreground">Signed in as</p>
         <p className="break-all">{email}</p>

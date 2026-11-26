@@ -57,7 +57,7 @@ export function SemesterManager({ semesters }: { semesters: Semester[] }) {
   }
 
   return (
-    <section aria-labelledby="semesters-heading" className="rounded-md border border-border bg-card p-4 md:p-6">
+    <section id="semesters" aria-labelledby="semesters-heading" className="scroll-mt-4 rounded-md border border-border bg-card p-4 md:p-6">
       <div className="flex items-center justify-between gap-2">
         <h2 id="semesters-heading" className="text-title font-semibold">Semesters</h2>
         <Button variant="outline" onClick={() => setAdding(true)}>

@@ -5,7 +5,8 @@ import { loadOpenDeadlines } from "@/server/data/assessments";
 import { db } from "@/server/db/client";
 import { autoChange, emailLog, entityVersion, inboxMessage, unknownCourseMention, user, waGroup } from "@/server/db/schema";
 import { type CheckTheseInput, isDigestWindow, selectDigest } from "@/server/domain/digest";
-import { dueForFinalReminder } from "@/server/domain/reminders";
+import { remindersDue } from "@/server/domain/reminders";
+import { getNotify } from "@/server/data/settings";
 import { todayIn } from "@/server/domain/time";
 import { digestEmail } from "@/server/email/templates/digest";
 import { finalReminderEmail } from "@/server/email/templates/final-reminder";
@@ -37,14 +38,18 @@ async function loadCheckThese(studentId: string, since: Date, paused: boolean): 
   return { riskyChanges, possiblyMissed, unknownCourses, paused };
 }
 
-/** Open Deadlines due in the next 4 hours with no reminder logged for their current due instant (a moved one gets a new one). */
+/**
+ * Open Deadlines whose reminder is due (the Student's lead time, an optional second reminder, quiet hours; U44), with
+ * no reminder of that kind logged for their current due instant (a moved one gets a new one).
+ */
 export async function runFinalReminders(now: Date) {
   for (const s of await students()) {
-    const due = dueForFinalReminder(await loadOpenDeadlines(s.id, { examsFrom: todayIn(now), includeTba: false }), now);
-    for (const d of due) {
+    const prefs = await getNotify(s.id);
+    const due = remindersDue(await loadOpenDeadlines(s.id, { examsFrom: todayIn(now), includeTba: false }), now, prefs);
+    for (const { item: d, kind, hours } of due) {
       await claimAndSend(
-        { studentId: s.id, kind: "final_reminder", entityType: d.deadline.type, entityId: d.id, dueAt: d.dueAt! },
-        { to: s.email, ...finalReminderEmail(d.deadline, origin()) },
+        { studentId: s.id, kind: kind === "final" ? "final_reminder" : "second_reminder", entityType: d.deadline.type, entityId: d.id, dueAt: d.dueAt! },
+        { to: s.email, ...finalReminderEmail(d.deadline, origin(), hours) },
       );
     }
     // A reminder still failed when its Deadline arrived: give up on it and alert (§10). Failures from the last day count,
@@ -57,11 +62,12 @@ export async function runFinalReminders(now: Date) {
   }
 }
 
-/** At most one digest a day, only 07:00–08:59; a day with nothing to report is recorded as skipped. */
+/** At most one digest a day, within two hours of the Student's digest time (07:00 by default; U44); a day with nothing to report is recorded as skipped. */
 export async function runDigest(now: Date) {
-  if (!isDigestWindow(now)) return;
   const today = todayIn(now);
   for (const s of await students()) {
+    const prefs = await getNotify(s.id);
+    if (!isDigestWindow(now, prefs)) continue;
     const open = await loadOpenDeadlines(s.id, { examsFrom: today, includeTba: false });
     // Added or moved since the last digest: creates, and edits or undos that touched a due date or time. Before the
     // first digest, everything still open is new.
@@ -79,7 +85,7 @@ export async function runDigest(now: Date) {
             ),
           )
       : [];
-    const sections = selectDigest(open, new Set(changed.map((c) => c.id)), today, await loadCheckThese(s.id, since, s.paused));
+    const sections = selectDigest(open, new Set(changed.map((c) => c.id)), today, await loadCheckThese(s.id, since, s.paused), prefs.digestDays);
     if (!sections) {
       await recordSkippedDigest(s.id, today);
       continue;
