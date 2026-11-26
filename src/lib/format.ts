@@ -31,8 +31,8 @@ export function relativeDay(date: string, today: string) {
 }
 
 /** "Due Thu 19 Nov, 16:30 · in 2 days" or "Due Fri 20 Nov · time not announced" (design-system §6.1). */
-export function dueLine(date: string, time: string | null, today: string, verb = "Due", untimed = "time not announced") {
-  return `${verb} ${formatDate(date)}${time ? `, ${time}` : ` · ${untimed}`} · ${relativeDay(date, today)}`;
+export function dueLine(date: string, time: string | null, today: string, verb = "Due", untimed = "time not announced", tf: "24h" | "12h" = "24h") {
+  return `${verb} ${formatDate(date)}${time ? `, ${formatTime(time, tf)}` : ` · ${untimed}`} · ${relativeDay(date, today)}`;
 }
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const; // ISO 1–7
@@ -44,3 +44,10 @@ export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n ==
 /** "November 2026" for a YYYY-MM month (the month view's title). */
 export const formatMonth = (month: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${month}-01T00:00:00Z`));
+
+/** "14:05" or, in 12-hour format, "2:05 pm" (Settings → Defaults, #83). */
+export function formatTime(hhmm: string, format: "24h" | "12h" = "24h") {
+  if (format === "24h") return hhmm;
+  const h = Number(hhmm.slice(0, 2));
+  return `${h % 12 || 12}:${hhmm.slice(3, 5)} ${h < 12 ? "am" : "pm"}`;
+}

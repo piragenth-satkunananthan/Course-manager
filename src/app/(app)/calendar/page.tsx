@@ -3,9 +3,11 @@ import { MonthGrid } from "@/components/app/month-grid";
 import { Header, Pager } from "@/components/app/timetable-header";
 import { calendarHref } from "@/lib/deadline-date";
 import { formatMonth } from "@/lib/format";
-import { getMonth, monthDays } from "@/server/data/calendar";
+import { getMonth } from "@/server/data/calendar";
+import { getPrefs } from "@/server/data/settings";
+import { weekStartOf } from "@/server/domain/defaults";
 import { listCourseOptions } from "@/server/data/courses";
-import { addDays, addMonths, todayIn, weekdayOf } from "@/server/domain/time";
+import { addMonths, todayIn } from "@/server/domain/time";
 import { requireStudentId } from "@/server/session";
 import { Month } from "@/shared/schemas/calendar";
 import { IsoDate } from "@/shared/schemas/common";
@@ -19,13 +21,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const day = IsoDate.safeParse(q.day).success ? q.day! : null;
   // The design's link is /calendar?day=YYYY-MM-DD: with no month, the day's own month.
   const month = Month.safeParse(q.month).success ? q.month! : (day ?? today).slice(0, 7);
-  const [data, courses] = await Promise.all([getMonth(studentId, month), listCourseOptions(studentId)]);
-  const selected = day && monthDays(month).includes(day) ? day : null;
+  const [data, courses, { weekStart }] = await Promise.all([getMonth(studentId, month), listCourseOptions(studentId), getPrefs(studentId)]);
+  const selected = day && data.days.some((d) => d.date === day) ? day : null;
   const focus = selected ?? (today.startsWith(month) ? today : `${month}-01`);
   const thisMonth = today.slice(0, 7);
   return (
     <>
-      <Header courses={courses} date={focus} view="month" hrefs={{ day: `/timetable?view=day&date=${focus}`, week: `/timetable?view=week&week=${addDays(focus, 1 - weekdayOf(focus))}`, month: calendarHref(month) }} />
+      <Header courses={courses} date={focus} view="month" hrefs={{ day: `/timetable?view=day&date=${focus}`, week: `/timetable?view=week&week=${weekStartOf(focus, weekStart)}`, month: calendarHref(month) }} />
       <Pager
         label={formatMonth(month)}
         prev={calendarHref(addMonths(month, -1))} prevLabel="Previous month" next={calendarHref(addMonths(month, 1))} nextLabel="Next month"

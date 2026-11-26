@@ -7,13 +7,14 @@ import { formatDate } from "@/lib/format";
 import { listDeadlinesIn } from "@/server/data/assessments";
 import { listCourseOptions } from "@/server/data/courses";
 import { getOccurrences } from "@/server/data/timetable";
-import { addDays, todayIn, weekdayOf } from "@/server/domain/time";
+import { getPrefs } from "@/server/data/settings";
+import { weekStartOf } from "@/server/domain/defaults";
+import { addDays, todayIn } from "@/server/domain/time";
 import { requireStudentId } from "@/server/session";
 import { IsoDate } from "@/shared/schemas/common";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Occurrence } from "@/shared/schemas/timetable";
 
-const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
 const dayHref = (date: string) => `/timetable?view=day&date=${date}`;
 const weekHref = (week: string) => `/timetable?view=week&week=${week}`;
 const monthHref = (date: string) => calendarHref(date.slice(0, 7));
@@ -42,6 +43,9 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   // With no choice in the URL, the week: a grid from 1024 px, today's list below that (the design's routes table).
   const view: "day" | "week" = q.view === "day" || (!q.view && q.date) ? "day" : "week";
   const valid = (d?: string) => (IsoDate.safeParse(d).success ? d! : null);
+  // The week starts on the Student's chosen day (Monday by default; #83).
+  const { weekStart } = await getPrefs(studentId);
+  const monday = (d: string) => weekStartOf(d, weekStart);
 
   if (view === "day") {
     const date = valid(q.date) ?? today;

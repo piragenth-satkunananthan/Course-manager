@@ -2,6 +2,7 @@ import { AccountSection } from "@/components/app/account-section";
 import { AiSection } from "@/components/app/ai-section";
 import { EmailAlertsSection } from "@/components/app/email-alerts-section";
 import { DashboardSection } from "@/components/app/dashboard-section";
+import { DefaultsSection } from "@/components/app/defaults-section";
 import { getAiStatus } from "@/server/data/ai-status";
 import { getAiKeyView } from "@/server/data/nim";
 import { NotificationsSection } from "@/components/app/notifications-section";
@@ -20,6 +21,7 @@ const SECTIONS = [
   { id: "ai", label: "AI" },
   { id: "email", label: "Email and alerts" },
   { id: "dashboard", label: "Dashboard" },
+  { id: "defaults", label: "Defaults" },
   { id: "semesters", label: "Semesters" },
   { id: "whatsapp", label: "WhatsApp" },
   { id: "account", label: "Account" },
@@ -52,6 +54,7 @@ export default async function SettingsPage() {
         <AiSection status={ai} keyView={aiKey} />
         <EmailAlertsSection email={settings.email} alertsOff={settings.alertsOff} />
         <DashboardSection initial={settings.dashboard} />
+        <DefaultsSection initial={settings.defaults} />
         <SemesterManager semesters={semesters} />
         <WhatsAppSection
           initial={whatsapp}

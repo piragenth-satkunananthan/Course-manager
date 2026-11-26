@@ -1,4 +1,6 @@
 // Assignments and Exams, scoped to the Student (design files 42, 43). Writes go through writeEntity.
+import { withDefaultDueTime } from "@/server/domain/defaults";
+import { getPrefs } from "./settings";
 import { and, asc, between, desc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { assignment, course, entityVersion, exam, semester } from "@/server/db/schema";
@@ -81,7 +83,9 @@ const student = () => ({ actor: "student" as const, setAt: new Date().toISOStrin
 export async function createAssignment(studentId: string, input: AssignmentCreate) {
   await assertCourse(studentId, input.courseId);
   return db.transaction(async (tx) => {
-    const { row } = await writeEntity(tx, { studentId, entityType: "assignment", op: "create", proposed: input, ...student() });
+    // A new Assignment with no time gets the Student's default due time (#83).
+    const proposed = withDefaultDueTime(input, (await getPrefs(studentId)).dueTime);
+    const { row } = await writeEntity(tx, { studentId, entityType: "assignment", op: "create", proposed, ...student() });
     return oneAssignment(tx, studentId, row.id);
   });
 }

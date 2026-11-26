@@ -1,6 +1,7 @@
 // The Deadlines list's groups (design-system §7.3, #21). Pure, so it's unit-tested. "This week" is today until
 // Sunday (product owner, 2026-11-22).
-import { addDays, localToInstant, weekdayOf } from "@/server/domain/time";
+import { type WeekStart, weekStartOf } from "@/server/domain/defaults";
+import { addDays, localToInstant } from "@/server/domain/time";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import { deadlineDate, isOverdueDeadline } from "./deadline-date";
 
@@ -10,8 +11,8 @@ export type DeadlineGroups = { overdue: Deadline[]; thisWeek: Deadline[]; later:
 const key = (d: Deadline) => d.item.dueAt ?? localToInstant(deadlineDate(d) ?? "9999-12-31", "23:59").toISOString();
 const soonest = (x: Deadline, y: Deadline) => key(x).localeCompare(key(y));
 
-export function groupDeadlines(items: Deadline[], now: Date, today: string): DeadlineGroups {
-  const sunday = addDays(today, 7 - weekdayOf(today));
+export function groupDeadlines(items: Deadline[], now: Date, today: string, weekStart: WeekStart = "monday"): DeadlineGroups {
+  const sunday = addDays(weekStartOf(today, weekStart), 6); // the week's last day (Sunday by default; #83)
   const g: DeadlineGroups = { overdue: [], thisWeek: [], later: [], earlier: [], tba: [] };
   for (const d of items) {
     const date = deadlineDate(d);

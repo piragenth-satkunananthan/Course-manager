@@ -1,6 +1,8 @@
 // Applies validated AI operations (design §9, file 64a), inside the caller's transaction: each through writeEntity
 // (actor ai, setAt = its source message's sent time), then an Auto Change with its summary, risk and sources.
 // A write that changes nothing makes no Auto Change. Shared by the worker and Unknown Course resolution (#14).
+import { withDefaultDueTime } from "@/server/domain/defaults";
+import { getPrefs } from "@/server/data/settings";
 import { and, eq } from "drizzle-orm";
 import type { Tx } from "@/server/db/client";
 import { assignment, autoChange, autoChangeSource, classSession, course, entityVersion, exam, semester, sessionChange } from "@/server/db/schema";
@@ -31,7 +33,9 @@ async function applyAssessment(tx: Tx, base: Base, op: AssessmentOp): Promise<Do
   let before: Record<string, unknown> | null = null;
   let kind: "create" | "update" | "delete";
   if (op.op === "create_assignment" || op.op === "create_exam") {
-    const proposed = Object.fromEntries(Object.entries(op).filter(([k]) => k !== "op" && k !== "sourceMessageIds"));
+    const fields = Object.fromEntries(Object.entries(op).filter(([k]) => k !== "op" && k !== "sourceMessageIds"));
+    // An announced Assignment with no time gets the Student's default due time (#83), like one added by hand.
+    const proposed = isA ? withDefaultDueTime(fields, (await getPrefs(base.studentId)).dueTime) : fields;
     kind = "create";
     result = await writeEntity(tx, { ...base, entityType, op: "create", proposed });
   } else {

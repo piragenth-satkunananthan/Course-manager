@@ -2,6 +2,7 @@
 // The desktop week grid (design-system §6.8, #19): Monday to Sunday, 07:00 to 20:00 at 48 px per hour. A Deadline
 // strip on top of each day, class blocks in the Course colour, and a current-time line on today. It scrolls
 // vertically only. Each class and Deadline is a button that opens the same sheet as the day list.
+import { usePrefs } from "./prefs";
 import { Ban, ChevronDown, ChevronUp, CircleAlert, CircleCheck, CirclePlus } from "lucide-react";
 import { useState } from "react";
 import { useNow } from "@/hooks/use-now";
@@ -22,9 +23,10 @@ const STATUS = { normal: "", cancelled: ", cancelled", rescheduled: ", moved", e
 const timeOf = (d: Deadline) => (d.type === "assignment" ? d.item.dueTime : d.item.startTime);
 
 function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: React.CSSProperties; cutStart: boolean; cutEnd: boolean }) {
+  const { t } = usePrefs();
   const [open, setOpen] = useState(false);
   const cancelled = o.status === "cancelled";
-  const label = `${o.courseCode} ${SESSION_KIND_LABEL[o.kind]}, ${formatDate(o.date)}, ${o.startTime} to ${o.endTime}${o.location ? `, ${o.location}` : ""}${STATUS[o.status]}`;
+  const label = `${o.courseCode} ${SESSION_KIND_LABEL[o.kind]}, ${formatDate(o.date)}, ${t(o.startTime)} to ${t(o.endTime)}${o.location ? `, ${o.location}` : ""}${STATUS[o.status]}`;
   return (
     <>
       <button
@@ -42,7 +44,7 @@ function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: Reac
             {o.status === "extra" && <CirclePlus size={12} aria-hidden="true" />}
             <span className="truncate">{o.courseCode}</span>
           </span>
-          <span className="block truncate text-muted-foreground tabular-nums">{o.startTime}–{o.endTime}{o.location ? ` · ${o.location}` : ""}</span>
+          <span className="block truncate text-muted-foreground tabular-nums">{t(o.startTime)}–{t(o.endTime)}{o.location ? ` · ${o.location}` : ""}</span>
         </span>
         {/* Starts before 07:00 or ends after 20:00: the block is cut at the grid's edge (its times are on it). */}
         {cutStart && <ChevronUp size={12} aria-hidden="true" className="absolute top-0 right-0.5 text-muted-foreground" />}

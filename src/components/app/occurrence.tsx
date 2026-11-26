@@ -1,5 +1,6 @@
 "use client";
 // One class on one day (design-system §6.2) and its sheet (§7.4): cancel, reschedule, or edit or remove a change.
+import { usePrefs } from "./prefs";
 import { ArrowRightLeft, Ban, CircleDot, CirclePlus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +60,7 @@ function RescheduleChangeForm({ o, onDone }: { o: Occurrence; onDone: () => void
 
 /** A class's sheet (design-system §7.4): its time and place, and the actions that fit its state. */
 export function OccurrenceSheet({ o, open, onOpenChange }: { o: Occurrence; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = usePrefs();
   const router = useRouter();
   const [mode, setMode] = useState<"view" | "reschedule">("view");
   const [pending, setPending] = useState(false);
@@ -88,7 +90,7 @@ export function OccurrenceSheet({ o, open, onOpenChange }: { o: Occurrence; open
       open={open}
       onOpenChange={(v) => (v ? onOpenChange(true) : close())}
       title={mode === "reschedule" ? `Reschedule ${title(o)}` : title(o)}
-      description={`${formatDate(o.date)}, ${o.startTime}–${o.endTime}${o.location ? ` · ${o.location}` : ""}`}
+      description={`${formatDate(o.date)}, ${t(o.startTime)}–${t(o.endTime)}${o.location ? ` · ${o.location}` : ""}`}
     >
       {mode === "reschedule" ? (
         <RescheduleChangeForm o={o} onDone={refresh} />
@@ -130,14 +132,15 @@ export function OccurrenceSheet({ o, open, onOpenChange }: { o: Occurrence; open
 }
 
 export function SessionItem({ o, now }: { o: Occurrence; now: boolean }) {
+  const { t } = usePrefs();
   const [open, setOpen] = useState(false);
   const Icon = KIND_ICON[o.kind];
   return (
     <li className="flex min-h-14 items-stretch rounded-md border border-border bg-card">
       <button type="button" onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-stretch gap-3 py-2 pr-2 pl-3 text-left">
         <span className="w-12 shrink-0 text-sm tabular-nums">
-          <span className="block font-semibold">{o.startTime}</span>
-          <span className="block text-muted-foreground">{o.endTime}</span>
+          <span className="block font-semibold">{t(o.startTime)}</span>
+          <span className="block text-muted-foreground">{t(o.endTime)}</span>
         </span>
         <span aria-hidden="true" className={`w-1 shrink-0 rounded-full ${COLOUR_BG[o.colour]}`} />
         <span className="min-w-0 flex-1">

@@ -1,5 +1,6 @@
 // The Deadlines lists (design-system §7.3, #21): /assignments and /exams, with the Assignments | Exams switch, the
 // status and Course filters in the URL, and the groups Overdue, This week, Later, Date TBA and Earlier.
+import type { WeekStart } from "@/server/domain/defaults";
 import { BookOpen, CalendarCheck, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,12 @@ const GROUPS = [
   ["earlier", "Earlier"],
 ] as const;
 
-type Props = { kind: ListKind; status: ListStatus; course: string | null; courses: CourseOption[]; items: Deadline[] };
+type Props = { kind: ListKind; status: ListStatus; course: string | null; courses: CourseOption[]; items: Deadline[]; weekStart: WeekStart };
 
-export function DeadlineList({ kind, status, course, courses, items }: Props) {
+export function DeadlineList({ kind, status, course, courses, items, weekStart }: Props) {
   const now = new Date();
   const today = todayIn(now);
-  const groups = groupDeadlines(items, now, today);
+  const groups = groupDeadlines(items, now, today, weekStart);
   const courseCode = courses.find((c) => c.id === course)?.code;
   const noun = kind === "assignments" ? (status === "submitted" ? "submitted Assignments" : "Assignments to do") : "Exams";
 

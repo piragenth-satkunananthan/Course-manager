@@ -1,5 +1,6 @@
 // The Deadlines lists' data (#21): the Student's Assignments or Exams in Courses that aren't archived, filtered by
 // status and Course. An unknown or archived Course in the URL is ignored rather than an error.
+import { getPrefs } from "./settings";
 import type { ListKind, ListStatus } from "@/lib/deadline-list-href";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import { listAssignments, listExams } from "./assessments";
@@ -17,5 +18,5 @@ export async function loadDeadlineList(studentId: string, kind: ListKind, q: { s
           .filter((a) => active.has(a.courseId) && (status === "submitted") === (a.status === "submitted"))
           .map((item) => ({ type: "assignment" as const, item }))
       : (await listExams(studentId, { courseId: course ?? undefined })).filter((e) => active.has(e.courseId)).map((item) => ({ type: "exam" as const, item }));
-  return { status, course, courses, items };
+  return { status, course, courses, items, weekStart: (await getPrefs(studentId)).weekStart }; // "This week" ends on the week's last day (#83)
 }

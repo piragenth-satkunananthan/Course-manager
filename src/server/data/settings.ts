@@ -26,13 +26,13 @@ export async function getNotify(studentId: string): Promise<NotifySettings> {
 
 export async function getSettings(studentId: string): Promise<Settings> {
   const [[row], email] = await Promise.all([
-    db.select({ autoChangesPaused: user.autoChangesPaused, alertsOff: user.alertsOff, dueSoonDays: user.dueSoonDays, layout: user.dashboardLayout, ...NOTIFY }).from(user).where(eq(user.id, studentId)),
+    db.select({ autoChangesPaused: user.autoChangesPaused, alertsOff: user.alertsOff, dueSoonDays: user.dueSoonDays, layout: user.dashboardLayout, dueTime: user.defaultDueTime, weekStart: user.weekStart, timeFormat: user.timeFormat, ...NOTIFY }).from(user).where(eq(user.id, studentId)),
     getEmailSetting(studentId),
   ]);
-  const { autoChangesPaused, alertsOff, dueSoonDays, layout, ...notify } = row!;
+  const { autoChangesPaused, alertsOff, dueSoonDays, layout, dueTime, weekStart, timeFormat, ...notify } = row!;
   const order = fullOrder(layout?.order);
   const dashboard: DashboardSettings = { dueSoonDays, order, hidden: order.filter((s) => layout?.hidden.includes(s)) };
-  return { autoChangesPaused, notify, alertsOff: alertsOff as Settings["alertsOff"], email, dashboard };
+  return { autoChangesPaused, notify, alertsOff: alertsOff as Settings["alertsOff"], email, dashboard, defaults: { dueTime, weekStart, timeFormat } };
 }
 
 export async function updateSettings(studentId: string, input: SettingsUpdate): Promise<Settings> {
@@ -51,7 +51,13 @@ export async function updateSettings(studentId: string, input: SettingsUpdate): 
     if (first) throw new AppError("VALIDATION", first, { fieldErrors });
     dashboard = { dueSoonDays: next.dueSoonDays, dashboardLayout: { order: next.order, hidden: next.hidden } };
   }
-  const set = { ...(input.autoChangesPaused !== undefined && { autoChangesPaused: input.autoChangesPaused }), ...notify, ...(input.alertsOff && { alertsOff: [...new Set(input.alertsOff)] }), ...dashboard };
+  const set = { ...(input.autoChangesPaused !== undefined && { autoChangesPaused: input.autoChangesPaused }), ...notify, ...(input.alertsOff && { alertsOff: [...new Set(input.alertsOff)] }), ...dashboard, ...(input.defaults && { ...(input.defaults.dueTime && { defaultDueTime: input.defaults.dueTime }), ...(input.defaults.weekStart && { weekStart: input.defaults.weekStart }), ...(input.defaults.timeFormat && { timeFormat: input.defaults.timeFormat }) }) };
   if (Object.keys(set).length) await db.update(user).set(set).where(eq(user.id, studentId));
   return getSettings(studentId);
+}
+
+/** The display and default preferences every page needs (#83). */
+export async function getPrefs(studentId: string) {
+  const [row] = await db.select({ dueTime: user.defaultDueTime, weekStart: user.weekStart, timeFormat: user.timeFormat }).from(user).where(eq(user.id, studentId));
+  return row ?? { dueTime: "23:59", weekStart: "monday" as const, timeFormat: "24h" as const };
 }

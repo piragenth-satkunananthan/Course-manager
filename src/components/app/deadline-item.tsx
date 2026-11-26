@@ -26,14 +26,16 @@ import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Exam } from "@/shared/schemas/exam";
 import { AssignmentForm, ExamForm } from "./assessment-forms";
 import type { CourseOption } from "./form";
+import { usePrefs } from "./prefs";
 import { ResponsiveDialog } from "./responsive-dialog";
+import type { TimeFormat } from "@/server/domain/defaults";
 import { StatusBadge, type StatusKind } from "./status-badge";
 
 const STATUS_LABEL = { todo: "To do", in_progress: "In progress", submitted: "Submitted" } as const;
 
-function whenLine(d: Deadline, today: string) {
-  if (d.type === "assignment") return dueLine(d.item.dueDate, d.item.dueTime, today);
-  return d.item.date ? dueLine(d.item.date, d.item.startTime, today, "On", "time TBA") : "Date TBA";
+function whenLine(d: Deadline, today: string, tf: TimeFormat) {
+  if (d.type === "assignment") return dueLine(d.item.dueDate, d.item.dueTime, today, "Due", "time not announced", tf);
+  return d.item.date ? dueLine(d.item.date, d.item.startTime, today, "On", "time TBA", tf) : "Date TBA";
 }
 
 function badgeFor(d: Deadline, overdue: boolean, today: string, tomorrow: string): StatusKind | null {
@@ -46,6 +48,7 @@ function badgeFor(d: Deadline, overdue: boolean, today: string, tomorrow: string
 type Props = { deadline: Deadline; overdue?: boolean; today: string; tomorrow: string; courses: CourseOption[] };
 
 export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, courses }: Props) {
+  const { timeFormat } = usePrefs();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const badge = badgeFor(d, overdue, today, tomorrow);
@@ -70,7 +73,7 @@ export function DeadlineItem({ deadline: d, overdue = false, today, tomorrow, co
           {d.item.courseCode} · {d.type === "assignment" ? "Assignment" : "Exam"}
         </span>
         <span className={`block font-semibold ${submitted ? "text-muted-foreground" : ""}`}>{d.item.title}</span>
-        <span className="block text-sm text-muted-foreground tabular-nums">{whenLine(d, today)}</span>
+        <span className="block text-sm text-muted-foreground tabular-nums">{whenLine(d, today, timeFormat)}</span>
         {badge && <span className="mt-1 block"><StatusBadge kind={badge} /></span>}
       </button>
       {d.type === "assignment" && (
@@ -93,6 +96,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses }: { deadline: Deadline; open: boolean; onOpenChange: (o: boolean) => void; today: string; courses: CourseOption[] }) {
+  const { timeFormat } = usePrefs();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -133,7 +137,7 @@ export function DeadlineDetail({ deadline: d, open, onOpenChange, today, courses
         ) : (
           <div className="space-y-4 pb-4">
             <dl className="space-y-3">
-              <Row label="When" value={whenLine(d, today)} />
+              <Row label="When" value={whenLine(d, today, timeFormat)} />
               {d.type === "assignment" ? (
                 <>
                   <Row label="Where to submit" value={d.item.submitWhere} />
