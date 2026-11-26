@@ -414,7 +414,7 @@ describe("the timetable and the Semester (#16)", () => {
   });
 
   it("extends the Semester: weekly classes continue, a due date in the new weeks applies in the same batch, and Undo restores the end", async () => {
-    const newEnd = "2027-01-15";
+    const newEnd = "2027-01-17"; // a Sunday: the class (two days from today, any weekday) falls in the week of 11 Jan
     await tell("semester extended by 4 weeks; final report due 2027-01-08");
     await run((ctx) => [{ op: "extend_semester", semesterId: ctx.semester!.id, newEndDate: newEnd }, create(ctx, { title: "Final report", dueDate: "2027-01-08" })]);
     expect((await a(semesters.GET, "GET", "/semesters")).json).toMatchObject([{ endDate: newEnd }]);
