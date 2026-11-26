@@ -67,7 +67,7 @@ describe("Semesters", () => {
   it("keeps more than one Class Group, each for the whole degree: both are linked and both move to a new current Semester (#73, U43)", async () => {
     const [oldSem, newSem] = [await newSemester("Y3S1"), await newSemester("Y3S2")];
     await api(setCurrent.POST, "POST", `/semesters/${oldSem.id}/set-current`, { params: { id: oldSem.id } });
-    const ids = [];
+    const ids: string[] = [];
     for (const [jid, subject] of [["batch@g.us", "Batch 22/23"], ["notices@g.us", "Batch 22/23 notices"]]) {
       ids.push((await pool.query("insert into wa_group (student_id, wa_jid, subject) values ($1, $2, $3) returning id", [studentId, jid, subject])).rows[0].id as string);
     }
