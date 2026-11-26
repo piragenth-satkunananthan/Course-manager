@@ -4,7 +4,7 @@ Terms are defined in `GLOSSARY.md`. Architecture decisions are in `docs/adr/`.
 
 ## Problem
 
-A university student's lectures, Assessments and study material are scattered across WhatsApp groups, PDFs and several apps. Course-manager puts them in one web app and keeps it current by reading the class WhatsApp groups.
+A university student's lectures, CAs, exams and study material are scattered across WhatsApp groups, PDFs and several apps. Course-manager puts them in one web app and keeps it current by reading the class WhatsApp groups.
 
 ## Goal
 
@@ -32,7 +32,8 @@ The pain to remove is **missed Assignment deadlines**. The product owner saw the
 - One rate per Course: Lectures, Tutorials and Labs count equally. Cancelled occurrences, Excused occurrences and unmarked occurrences don't count. An "unmarked" counter reminds the Student to catch up.
 - Each Course shows "you can miss N more". It turns amber when N reaches 2, and turns red with a dashboard warning when the minimum can no longer be reached, even by attending every class left. The rate and the minimum are always shown side by side.
 
-### Assessments
+### Assignments, Exams and CA
+- CA (Continuous Assessment) is graded work during the semester: everything except the final exam. A CA held in class (a CA test, quiz, mid-term, viva or presentation) is an Exam with the type "CA"; a CA handed in by a deadline (a project, group project or report) is an Assignment. The final exam is an Exam that isn't a CA. The app never says "Assessment".
 - An Assignment is something you hand in by a due date (report, lab sheet, project). It has a title, due date and time, description, and a status of To do, In progress or Submitted. Two optional fields: where to submit it, and whether it's a group or individual piece of work.
 - An Assignment with a due date but no time is due at 23:59 on that date.
 - An Exam is held at a set time and place (quiz, mid-term, viva, presentation). It has a location and topics. Its date and time may be TBA.

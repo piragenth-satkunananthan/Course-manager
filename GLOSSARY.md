@@ -64,17 +64,17 @@ _Avoid_: Exception, override, update
 
 ## Work
 
-**Assessment**:
-Umbrella word for anything a Course grades. Every Assessment is either an Assignment or an Exam.
-_Avoid_: Evaluation, graded work
+**CA** (Continuous Assessment):
+Graded work during the semester: everything except the final exam. In the app a CA is an Exam when it is held in class (CA test, quiz, mid-term, viva, presentation) and an Assignment when it is handed in by a deadline (project, group project, report). The final exam is an Exam that isn't a CA. This is the university's word.
+_Avoid_: Assessment, evaluation, graded work
 
 **Assignment**:
-An Assessment the Student hands in by a due date, such as a report, lab sheet or project. Its status is To do, In progress or Submitted.
+Work the Student hands in by a due date, such as a report, lab sheet or project. Its status is To do, In progress or Submitted.
 _Avoid_: Task, homework, coursework
 
 **Exam**:
-An Assessment held at a set date, time and location, such as a quiz, mid-term, viva or presentation, with a list of topics to revise. Its date may be TBA until announced.
-_Avoid_: Test, paper
+A sitting held at a set date, time and location, such as a CA test, quiz, mid-term, viva or presentation, with a list of topics to revise. Its date may be TBA until announced.
+_Avoid_: Test, paper, Assessment
 
 **Overdue**:
 An Assignment whose due date has passed but which is not yet Submitted.

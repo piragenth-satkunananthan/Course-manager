@@ -265,20 +265,20 @@ PostgreSQL 16, managed by Drizzle migrations. Every table, index, partial index 
 | Table | Key columns | Rules |
 |---|---|---|
 | `semester` | `name`, `start_date`, `end_date`, `is_current`, `archived_at`, `version`, `field_set_at` | Partial unique index: one `is_current` per Student. The AI may change only `end_date` (extensions). |
-| `course` | `semester_id`, `code`, `name`, `lecturer_name`, `colour`, `practical_of_course_id` (nullable, the theory Course this is the Practical Course of; `ON DELETE SET NULL`), `archived_at` | Unique `(student_id, semester_id, lower(code))`. Unique `practical_of_course_id` where not null (one Practical Course per theory Course); a check stops it pointing at itself. The app also requires the same Semester and no chains (a Practical Course can't have its own). The AI never writes here. Deleting a Course cascades to its Class Sessions, Session Changes, Assessments, Nicknames, suppressions and Unknown Course mappings, and unlinks its WhatsApp group. |
+| `course` | `semester_id`, `code`, `name`, `lecturer_name`, `colour`, `practical_of_course_id` (nullable, the theory Course this is the Practical Course of; `ON DELETE SET NULL`), `archived_at` | Unique `(student_id, semester_id, lower(code))`. Unique `practical_of_course_id` where not null (one Practical Course per theory Course); a check stops it pointing at itself. The app also requires the same Semester and no chains (a Practical Course can't have its own). The AI never writes here. Deleting a Course cascades to its Class Sessions, Session Changes, Assignments, Exams, Nicknames, suppressions and Unknown Course mappings, and unlinks its WhatsApp group. |
 | `course_nickname` | `course_id`, `nickname` (stored lowercase), `source` (`manual` or `unknown_course`) | Unique `(student_id, course_id, nickname)`. Matching considers only Courses in the current Semester. |
 | `class_session` | `course_id`, `kind` (`lecture`, `tutorial` or `lab`), `weekday` (1–7, ISO), `start_time`, `end_time`, `location` | Repeats every week of the Semester. M2 adds alternate weeks, start weeks and Session Groups as new columns (decision U8). |
 | `session_change` | `course_id`, `class_session_id` (null for extras), `kind` (`cancel`, `reschedule` or `extra`), `original_date`, `new_date`, `new_start_time`, `new_end_time`, `new_location`, `deleted_at`, `version`, `field_set_at` | Partial unique index on `(class_session_id, original_date)` where `deleted_at` is null and `kind` is cancel or reschedule. Each occurrence has at most one active change, which is **updated** (never duplicated) when a correction arrives. |
 
 **An Occurrence is never stored.** It is identified by `(class_session_id, date)` and calculated by expanding each Class Session across the Semester's dates, then applying `session_change` rows. M2's Attendance table will use the same key.
 
-**Assessments**
+**Assignments and Exams**
 
 | Table | Key columns | Rules |
 |---|---|---|
 | `assignment` | `course_id`, `title`, `description`, `due_date`, `due_time` (null = time not announced, treated as 23:59), `status` (`todo`, `in_progress` or `submitted`), `submitted_at`, `submit_where`, `is_group_work`, `source` (`manual` or `ai`), `deleted_at`, `version`, `field_set_at` | **The AI may write only** `title`, `description`, `due_date`, `due_time`, `submit_where`, `is_group_work`, and `deleted_at` (to cancel). **The Student owns** `status` and `submitted_at`. A status change writes an `entity_version` row with `op = status` but **does not change `version`**, so it never blocks Undo. |
 | `exam` | `course_id`, `title`, `kind_label` (quiz, mid-term and so on, free text), `date` (null = TBA), `start_time` (null = TBA), `location`, `topics`, `source`, `deleted_at`, `version`, `field_set_at` | The AI may write every field except `source`. |
-| `suppression` | `course_id`, `entity_type` (`assignment` or `exam`), `title_key` (normalised title), `due_date` (null for a TBA Exam), `created_at` | Created **only** when the Student undoes or deletes an Assessment the AI created; never by an Undo the system triggers. It is part of the AI's context, so a repeated announcement doesn't recreate the item. **It expires** when a message gives a different due date for the same title, or when its Semester is archived. Session Changes and Semester extensions have no suppression: if an undone one is announced again, it is applied again. |
+| `suppression` | `course_id`, `entity_type` (`assignment` or `exam`), `title_key` (normalised title), `due_date` (null for a TBA Exam), `created_at` | Created **only** when the Student undoes or deletes an Assignment or Exam the AI created; never by an Undo the system triggers. It is part of the AI's context, so a repeated announcement doesn't recreate the item. **It expires** when a message gives a different due date for the same title, or when its Semester is archived. Session Changes and Semester extensions have no suppression: if an undone one is announced again, it is applied again. |
 
 A **Deadline** is not a table. It is a query over two sets:
 - Assignments that aren't submitted or deleted;
@@ -451,7 +451,7 @@ The main ones:
 | `PATCH /api/v1/semesters/:id` | `{expectedVersion, name?, startDate?, endDate?}` | Semester |
 | `POST /api/v1/semesters/:id/set-current` · `POST /api/v1/semesters/:id/archive` | none | Semester (archiving erases stored message text, as decided in D1) |
 | `GET /api/v1/courses` · `POST /api/v1/courses` | `{semesterId, code, name, lecturerName?, colour, practicalOfCourseId?}` | list · Course (with `practicalOfCourseId`) |
-| `GET /api/v1/courses/:id` | none | Course with Class Sessions, Assessments and Nicknames |
+| `GET /api/v1/courses/:id` | none | Course with Class Sessions, Assignments, Exams and Nicknames |
 | `PATCH /api/v1/courses/:id` | `{code?, name?, lecturerName?, colour?, practicalOfCourseId?}` (`null` clears it) | Course (the AI never writes Courses, so no version check) |
 | `POST /api/v1/courses/:id/archive` · `DELETE /api/v1/courses/:id?confirmCode=CS2010` | none | Course · 204 |
 | `POST /api/v1/courses/:id/nicknames` · `DELETE /api/v1/nicknames/:id` | `{nickname}` | Nickname · 204 |
@@ -595,7 +595,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
   - the Student's Courses in the current Semester, with ids, codes, names and Nicknames;
   - which Course or Semester the group is linked to, and for a Course Group, its Practical Course's id (`linkedTo: {courseId, practicalCourseId?}`). Each Course carries `practicalOf` when it is a Practical Course.
 - **The timetable:** Class Session Occurrences for the next 21 days, with `classSessionId`, date and time, and any existing Session Change with its id.
-- **Assessments:**
+- **Assignments and Exams:**
   - open Assignments and Exams for those Courses (id, title, due date and time);
   - **Assignments submitted in the last 30 days** (id, title, due date), so a repeated announcement matches them instead of creating a duplicate;
   - active `suppression` rows.
@@ -671,7 +671,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
 | `cancel_occurrence`, `reschedule_occurrence`, `add_extra_session` | create a `session_change`; if one already exists for that occurrence, update it instead |
 | `extend_semester` | update `semester.end_date` |
 
-A write that changes nothing (§3) produces no Auto Change. An operation naming an occurrence that already has an active change updates that change instead of adding one. Extensions are applied before the batch's other operations. Every Auto Change, including Session Changes and a Semester extension, can be undone under the Undo rule (U16). Changes that move a Deadline later, or cancel an Assessment or Class Session occurrence, get `risk = moved_later` or `risk = cancelled`. They stay highlighted on the dashboard for 7 days, or until undone (decision U3), and they appear in the digest's "Check these" section.
+A write that changes nothing (§3) produces no Auto Change. An operation naming an occurrence that already has an active change updates that change instead of adding one. Extensions are applied before the batch's other operations. Every Auto Change, including Session Changes and a Semester extension, can be undone under the Undo rule (U16). Changes that move a Deadline later, or cancel an Assignment, Exam or Class Session occurrence, get `risk = moved_later` or `risk = cancelled`. They stay highlighted on the dashboard for 7 days, or until undone (decision U3), and they appear in the digest's "Check these" section.
 
 **Edited and deleted messages** (both are stored as their own inbox rows; see §3):
 
@@ -694,7 +694,7 @@ Possibly Missed messages show in the Activity Log with their text and "Add Assig
 
 **Prompt injection:** messages are data inside the prompt, never instructions. Validation limits what a malicious or misleading message can do:
 
-- **Allowed:** up to 10 changes per batch to existing Courses' Assessments, Session Changes and the Semester end date, each passing rule 1.
+- **Allowed:** up to 10 changes per batch to existing Courses' Assignments and Exams, Session Changes and the Semester end date, each passing rule 1.
 - **Never allowed:** sending messages, creating Courses, or touching submission status.
 
 Every change is logged and can be undone, singly or by batch. Risky ones are highlighted and emailed in the digest. The design does **not** prevent a convincing false announcement from being applied: that is the "trust AI" decision (ADR-0003).
@@ -757,7 +757,7 @@ Every change is logged and can be undone, singly or by batch. Risky ones are hig
   | `/` | Dashboard: Overdue first, then today's classes, next 14 days, TBA Exams, recent and highlighted Auto Changes, banners |
   | `/timetable` | Week grid on desktop; day list on phones |
   | `/calendar` | **Month view (M1b):** classes, Assignments and Exams together. Each day cell shows Deadline chips (course colour and title; Overdue in red, Submitted ticked) and one dot per class (cancelled ones greyed, extra sessions included). Tapping a day opens a sheet with that day's full list of classes and Deadlines. Exams marked TBA aren't shown, because they have no date. Previous and next buttons move a month at a time. |
-  | `/courses`, `/courses/[id]` | A Course with its Class Sessions, Assessments and Nicknames (`nickname-editor`: add and remove) |
+  | `/courses`, `/courses/[id]` | A Course with its Class Sessions, Assignments, Exams and Nicknames (`nickname-editor`: add and remove) |
   | `/assignments`, `/exams` | Filterable lists; "mark Submitted" in one tap |
   | `/activity` | Activity Log: Auto Changes with Undo and Undo batch, Unknown Course actions, Possibly Missed messages with "Add…", and events (rejected or overflowed AI output, alerts) |
   | `/settings` | **Semesters** (create, set current, archive; `semester-manager`), password, WhatsApp pairing and group linking, the pause switch for Auto Changes, account deletion |
@@ -925,6 +925,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U39 | (2026-11-24, product owner, #65) `badSession` (code 500) reconnects with backoff instead of logging out. Baileys reports any unknown stream error from WhatsApp as 500, and treating it as a logout wiped the keys while the phone was still linked. Only `loggedOut` and `forbidden` wipe the keys. |
 | U40 | (2026-11-25, product owner, #67) A NIM call may take up to 180 s, not 60 s. NIM writes about 63 tokens/s, so a full 4,096-token answer takes about 65 s; with 60 s, a message that draws a long answer timed out on every hourly retry. 180 s covers a full answer at 25 tokens/s, and two calls still fit inside the 10-minute stale reset. |
 | U41 | (2026-11-25, product owner, #69) A class change the AI can't match to exactly one class (the Class Group with no Course named, or a Course with several classes that day and no kind given) is flagged Possibly Missed instead of ignored. A stated end time ("8.30 to 10.30") is kept; with only a start, the class's usual length is kept. In a Course Group, a time for a day with no class of that Course adds an extra lecture. |
+| U42 | (2026-11-25, product owner, #71) The university's word is CA (Continuous Assessment): graded work during the semester, everything except the final exam. The docs never say "Assessment". The AI reads a CA held in class, or one with no sign of a hand-in, as an Exam with kindLabel "CA", and a CA that is handed in (project, group project, report) as an Assignment, group work when it says so. Internal code names are unchanged. |
 
 ## Risks and Mitigations
 
