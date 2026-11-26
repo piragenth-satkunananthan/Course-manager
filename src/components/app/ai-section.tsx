@@ -6,16 +6,14 @@ import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-fetch";
 import { formatDate } from "@/lib/format";
 import { instantToLocal } from "@/server/domain/time";
-import type { AiState } from "@/server/domain/ai-status";
+import { type AiState, type AiStatus, AiTestResult } from "@/shared/schemas/ai";
 
 const when = (iso: string) => {
   const { date, time } = instantToLocal(new Date(iso));
   return `${formatDate(date)}, ${time}`;
 };
 
-export type AiStatusView = { state: AiState; lastSuccessAt: string | null; waiting: number; problem: string | null; model: string | null };
-type TestResult = { ok: true; ms: number; model: string } | { ok: false; problem: string };
-type Shown = TestResult | { ok: "error"; message: string }; // the test itself couldn't run (too soon, offline)
+type Shown = AiTestResult | { ok: "error"; message: string }; // the test itself couldn't run (too soon, offline)
 
 const STATES: Record<AiState, { label: string; icon: typeof CircleCheck; className: string }> = {
   working: { label: "Working", icon: CircleCheck, className: "text-success" },
@@ -24,14 +22,14 @@ const STATES: Record<AiState, { label: string; icon: typeof CircleCheck; classNa
   paused: { label: "Paused", icon: CirclePause, className: "text-muted-foreground" },
 };
 
-export function AiSection({ status }: { status: AiStatusView }) {
+export function AiSection({ status }: { status: AiStatus }) {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<Shown | null>(null);
   const s = STATES[status.state];
   async function test() {
     setTesting(true);
     setResult(null);
-    const res = await apiFetch<TestResult>("/ai/test", { method: "POST" });
+    const res = await apiFetch("/ai/test", { method: "POST", schema: AiTestResult });
     setResult(res.ok ? res.data : { ok: "error", message: res.error.message });
     setTesting(false);
   }
@@ -49,6 +47,12 @@ export function AiSection({ status }: { status: AiStatusView }) {
           <>
             <dt className="text-muted-foreground">Problem</dt>
             <dd>{status.problem}</dd>
+          </>
+        )}
+        {status.lastError && status.lastError !== status.problem && (
+          <>
+            <dt className="text-muted-foreground">Last error</dt>
+            <dd>{status.lastError}</dd>
           </>
         )}
         <dt className="text-muted-foreground">Last change made</dt>

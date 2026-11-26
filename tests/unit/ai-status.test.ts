@@ -7,7 +7,7 @@ const base = { signal: { lastOkAt: ago(1), lastErrorAt: null, detail: null }, pa
 
 describe("aiStatus (#80)", () => {
   it("is working when the loop runs and nothing waits over 30 minutes", () => {
-    expect(aiStatus(base)).toEqual({ state: "working", lastSuccessAt: ago(40).toISOString(), waiting: 0, problem: null });
+    expect(aiStatus(base)).toEqual({ state: "working", lastSuccessAt: ago(40).toISOString(), waiting: 0, problem: null, lastError: null });
     expect(aiStatus({ ...base, waiting: 3, oldestWaitingMs: 30 * 60_000 }).state).toBe("working");
   });
 
@@ -35,7 +35,11 @@ describe("aiStatus (#80)", () => {
       "NVIDIA's service had an error",
       "NVIDIA doesn't offer the chosen model",
       "No API key or model is set on the server",
-      "something odd",
+      "The AI service had an unexpected problem",
     ]);
+  });
+
+  it("shows the last error from the past day even while working", () => {
+    expect(aiStatus({ ...base, lastBatchError: "NIM 503" })).toMatchObject({ state: "working", problem: null, lastError: "NVIDIA's service had an error" });
   });
 });

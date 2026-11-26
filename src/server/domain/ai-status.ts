@@ -7,9 +7,9 @@ export type AiStatusInput = {
   oldestWaitingMs: number | null;
   waiting: number;
   lastSuccessAt: Date | null;
-  lastBatchError: string | null;
+  lastBatchError: string | null; // the newest batch error from the past 24 hours
 };
-export type AiState = "working" | "delayed" | "stopped" | "paused";
+import type { AiState } from "@/shared/schemas/ai";
 
 /** NIM's technical errors as the Student reads them. */
 export function plainAiError(e: string) {
@@ -20,15 +20,16 @@ export function plainAiError(e: string) {
   if (/\b404\b|pinned model/.test(e)) return "NVIDIA doesn't offer the chosen model";
   if (/\b5\d\d\b/.test(e)) return "NVIDIA's service had an error";
   if (/must be set/.test(e)) return "No API key or model is set on the server";
-  return e;
+  return "The AI service had an unexpected problem"; // never echo a raw error to the page
 }
 
-export function aiStatus(i: AiStatusInput): { state: AiState; lastSuccessAt: string | null; waiting: number; problem: string | null } {
-  const out = (state: AiState, problem: string | null) => ({ state, lastSuccessAt: i.lastSuccessAt?.toISOString() ?? null, waiting: i.waiting, problem });
+export function aiStatus(i: AiStatusInput): { state: AiState; lastSuccessAt: string | null; waiting: number; problem: string | null; lastError: string | null } {
+  const lastError = i.lastBatchError ? plainAiError(i.lastBatchError) : null;
+  const out = (state: AiState, problem: string | null) => ({ state, lastSuccessAt: i.lastSuccessAt?.toISOString() ?? null, waiting: i.waiting, problem, lastError });
   if (i.paused) return out("paused", null);
   if (!i.signal) return out("stopped", "The AI hasn't started on the server");
   const { lastOkAt, lastErrorAt, detail } = i.signal;
   if (lastErrorAt && (!lastOkAt || +lastErrorAt > +lastOkAt)) return out("stopped", detail ? plainAiError(detail) : "The AI stopped on the server");
-  if (i.oldestWaitingMs !== null && i.oldestWaitingMs > WAIT_LIMIT_MS) return out("delayed", i.lastBatchError ? plainAiError(i.lastBatchError) : "Messages are waiting longer than usual");
+  if (i.oldestWaitingMs !== null && i.oldestWaitingMs > WAIT_LIMIT_MS) return out("delayed", lastError ?? "Messages are waiting longer than usual");
   return out("working", null);
 }

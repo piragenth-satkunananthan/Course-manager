@@ -1,10 +1,10 @@
-// Seam: the Settings AI section's API (#80): GET /ai/status from the real health signal, queue and batches, and
+// Seam: the Settings AI section (#80): its status from the real health signal, queue and batches, and
 // POST /ai/test against a fake NVIDIA NIM over HTTP.
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import * as aiStatus from "@/app/api/v1/ai/status/route";
 import * as aiTest from "@/app/api/v1/ai/test/route";
 import { pool } from "@/server/db/client";
+import { getAiStatus } from "@/server/data/ai-status";
 import { recordHealth } from "@/server/data/health";
 import { client, resetData, seedStudent } from "./api";
 
@@ -38,15 +38,15 @@ beforeEach(async () => {
 describe("AI status (#80)", () => {
   it("is working when the loop is up, and stopped with a plain reason after a refused key", async () => {
     await recordHealth("ai", true);
-    expect((await a(aiStatus.GET, "GET", "/ai/status")).json).toEqual({ state: "working", lastSuccessAt: null, waiting: 0, problem: null, model: "nvidia/test-model" });
+    expect((await getAiStatus(studentId))).toEqual({ state: "working", lastSuccessAt: null, waiting: 0, problem: null, lastError: null, model: "nvidia/test-model" });
     await recordHealth("ai", false, "NIM refused the key (401)");
-    expect((await a(aiStatus.GET, "GET", "/ai/status")).json).toMatchObject({ state: "stopped", problem: "NVIDIA refused the API key" });
+    expect((await getAiStatus(studentId))).toMatchObject({ state: "stopped", problem: "NVIDIA refused the API key" });
   });
 
   it("is paused when Auto Changes are off", async () => {
     await recordHealth("ai", true);
     await pool.query(`update "user" set auto_changes_paused = true where id = $1`, [studentId]);
-    expect((await a(aiStatus.GET, "GET", "/ai/status")).json).toMatchObject({ state: "paused" });
+    expect((await getAiStatus(studentId))).toMatchObject({ state: "paused" });
   });
 });
 

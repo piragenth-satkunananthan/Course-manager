@@ -49,25 +49,3 @@ export async function checkModel(model = process.env.NIM_MODEL, apiKey = process
   if (!ids.includes(model)) throw new AiFatalError(`NIM_MODEL ${model} isn't listed by NIM`);
 }
 
-/** "Test AI now" (#80): one tiny chat with the server's key and model, within a short limit. Resolves with the time taken. */
-export async function pingNim(timeoutMs = Number(process.env.NIM_TEST_TIMEOUT_MS ?? 20_000)) {
-  const model = process.env.NIM_MODEL ?? "";
-  const apiKey = process.env.NIM_API_KEY ?? "";
-  if (!model || !apiKey) throw new AiFatalError("NIM_MODEL and NIM_API_KEY must be set");
-  const started = Date.now();
-  let res: Response;
-  try {
-    res = await fetch(`${process.env.NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1"}/chat/completions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply with OK." }], max_tokens: 16, temperature: 0 }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (e) {
-    throw new AiRetryableError(`NIM unreachable: ${(e as Error).name === "TimeoutError" ? "timeout" : (e as Error).message}`);
-  }
-  if (res.status === 401 || res.status === 403) throw new AiFatalError(`NIM refused the key (${res.status})`);
-  if (res.status === 404) throw new AiFatalError("NIM doesn't offer the pinned model (404)");
-  if (!res.ok) throw new AiRetryableError(`NIM ${res.status}`);
-  return { ms: Date.now() - started, model };
-}
