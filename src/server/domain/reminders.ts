@@ -12,7 +12,6 @@ export type NotifyPrefs = {
   quietEnd: string | null;
 };
 export const DEFAULT_NOTIFY: NotifyPrefs = { digestOn: true, digestTime: "07:00", digestDays: 2, reminderHours: 4, secondReminderHours: null, quietStart: null, quietEnd: null };
-export const FINAL_REMINDER_HOURS = DEFAULT_NOTIFY.reminderHours;
 
 /** Open Deadlines whose due instant is in (now, now + lead time]. Deadlines with no time (untimed Exams) never qualify. */
 export function dueForFinalReminder<T extends { dueAt: Date | null }>(deadlines: T[], now: Date, prefs: NotifyPrefs = DEFAULT_NOTIFY): T[] {
@@ -27,12 +26,12 @@ export function inQuietHours(hhmm: string, prefs: Pick<NotifyPrefs, "quietStart"
   const [t, s, e] = [minutes(hhmm), minutes(prefs.quietStart), minutes(prefs.quietEnd)];
   return s <= e ? t >= s && t < e : t >= s || t < e;
 }
-export { minutes as clockMinutes };
 
-/** The digest goes out within two hours of its chosen time, when it's on. */
+/** The digest goes out within two hours of its chosen time, when it's on, and never once quiet hours have begun. */
 export function isDigestDue(now: Date, prefs: NotifyPrefs = DEFAULT_NOTIFY) {
-  if (!prefs.digestOn) return false;
-  const t = minutes(instantToLocal(now).time) - minutes(prefs.digestTime);
+  const time = instantToLocal(now).time;
+  if (!prefs.digestOn || inQuietHours(time, prefs)) return false;
+  const t = minutes(time) - minutes(prefs.digestTime);
   return t >= 0 && t < 120;
 }
 
@@ -48,7 +47,11 @@ function sendAt(dueAt: Date, hours: number, prefs: NotifyPrefs): number {
   return at - back * 60_000 - (at % 60_000);
 }
 
-/** The reminders due now: the Final Reminder from its send time until the Deadline, and the optional second reminder until the Final Reminder's send time. */
+/**
+ * The reminders due now: the Final Reminder from its send time until the Deadline, and the optional second reminder
+ * until the Final Reminder's send time. One whose time has already passed is sent even inside quiet hours (a Deadline
+ * added late at night, or a missed tick): a Deadline that close is urgent (product owner, 2026-11-26).
+ */
 export function remindersDue<T extends { dueAt: Date | null }>(deadlines: T[], now: Date, prefs: NotifyPrefs = DEFAULT_NOTIFY) {
   // `hours`: how far ahead of the Deadline it was meant to go out (more than the lead time when quiet hours moved it earlier).
   const out: { item: T; kind: "final" | "second"; hours: number }[] = [];

@@ -7,10 +7,10 @@ import { toast } from "sonner";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-fetch";
+import { DEFAULT_NOTIFY as DEFAULTS } from "@/server/domain/reminders";
 import { type NotifySettings, REMINDER_HOURS, SECOND_REMINDER_HOURS } from "@/shared/schemas/settings";
 import { applyServerError, ErrorSummary, SaveButton, SelectField, useAppForm } from "./form";
 
-const DEFAULTS: NotifySettings = { digestOn: true, digestTime: "07:00", digestDays: 2, reminderHours: 4, secondReminderHours: null, quietStart: null, quietEnd: null };
 const OFF = "off";
 const pad = (n: number) => String(n).padStart(2, "0");
 const halfHours = (from: number, to: number) => Array.from({ length: (to - from) * 2 + 1 }, (_, i) => `${pad(from + Math.floor(i / 2))}:${i % 2 ? "30" : "00"}`);
@@ -37,7 +37,7 @@ const fromForm = (f: Form, current: NotifySettings): NotifySettings => ({
   quietStart: f.quietStart === OFF ? null : f.quietStart,
   quietEnd: f.quietEnd === OFF ? null : f.quietEnd,
 });
-const LABELS = { digestTime: "Daily Digest", digestDays: "Digest covers", reminderHours: "Final Reminder", secondReminderHours: "Second reminder", quietStart: "Quiet hours start", quietEnd: "Quiet hours end", digestOn: "Daily Digest" };
+const LABELS = { digestTime: "Daily Digest", digestDays: "Digest covers", reminderHours: "Final Reminder", secondReminderHours: "Second reminder", quietStart: "Quiet hours start", quietEnd: "Quiet hours end" };
 
 export function NotificationsSection({ initial }: { initial: NotifySettings }) {
   const router = useRouter();

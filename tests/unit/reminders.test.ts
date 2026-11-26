@@ -102,4 +102,15 @@ describe("notification settings", () => {
     expect(notifyProblems({ ...prefs, quietStart: "22:00", quietEnd: "22:00" })).toEqual({ quietEnd: "Quiet hours must end at a different time" });
     expect(notifyProblems({ ...prefs, reminderHours: 24, secondReminderHours: 24 })).toEqual({ secondReminderHours: "The second reminder must come before the Final Reminder" });
   });
+
+  it("sends a reminder whose time has already passed even inside quiet hours: a Deadline that close is urgent", () => {
+    const p = { ...prefs, quietStart: "22:00", quietEnd: "06:00" };
+    const soon = d("soon", "2026-11-20T19:30:00Z"); // Sat 21 Nov, 01:00 Colombo, added at 23:00
+    expect(kinds([soon], at("23:00"), p)).toEqual(["soon:final"]);
+  });
+
+  it("doesn't send a late digest once quiet hours have begun", () => {
+    const p = { ...prefs, digestTime: "08:30", quietStart: "09:00", quietEnd: "12:00" };
+    expect([at("08:30"), at("08:59"), at("09:00")].map((n) => isDigestWindow(n, p))).toEqual([true, true, false]);
+  });
 });

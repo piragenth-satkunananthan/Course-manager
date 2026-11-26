@@ -46,7 +46,8 @@ Each section saves on its own with a Save button (U7 conflict rule), shows "Save
 ## Rules
 
 - **Quiet hours:** no email is sent inside them. A Final Reminder that would fall inside is sent just before quiet hours start; the digest time can't be set inside them. Alerts that need action now (WhatsApp logged out, AI key refused, a reminder that couldn't be sent) are still sent: missing them is how deadlines are missed.
-- **Second reminder:** the same email as the Final Reminder ("Due in 1 day: …"), each logged once per Deadline and due time, as today.
+- **Too late to come before quiet hours:** a reminder whose time has already passed (a Deadline added at night, quiet hours turned on later, a missed tick) is sent at once, even inside quiet hours: a Deadline that close is urgent (product owner, 2026-11-26). A digest that hasn't gone out by the time quiet hours begin isn't sent that day.
+- **Second reminder:** it must come before the Final Reminder (a longer lead time). the same email as the Final Reminder ("Due in 1 day: …"), each logged once per Deadline and due time, as today.
 - **Alerts that can't be turned off:** the healthchecks.io emails (worker or backup stopped) come from outside the app, and "a reminder couldn't be sent" stays on. The Settings page says so.
 - **Email address:** the new address is used only after its confirmation link is opened; until then, emails go to the old one. Sign-in still uses the login email.
 - **Default due time:** applies to new Assignments only (from the AI and the Add form); existing ones keep their times. The AI prompt reads it from the context instead of the fixed 23:59, so this is a prompt change (eval twice).
