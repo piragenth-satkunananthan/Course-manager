@@ -4,8 +4,7 @@ import { db } from "@/server/db/client";
 import { aiBatch, healthSignal, inboxMessage, user } from "@/server/db/schema";
 import { aiStatus } from "@/server/domain/ai-status";
 import type { AiStatus } from "@/shared/schemas/ai";
-
-export const nimModel = () => process.env.NIM_MODEL || null;
+import { getNimConfig } from "./nim";
 
 export async function getAiStatus(studentId: string, now = new Date()): Promise<AiStatus> {
   const [[signal], [w], [p], [ok], [failed]] = await Promise.all([
@@ -26,5 +25,5 @@ export async function getAiStatus(studentId: string, now = new Date()): Promise<
     lastSuccessAt: ok?.at ?? null,
     lastBatchError: failed?.error ?? null,
   });
-  return { ...status, model: nimModel() };
+  return { ...status, model: (await getNimConfig(studentId)).model || null };
 }

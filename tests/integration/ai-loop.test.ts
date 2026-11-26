@@ -14,6 +14,7 @@ const MODEL = "nvidia/test-model";
 let models = [MODEL];
 let chatStatus = 200;
 let chats = 0;
+let lastModel = "";
 let server: Server;
 let base: string;
 let loop: { stop(): void } | null = null;
@@ -25,6 +26,7 @@ beforeAll(async () => {
     req.on("end", () => {
       if (req.url === "/models") return void res.end(JSON.stringify({ data: models.map((id) => ({ id })) }));
       chats++;
+      lastModel = JSON.parse(body || "{}").model ?? "";
       const ids = [...body.matchAll(/\\"id\\":\\"([0-9a-f-]{36})\\"/g)].map((m) => m[1]);
       if (chatStatus !== 200) return void res.writeHead(chatStatus).end("{}");
       const content = JSON.stringify({ messages: ids.map((id) => ({ id, decision: "ignored", reason: "t" })), operations: [], unknownCourses: [] });
@@ -102,4 +104,17 @@ describe("the AI loop (#15)", () => {
     await until(async () => !!(await signal())?.last_error_at);
     expect(await alerts()).toEqual([]);
   });
+
+  it("picks up a new model on its next batch, without a restart (#81)", async () => {
+    let model = MODEL;
+    loop = startAiLoop({ key: loadKey(randomBytes(32).toString("base64")), client: () => nimClient(model, "k", base), check: () => checkModel(MODEL, "k", base), tickMs: 30, recheckMs: 150 });
+    await queued();
+    await until(async () => chats > 0);
+    expect(lastModel).toBe(MODEL);
+    model = "nvidia/new-model";
+    models = [MODEL, model];
+    await pool.query("insert into inbox_message (student_id, wa_group_id, wa_message_id, kind, sent_at, received_at) select student_id, wa_group_id, 'm2', 'text', now(), now() - interval '5 minutes' from inbox_message limit 1");
+    await until(async () => lastModel === "nvidia/new-model");
+  });
 });
+

@@ -6,6 +6,7 @@ import { db } from "@/server/db/client";
 import { recordHealth } from "@/server/data/health";
 import { user, waSession } from "@/server/db/schema";
 import { startAiLoop } from "./ai/loop";
+import { getWorkerNimConfig } from "@/server/data/nim";
 import { checkModel, nimClient } from "./ai/nim-client";
 import { startPoller } from "./poller";
 import { raiseAlert } from "./scheduler/alerts";
@@ -87,7 +88,18 @@ void startWhatsApp();
 // AI loop (ai/loop.ts): a refused key or a missing model stops only it, alerts, and re-checks every 5 minutes.
 try {
   const key = loadKey();
-  startAiLoop({ key, client: () => nimClient(), check: () => checkModel() });
+  // The Student's saved key and model (Settings, #81), else the server's; read fresh each tick.
+  startAiLoop({
+    key,
+    client: async () => {
+      const c = await getWorkerNimConfig();
+      return nimClient(c.model, c.apiKey, c.base);
+    },
+    check: async () => {
+      const c = await getWorkerNimConfig();
+      await checkModel(c.model, c.apiKey, c.base);
+    },
+  });
 } catch (e) {
   log("error", "ai loop not started: the encryption key doesn't load", { error: (e as Error).message });
 }

@@ -1,6 +1,7 @@
 import { AccountSection } from "@/components/app/account-section";
 import { AiSection } from "@/components/app/ai-section";
 import { getAiStatus } from "@/server/data/ai-status";
+import { getAiKeyView } from "@/server/data/nim";
 import { NotificationsSection } from "@/components/app/notifications-section";
 import { SemesterManager } from "@/components/app/semester-manager";
 import { WhatsAppSection } from "@/components/app/whatsapp-section";
@@ -22,7 +23,7 @@ const SECTIONS = [
 
 export default async function SettingsPage() {
   const studentId = await requireStudentId();
-  const [semesters, email, whatsapp, settings, ai] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId), getAiStatus(studentId)]);
+  const [semesters, email, whatsapp, settings, ai, aiKey] = await Promise.all([listSemesters(studentId), requireStudentEmail(), getWhatsApp(studentId), getSettings(studentId), getAiStatus(studentId), getAiKeyView(studentId)]);
   // Groups link to the current Semester (the Class Group) or one of its Courses.
   const current = semesters.find((s) => s.isCurrent) ?? null;
   const courses = current ? (await listCourses(studentId, { semesterId: current.id })).filter((c) => !c.archivedAt) : [];
@@ -44,7 +45,7 @@ export default async function SettingsPage() {
         </nav>
         <div className="min-w-0 space-y-6">
         <NotificationsSection initial={settings.notify} />
-        <AiSection status={ai} />
+        <AiSection status={ai} keyView={aiKey} />
         <SemesterManager semesters={semesters} />
         <WhatsAppSection
           initial={whatsapp}

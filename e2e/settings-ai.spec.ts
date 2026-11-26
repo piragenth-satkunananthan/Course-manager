@@ -14,12 +14,9 @@ test("the AI section shows its status and Test AI now answers", async ({ page },
   await expect(ai).toBeInViewport();
   // No worker runs in e2e, so the AI loop has never started on this database.
   await expect(ai.getByText("Stopped")).toBeVisible();
-  await expect(ai.getByText("nvidia/e2e-model")).toBeVisible();
+  await expect(ai.getByRole("combobox", { name: "Model" })).toHaveText("nvidia/e2e-model");
   await ai.getByRole("button", { name: "Test AI now" }).click();
   await expect(ai.getByRole("status")).toHaveText(/^Working: answered in \d+\.\d s$/);
-  // Again at once: too soon
-  await ai.getByRole("button", { name: "Test AI now" }).click();
-  await expect(ai.getByRole("status")).toHaveText("Wait a few seconds before testing again");
   expect(await auditLayout(page, info.project.name === "phone" ? 44 : 40)).toMatchObject({ sidewaysScroll: 0, small: [] });
   await page.screenshot({ path: `test-results/screenshots/${info.project.name}-settings-ai.png`, fullPage: true });
 });

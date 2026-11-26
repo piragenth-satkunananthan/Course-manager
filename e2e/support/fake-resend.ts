@@ -7,6 +7,11 @@ const emails: unknown[] = [];
 createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") return void res.end("ok");
   if (req.method === "GET" && req.url === "/emails") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(emails));
+  // NIM's model list (#81): a key containing "bad" is refused.
+  if (req.method === "GET" && req.url === "/models") {
+    if (String(req.headers.authorization).includes("bad")) return void res.writeHead(401).end("{}");
+    return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ data: [{ id: "nvidia/e2e-model" }, { id: "nvidia/e2e-other" }] }));
+  }
   if (req.method === "POST" && req.url === "/chat/completions")
     return void req.resume().on("end", () => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ choices: [{ message: { content: "OK" } }], usage: { prompt_tokens: 1, completion_tokens: 1 } })));
   if (req.method !== "POST" || req.url !== "/emails") return void res.writeHead(404).end();
