@@ -8,6 +8,8 @@ import * as nickname from "@/app/api/v1/nicknames/[id]/route";
 import * as semesterArchive from "@/app/api/v1/semesters/[id]/archive/route";
 import * as setCurrent from "@/app/api/v1/semesters/[id]/set-current/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import * as groupLink from "@/app/api/v1/whatsapp/groups/[id]/link/route";
+import * as whatsapp from "@/app/api/v1/whatsapp/route";
 import { pool } from "@/server/db/client";
 import { client, ORIGIN, resetData, seedStudent } from "./api";
 
@@ -60,6 +62,24 @@ describe("Semesters", () => {
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
     const current = (await api(semesters.GET, "GET", "/semesters")).json.filter((s: { isCurrent: boolean }) => s.isCurrent);
     expect(current).toHaveLength(1);
+  });
+
+  it("keeps more than one Class Group, each for the whole degree: both are linked and both move to a new current Semester (#73, U43)", async () => {
+    const [oldSem, newSem] = [await newSemester("Y3S1"), await newSemester("Y3S2")];
+    await api(setCurrent.POST, "POST", `/semesters/${oldSem.id}/set-current`, { params: { id: oldSem.id } });
+    const ids: string[] = [];
+    for (const [jid, subject] of [["batch@g.us", "Batch 22/23"], ["notices@g.us", "Batch 22/23 notices"]]) {
+      ids.push((await pool.query("insert into wa_group (student_id, wa_jid, subject) values ($1, $2, $3) returning id", [studentId, jid, subject])).rows[0].id as string);
+    }
+    for (const id of ids) expect((await api(groupLink.PUT, "PUT", `/whatsapp/groups/${id}/link`, { params: { id }, body: { semesterId: oldSem.id } })).status).toBe(200);
+    const linked = () => api(whatsapp.GET, "GET", "/whatsapp").then((r) => (r.json.groups as { id: string; linkedSemesterId: string | null }[]).filter((g) => ids.includes(g.id)).map((g) => g.linkedSemesterId));
+    expect(await linked()).toEqual([oldSem.id, oldSem.id]);
+
+    await api(setCurrent.POST, "POST", `/semesters/${newSem.id}/set-current`, { params: { id: newSem.id } });
+    expect(await linked()).toEqual([newSem.id, newSem.id]); // no relinking
+    // Leave no state behind: later tests check the worker's reload flag.
+    await pool.query("update wa_session set groups_reload_requested_at = null where student_id = $1", [studentId]);
+    await pool.query("delete from wa_group where id = any($1)", [ids]);
   });
 
   it("moves the Class Group to the Semester set as current, and asks the worker to reload (#28)", async () => {
