@@ -21,7 +21,7 @@ const save = (dashboard: object) => a(settings.PATCH, "PATCH", "/settings", { bo
 describe("dashboard settings (#84)", () => {
   it("start at 14 days and today's order, save, and refuse hiding Overdue or bad values", async () => {
     expect((await a(settings.GET, "GET", "/settings")).json.dashboard).toEqual({ dueSoonDays: 14, order: ["overdue", "today", "dueSoon", "tbaExams", "checkThese", "recent"], hidden: [] });
-    expect((await save({ dueSoonDays: 7, order: ["dueSoon", "overdue"], hidden: ["recent"] })).json.dashboard).toMatchObject({ dueSoonDays: 7, order: ["dueSoon", "overdue"], hidden: ["recent"] });
+    expect((await save({ dueSoonDays: 7, order: ["dueSoon", "overdue"], hidden: ["recent"] })).json.dashboard).toMatchObject({ dueSoonDays: 7, order: ["dueSoon", "overdue", "today", "tbaExams", "checkThese", "recent"], hidden: ["recent"] }); // a partial order is made whole
     expect(await save({ hidden: ["overdue"] })).toMatchObject({ status: 400, json: { error: { fieldErrors: { hidden: "Overdue can't be hidden" } } } });
     expect((await save({ dueSoonDays: 2 })).status).toBe(400);
     expect((await save({ order: ["weather"] })).status).toBe(400);

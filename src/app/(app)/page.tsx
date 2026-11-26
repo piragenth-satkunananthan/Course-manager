@@ -57,102 +57,102 @@ export default async function DashboardPage() {
   const SECTIONS: Record<Dashboard["sections"][number], React.ReactNode> = {
     overdue: (
       <Fragment key="overdue">
-          {dashboard.overdue.length > 0 && (
-            <section aria-labelledby="overdue-heading" className="mt-6">
-              <h2 id="overdue-heading" className="text-title font-semibold">
-                Overdue <span className="text-destructive">({dashboard.overdue.length})</span>
-              </h2>
-              <ul className="mt-2 space-y-2">
-                {dashboard.overdue.map((d) => (
-                  <DeadlineItem key={d.item.id} deadline={d} overdue {...item} />
-                ))}
-              </ul>
-            </section>
-          )}
+        {dashboard.overdue.length > 0 && (
+          <section aria-labelledby="overdue-heading" className="mt-6">
+            <h2 id="overdue-heading" className="text-title font-semibold">
+              Overdue <span className="text-destructive">({dashboard.overdue.length})</span>
+            </h2>
+            <ul className="mt-2 space-y-2">
+              {dashboard.overdue.map((d) => (
+                <DeadlineItem key={d.item.id} deadline={d} overdue {...item} />
+              ))}
+            </ul>
+          </section>
+        )}
       </Fragment>
     ),
     today: (
       <Fragment key="today">
-          <section aria-labelledby="today-heading" className="mt-6">
-            <h2 id="today-heading" className="text-title font-semibold">Today · {formatDate(today)}</h2>
-            {dashboard.todaySessions.length === 0 ? (
-              <p className="mt-2 text-muted-foreground">No classes today.</p>
-            ) : (
-              <ul className="mt-2 space-y-2" aria-label="Today's classes">
-                {dashboard.todaySessions.map((o) => (
-                  <SessionItem key={occurrenceKey(o)} o={o} now={isHappeningNow(o, new Date())} />
-                ))}
-              </ul>
-            )}
-          </section>
+        <section aria-labelledby="today-heading" className="mt-6">
+          <h2 id="today-heading" className="text-title font-semibold">Today · {formatDate(today)}</h2>
+          {dashboard.todaySessions.length === 0 ? (
+            <p className="mt-2 text-muted-foreground">No classes today.</p>
+          ) : (
+            <ul className="mt-2 space-y-2" aria-label="Today's classes">
+              {dashboard.todaySessions.map((o) => (
+                <SessionItem key={occurrenceKey(o)} o={o} now={isHappeningNow(o, new Date())} />
+              ))}
+            </ul>
+          )}
+        </section>
       </Fragment>
     ),
     dueSoon: (
       <Fragment key="dueSoon">
-          <section aria-labelledby="soon-heading" className="mt-6">
-            <h2 id="soon-heading" className="text-title font-semibold">Due soon (next {dashboard.dueSoonDays} days)</h2>
-            {byDay.size === 0 ? (
-              <EmptyState icon={CalendarCheck}>Nothing due in the next {dashboard.dueSoonDays} days.</EmptyState>
-            ) : (
-              [...byDay].map(([date, deadlines]) => (
-                <div key={date} className="mt-3">
-                  <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold text-muted-foreground">{dayLabel(date, today)}</h3>
-                  <ul className="mt-1 space-y-2">
-                    {deadlines.map((d) => (
-                      <DeadlineItem key={d.item.id} deadline={d} {...item} />
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </section>
+        <section aria-labelledby="soon-heading" className="mt-6">
+          <h2 id="soon-heading" className="text-title font-semibold">Due soon (next {dashboard.dueSoonDays} days)</h2>
+          {byDay.size === 0 ? (
+            <EmptyState icon={CalendarCheck}>Nothing due in the next {dashboard.dueSoonDays} days.</EmptyState>
+          ) : (
+            [...byDay].map(([date, deadlines]) => (
+              <div key={date} className="mt-3">
+                <h3 className="sticky top-0 z-10 bg-background py-1 text-sm font-semibold text-muted-foreground">{dayLabel(date, today)}</h3>
+                <ul className="mt-1 space-y-2">
+                  {deadlines.map((d) => (
+                    <DeadlineItem key={d.item.id} deadline={d} {...item} />
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </section>
       </Fragment>
     ),
     tbaExams: (
       <Fragment key="tbaExams">
-          {dashboard.tbaExams.length > 0 && (
-            <details className="mt-6">
-              <summary className="flex min-h-11 cursor-pointer items-center text-title font-semibold">Exams with date TBA ({dashboard.tbaExams.length})</summary>
-              <ul className="mt-2 space-y-2">
-                {dashboard.tbaExams.map((e) => (
-                  <DeadlineItem key={e.id} deadline={{ type: "exam", item: e }} {...item} />
-                ))}
-              </ul>
-            </details>
-          )}
+        {dashboard.tbaExams.length > 0 && (
+          <details className="mt-6">
+            <summary className="flex min-h-11 cursor-pointer items-center text-title font-semibold">Exams with date TBA ({dashboard.tbaExams.length})</summary>
+            <ul className="mt-2 space-y-2">
+              {dashboard.tbaExams.map((e) => (
+                <DeadlineItem key={e.id} deadline={{ type: "exam", item: e }} {...item} />
+              ))}
+            </ul>
+          </details>
+        )}
       </Fragment>
     ),
     checkThese: (
       <Fragment key="checkThese">
-          {dashboard.highlightedChanges.length > 0 && (
-            <section aria-labelledby="check-heading" className="mt-6">
-              <h2 id="check-heading" className="text-title font-semibold">
-                Check these <span className="text-warning">({dashboard.highlightedChanges.length})</span>
-              </h2>
-              <ul className="mt-2 space-y-2">
-                {dashboard.highlightedChanges.map((c) => (
-                  <AutoChangeItem key={c.id} item={c} />
-                ))}
-              </ul>
-            </section>
-          )}
+        {dashboard.highlightedChanges.length > 0 && (
+          <section aria-labelledby="check-heading" className="mt-6">
+            <h2 id="check-heading" className="text-title font-semibold">
+              Check these <span className="text-warning">({dashboard.highlightedChanges.length})</span>
+            </h2>
+            <ul className="mt-2 space-y-2">
+              {dashboard.highlightedChanges.map((c) => (
+                <AutoChangeItem key={c.id} item={c} />
+              ))}
+            </ul>
+          </section>
+        )}
       </Fragment>
     ),
     recent: (
       <Fragment key="recent">
-          {dashboard.recentAutoChanges.length > 0 && (
-            <section aria-labelledby="recent-heading" className="mt-6">
-              <div className="flex items-center justify-between gap-2">
-                <h2 id="recent-heading" className="text-title font-semibold">Recent changes (48 h)</h2>
-                <Link href="/activity" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary md:min-h-10">Activity ›</Link>
-              </div>
-              <ul className="mt-2 space-y-2">
-                {dashboard.recentAutoChanges.map((c) => (
-                  <AutoChangeItem key={c.id} item={c} />
-                ))}
-              </ul>
-            </section>
-          )}
+        {dashboard.recentAutoChanges.length > 0 && (
+          <section aria-labelledby="recent-heading" className="mt-6">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="recent-heading" className="text-title font-semibold">Recent changes (48 h)</h2>
+              <Link href="/activity" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary md:min-h-10">Activity ›</Link>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {dashboard.recentAutoChanges.map((c) => (
+                <AutoChangeItem key={c.id} item={c} />
+              ))}
+            </ul>
+          </section>
+        )}
       </Fragment>
     ),
   };

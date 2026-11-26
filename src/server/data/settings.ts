@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { user } from "@/server/db/schema";
-import { DASHBOARD_SECTIONS, dashboardProblems } from "@/server/domain/dashboard-layout";
+import { dashboardProblems, fullOrder } from "@/server/domain/dashboard-layout";
 import { notifyProblems } from "@/server/domain/reminders";
 import { AppError } from "@/server/http/errors";
 import type { DashboardSettings, NotifySettings, Settings, SettingsUpdate } from "@/shared/schemas/settings";
@@ -30,7 +30,8 @@ export async function getSettings(studentId: string): Promise<Settings> {
     getEmailSetting(studentId),
   ]);
   const { autoChangesPaused, alertsOff, dueSoonDays, layout, ...notify } = row!;
-  const dashboard = { dueSoonDays, order: (layout?.order ?? [...DASHBOARD_SECTIONS]) as DashboardSettings["order"], hidden: (layout?.hidden ?? []) as DashboardSettings["hidden"] };
+  const order = fullOrder(layout?.order);
+  const dashboard: DashboardSettings = { dueSoonDays, order, hidden: order.filter((s) => layout?.hidden.includes(s)) };
   return { autoChangesPaused, notify, alertsOff: alertsOff as Settings["alertsOff"], email, dashboard };
 }
 

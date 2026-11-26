@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { DASHBOARD_SECTION_IDS } from "./settings";
 import { Assignment } from "./assignment";
 import { Exam } from "./exam";
 import { AutoChangeItem } from "./activity";
@@ -22,6 +23,6 @@ export const Dashboard = z.object({
   recentAutoChanges: z.array(AutoChangeItem),
   banners: z.array(Banner),
   dueSoonDays: z.number(), // #84: how many days Due soon covers
-  sections: z.array(z.enum(["overdue", "today", "dueSoon", "tbaExams", "checkThese", "recent"])), // #84: shown, in order
+  sections: z.array(z.enum(DASHBOARD_SECTION_IDS)), // #84: shown, in order
 });
 export type Dashboard = z.infer<typeof Dashboard>;

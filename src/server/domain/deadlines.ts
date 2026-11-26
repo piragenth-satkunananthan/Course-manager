@@ -21,7 +21,7 @@ const byDue = <T extends DeadlineInput>(a: T, b: T) => sortKey(a) - sortKey(b);
 
 /** The dashboard's sections: Overdue, the next 14 days (today and 13 more, local dates), and Exams with no date. Submitted work drops out. */
 /** `days`: how many days Due soon covers, today included (the Student's setting, 14 by default; #84). */
-export function classifyForDashboard<T extends DeadlineInput>(items: T[], now: Date, days = 14) {
+export function classifyForDashboard<T extends DeadlineInput>(items: T[], now: Date, days = 14 /* DEFAULT_DUE_SOON_DAYS */) {
   const today = todayIn(now);
   const last = addDays(today, days - 1);
   const open = items.filter((i) => i.type === "exam" || i.status !== "submitted");
