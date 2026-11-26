@@ -9,8 +9,8 @@ test("the AI section shows its status and Test AI now answers", async ({ page },
   else await signIn(page, EMPTY_STUDENT.password, EMPTY_STUDENT.email);
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await page.goto("/settings");
-  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "AI" }).click();
-  const ai = page.getByRole("region", { name: "AI" });
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "AI", exact: true }).click();
+  const ai = page.getByRole("region", { name: "AI", exact: true });
   await expect(ai).toBeInViewport();
   // No worker runs in e2e, so the AI loop has never started on this database.
   await expect(ai.getByText("Stopped")).toBeVisible();

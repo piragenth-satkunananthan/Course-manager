@@ -8,7 +8,7 @@ test("paste a key (a refused one isn't saved), see it masked, change the model a
   else await signIn(page, EMPTY_STUDENT.password, EMPTY_STUDENT.email);
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await page.goto("/settings#ai");
-  const ai = page.getByRole("region", { name: "AI" });
+  const ai = page.getByRole("region", { name: "AI", exact: true });
   await expect(ai.getByText("The server's key")).toBeVisible();
   await expect(ai.getByText(/••••/)).toHaveCount(0); // nothing of the server's key is shown
 

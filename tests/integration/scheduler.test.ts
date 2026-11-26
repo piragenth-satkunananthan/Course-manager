@@ -217,7 +217,7 @@ describe("notification settings (#79, U44)", () => {
   const save = (body: object) => a(settings.PATCH, "PATCH", "/settings", { body });
 
   it("start at today's behaviour, save, and refuse bad or clashing values", async () => {
-    expect((await a(settings.GET, "GET", "/settings")).json).toEqual({
+    expect((await a(settings.GET, "GET", "/settings")).json).toMatchObject({
       autoChangesPaused: false,
       notify: { digestOn: true, digestTime: "07:00", digestDays: 2, reminderHours: 4, secondReminderHours: null, quietStart: null, quietEnd: null },
     });

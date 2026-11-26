@@ -6,6 +6,7 @@ import { user } from "@/server/db/schema";
 import { notifyProblems } from "@/server/domain/reminders";
 import { AppError } from "@/server/http/errors";
 import type { NotifySettings, Settings, SettingsUpdate } from "@/shared/schemas/settings";
+import { getEmailSetting } from "./email-settings";
 
 const NOTIFY = {
   digestOn: user.digestOn,
@@ -23,9 +24,9 @@ export async function getNotify(studentId: string): Promise<NotifySettings> {
 }
 
 export async function getSettings(studentId: string): Promise<Settings> {
-  const [row] = await db.select({ autoChangesPaused: user.autoChangesPaused, ...NOTIFY }).from(user).where(eq(user.id, studentId));
-  const { autoChangesPaused, ...notify } = row!;
-  return { autoChangesPaused, notify };
+  const [[row], email] = await Promise.all([db.select({ autoChangesPaused: user.autoChangesPaused, alertsOff: user.alertsOff, ...NOTIFY }).from(user).where(eq(user.id, studentId)), getEmailSetting(studentId)]);
+  const { autoChangesPaused, alertsOff, ...notify } = row!;
+  return { autoChangesPaused, notify, alertsOff: alertsOff as Settings["alertsOff"], email };
 }
 
 export async function updateSettings(studentId: string, input: SettingsUpdate): Promise<Settings> {
@@ -35,6 +36,7 @@ export async function updateSettings(studentId: string, input: SettingsUpdate): 
     const first = Object.values(fieldErrors)[0];
     if (first) throw new AppError("VALIDATION", first, { fieldErrors });
   }
-  if (input.autoChangesPaused !== undefined || notify) await db.update(user).set({ ...(input.autoChangesPaused !== undefined && { autoChangesPaused: input.autoChangesPaused }), ...notify }).where(eq(user.id, studentId));
+  const set = { ...(input.autoChangesPaused !== undefined && { autoChangesPaused: input.autoChangesPaused }), ...notify, ...(input.alertsOff && { alertsOff: [...new Set(input.alertsOff)] }) };
+  if (Object.keys(set).length) await db.update(user).set(set).where(eq(user.id, studentId));
   return getSettings(studentId);
 }
