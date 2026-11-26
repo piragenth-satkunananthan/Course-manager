@@ -1,13 +1,13 @@
 // "Test AI now" (#80): one tiny chat with the server's NIM key and model, from the web app. It writes nothing.
 // Errors use the same wording as the worker's NIM client, so plainAiError reads both.
-export async function pingNim(timeoutMs = Number(process.env.NIM_TEST_TIMEOUT_MS ?? 10_000)) {
-  const model = process.env.NIM_MODEL ?? "";
-  const apiKey = process.env.NIM_API_KEY ?? "";
+import type { NimConfig } from "./nim-config";
+
+export async function pingNim({ apiKey, model, base }: NimConfig, timeoutMs = Number(process.env.NIM_TEST_TIMEOUT_MS ?? 10_000)) {
   if (!model || !apiKey) throw new Error("NIM_MODEL and NIM_API_KEY must be set");
   const started = Date.now();
   let res: Response;
   try {
-    res = await fetch(`${process.env.NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1"}/chat/completions`, {
+    res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply with OK." }], max_tokens: 16, temperature: 0 }),

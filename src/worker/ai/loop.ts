@@ -9,7 +9,8 @@ import { raiseAlert } from "../scheduler/alerts";
 import { aiTick } from "./batcher";
 import { AiFatalError, type AiClient } from "./nim-client";
 
-type Deps = { key: Buffer; client: () => AiClient; check: () => Promise<void>; tickMs?: number; recheckMs?: number };
+// `client` is called on every tick, so a key or model changed in Settings applies on the next batch (#81).
+type Deps = { key: Buffer; client: () => AiClient | Promise<AiClient>; check: () => Promise<void>; tickMs?: number; recheckMs?: number };
 
 const record = (ok: boolean, detail: string | null) => recordHealth("ai", ok, detail);
 
@@ -35,14 +36,15 @@ export function startAiLoop({ key, client, check, tickMs = 60_000, recheckMs = 5
     if (stopped) return;
     try {
       await check();
-      const ai = client();
+      const first = await client();
       await record(true, null);
-      log.info("ai loop started", { model: ai.model });
+      log.info("ai loop started", { model: first.model });
       let running = false;
       timer = setInterval(() => {
         if (running) return; // a slow batch never overlaps the next tick
         running = true;
-        aiTick(ai, key)
+        Promise.resolve(client())
+          .then((ai) => aiTick(ai, key))
           .then(() => record(true, null))
           .catch((e: Error) => (e instanceof AiFatalError ? fail(e) : log.error("ai tick failed", { error: e.message })))
           .finally(() => (running = false));

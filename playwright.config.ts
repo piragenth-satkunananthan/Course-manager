@@ -16,6 +16,7 @@ export const E2E_ENV = {
   NIM_BASE_URL: `http://127.0.0.1:${EMAIL_PORT}`,
   NIM_API_KEY: "nim_e2e",
   NIM_MODEL: "nvidia/e2e-model",
+  AI_TEST_MIN_INTERVAL_MS: "0", // the 10 s limit is covered by the integration test
 };
 
 // Runs against the production build (`npm run build` first).

@@ -7,6 +7,8 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultN
 const updatedAt = () =>
   timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull();
 
+const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
+
 // Better Auth core tables (shape from better-auth 1.7.27), plus the Student's settings.
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -23,6 +25,10 @@ export const user = pgTable("user", {
   secondReminderHours: integer("second_reminder_hours"),
   quietStart: text("quiet_start"),
   quietEnd: text("quiet_end"),
+  // The Student's own NVIDIA NIM key and model (U45, #81): the key encrypted with the data key, never returned.
+  nimApiKeyEnc: bytea("nim_api_key_enc"),
+  nimModel: text("nim_model"),
+  nimModelPrevious: text("nim_model_previous"), // for "Switch back"
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -332,7 +338,6 @@ export const activityEvent = pgTable(
 );
 
 // The WhatsApp Link and the inbox (§3, #11).
-const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 export const waStatus = pgEnum("wa_status", ["unlinked", "pairing", "connected", "logged_out", "error"]);
 
 /** One per Student. The *_requested_at columns are how the web app asks the worker to act (§8, request poller). */

@@ -17,3 +17,10 @@ export const AiTestResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), problem: z.string(), model: z.string().nullable() }),
 ]);
 export type AiTestResult = z.infer<typeof AiTestResult>;
+
+// #81 (U45): the key is only ever sent in; what comes back is its masked form.
+export const AiKeyUpdate = z.strictObject({ apiKey: z.string({ error: "Paste your NVIDIA API key" }).trim().min(8, "Paste your NVIDIA API key").max(400, "That key is too long") });
+export const AiModelUpdate = z.strictObject({ model: z.string({ error: "Choose a model" }).min(1, "Choose a model").max(200, "Choose a model") });
+export const AiKeyView = z.object({ keySource: z.enum(["saved", "server"]), keyMasked: z.string().nullable(), model: z.string().nullable(), previousModel: z.string().nullable() });
+export type AiKeyView = z.infer<typeof AiKeyView>;
+export const AiModels = z.object({ models: z.array(z.string()), current: z.string().nullable() });
