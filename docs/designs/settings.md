@@ -1,6 +1,6 @@
 # Settings design: more control for the Student
 
-> **Status: draft, waiting for the product owner's approval (2026-11-26).** Built before M2. No app code until the tickets are approved.
+> **Status: approved by the product owner on 2026-11-26 (U44–U47).** Built before M2.
 
 The Student asked for a Settings page they can customise as much as possible: notification times, the AI key and model, and a way to see whether the AI is working. Today Settings has three sections (Semesters, WhatsApp with the Auto Changes switch, Account), and the digest time, digest range, reminder lead time and the AI key are fixed.
 
