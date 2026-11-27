@@ -7,13 +7,14 @@ import { formatDate } from "@/lib/format";
 import { listDeadlinesIn } from "@/server/data/assessments";
 import { listCourseOptions } from "@/server/data/courses";
 import { getOccurrences } from "@/server/data/timetable";
-import { addDays, todayIn, weekdayOf } from "@/server/domain/time";
+import { getPrefs } from "@/server/data/settings";
+import { weekStartOf } from "@/server/domain/defaults";
+import { addDays, todayIn } from "@/server/domain/time";
 import { requireStudentId } from "@/server/session";
 import { IsoDate } from "@/shared/schemas/common";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import type { Occurrence } from "@/shared/schemas/timetable";
 
-const monday = (d: string) => addDays(d, 1 - weekdayOf(d));
 const dayHref = (date: string) => `/timetable?view=day&date=${date}`;
 const weekHref = (week: string) => `/timetable?view=week&week=${week}`;
 const monthHref = (date: string) => calendarHref(date.slice(0, 7));
@@ -42,23 +43,26 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   // With no choice in the URL, the week: a grid from 1024 px, today's list below that (the design's routes table).
   const view: "day" | "week" = q.view === "day" || (!q.view && q.date) ? "day" : "week";
   const valid = (d?: string) => (IsoDate.safeParse(d).success ? d! : null);
+  // The week starts on the Student's chosen day (Monday by default; #83).
+  const { weekStart } = await getPrefs(studentId);
+  const firstDay = (d: string) => weekStartOf(d, weekStart);
 
   if (view === "day") {
     const date = valid(q.date) ?? today;
     const [occurrences, deadlines, courses] = await Promise.all([getOccurrences(studentId, date, date), listDeadlinesIn(studentId, date, date), listCourseOptions(studentId)]);
     return (
       <>
-        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(monday(date)), month: monthHref(date) }} />
+        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(firstDay(date)), month: monthHref(date) }} />
         <DayList date={date} today={today} occurrences={occurrences} deadlines={deadlines} courses={courses} />
       </>
     );
   }
 
-  const week = monday(valid(q.week) ?? today); // any date in the URL means its week
+  const week = firstDay(valid(q.week) ?? today); // any date in the URL means its week
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const focus = days.includes(today) ? today : week; // the day shown below 1024 px
   const [occurrences, deadlines, courses] = await Promise.all([getOccurrences(studentId, week, days[6]!), listDeadlinesIn(studentId, week, days[6]!), listCourseOptions(studentId)]);
-  const thisWeek = monday(today);
+  const thisWeek = firstDay(today);
   return (
     <>
       <Header courses={courses} date={focus} view="week" hrefs={{ day: dayHref(focus), week: weekHref(week), month: monthHref(focus) }} />

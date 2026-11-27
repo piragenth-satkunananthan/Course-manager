@@ -19,7 +19,7 @@ const origin = () => process.env.APP_ORIGIN ?? "";
 // `email`: where this Student's emails go (a confirmed address, else the login email; #82).
 const students = () =>
   db
-    .select({ id: user.id, login: user.email, notifyEmail: user.notifyEmail, paused: user.autoChangesPaused })
+    .select({ id: user.id, login: user.email, notifyEmail: user.notifyEmail, paused: user.autoChangesPaused, timeFormat: user.timeFormat })
     .from(user)
     .then((rows) => rows.map((r) => ({ ...r, email: recipient({ email: r.login, notifyEmail: r.notifyEmail }) })));
 
@@ -55,7 +55,7 @@ export async function runFinalReminders(now: Date) {
     for (const { item: d, kind, hours } of due) {
       await claimAndSend(
         { studentId: s.id, kind: kind === "final" ? "final_reminder" : "second_reminder", entityType: d.deadline.type, entityId: d.id, dueAt: d.dueAt! },
-        { to: s.email, ...finalReminderEmail(d.deadline, origin(), hours) },
+        { to: s.email, ...finalReminderEmail(d.deadline, origin(), hours, s.timeFormat) },
       );
     }
     // A reminder still failed when its Deadline arrived: give up on it and alert (§10). Failures from the last day count,
@@ -96,7 +96,7 @@ export async function runDigest(now: Date) {
       await recordSkippedDigest(s.id, today);
       continue;
     }
-    const email = digestEmail({ dueSoon: sections.dueSoon.map((d) => d.deadline), addedOrMoved: sections.addedOrMoved.map((d) => d.deadline), checkThese: sections.checkThese }, formatDate(today), origin());
+    const email = digestEmail({ dueSoon: sections.dueSoon.map((d) => d.deadline), addedOrMoved: sections.addedOrMoved.map((d) => d.deadline), checkThese: sections.checkThese }, formatDate(today), origin(), s.timeFormat);
     await claimAndSend({ studentId: s.id, kind: "digest", digestDate: today }, { to: s.email, ...email });
   }
 }

@@ -50,8 +50,8 @@ Each section saves on its own with a Save button (U7 conflict rule), shows "Save
 - **Second reminder:** it must come before the Final Reminder (a longer lead time). the same email as the Final Reminder ("Due in 1 day: …"), each logged once per Deadline and due time, as today.
 - **Alerts that can't be turned off:** the healthchecks.io emails (worker or backup stopped) come from outside the app, and "a reminder couldn't be sent" stays on. The Settings page says so.
 - **Email address:** the new address is used only after its confirmation link is opened; until then, emails go to the old one. Sign-in still uses the login email.
-- **Default due time:** applies to new Assignments only (from the AI and the Add form); existing ones keep their times. The AI prompt reads it from the context instead of the fixed 23:59, so this is a prompt change (eval twice).
-- **Week starts on and time format:** display only: the week grid, the month view, the date pickers and email times. Data is unchanged.
+- **Default due time:** applies to new Assignments only (from the AI and the Add form); existing ones keep their times. It is filled in when such an Assignment is created with no time; the AI prompt is unchanged, so no eval runs (product owner, 2026-11-26). "None" keeps the original meaning: no time stored, counted as 23:59.
+- **Week starts on and time format:** display only: the week grid, the month view, the Deadlines lists' "This week", and times in the app and in emails. Date pickers are the browser's own and follow it. Data is unchanged.
 - **Dashboard sections:** Overdue can be moved but not hidden (it's how missed deadlines show).
 
 ### The AI key and model (security; needs ADR-0007)
@@ -81,7 +81,7 @@ These need the product owner's OK (this document's approval) and become decision
 2. **AI status and "Test AI now".**
 3. **AI key and model in Settings:** ADR-0007; encrypted key; model list; switch-back.
 4. **Email and alerts:** a confirmed email address; alert kinds on/off.
-5. **Defaults:** default due time (prompt change, eval twice), week start, time format.
+5. **Defaults:** default due time (filled in on create; no prompt change), week start, time format.
 6. **Dashboard:** Due soon range; section show/hide and order.
 
 Each ticket: unit tests for the rules, integration tests for the API and scheduler, e2e at phone and desktop sizes.

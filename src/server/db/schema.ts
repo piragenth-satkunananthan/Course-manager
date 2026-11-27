@@ -37,6 +37,10 @@ export const user = pgTable("user", {
   alertsOff: text("alerts_off").array().default(sql`'{}'::text[]`).notNull(),
   // Dashboard (U47, #84): Due soon's range, and the sections' order and hidden ones ({ order, hidden }).
   dueSoonDays: integer("due_soon_days").default(14).notNull(),
+  // Defaults (U47, #83): due time for a new Assignment with none ("23:59" = none stored), week start, time format.
+  defaultDueTime: text("default_due_time").default("23:59").notNull(),
+  weekStart: text("week_start").$type<"monday" | "sunday">().default("monday").notNull(),
+  timeFormat: text("time_format").$type<"24h" | "12h">().default("24h").notNull(),
   dashboardLayout: jsonb("dashboard_layout").$type<{ order: string[]; hidden: string[] }>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),

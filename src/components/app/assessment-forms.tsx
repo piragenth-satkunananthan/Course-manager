@@ -1,6 +1,7 @@
 "use client";
 // Add or edit an Assignment or an Exam (design-system §7.3). Edits send expectedVersion; on a conflict the form
 // reloads the latest values with a toast (U7), and saving again uses the new version.
+import { usePrefs } from "./prefs";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ function useSave<Dto extends { id: string; version: number }>(path: string, sche
 type FormProps<Dto> = { courses: CourseOption[]; existing?: Dto; initial?: Partial<Dto>; onDone: (saved: Dto) => void };
 
 export function AssignmentForm({ courses, existing, initial, onDone }: FormProps<Assignment>) {
+  const { t, dueTime } = usePrefs();
   const form = useAppForm(AssignmentCreate, assignmentValues(existing ?? initial));
   const save = useSave("/assignments", Assignment, existing, (a) => form.reset(assignmentValues(a)));
   const { isSubmitting, errors, submitCount } = form.formState;
@@ -62,7 +64,7 @@ export function AssignmentForm({ courses, existing, initial, onDone }: FormProps
       <CourseField control={form.control} name="courseId" courses={courses} />
       <TextField control={form.control} name="title" label="Title" required />
       <TextField control={form.control} name="dueDate" label="Due date" type="date" required />
-      <TextField control={form.control} name="dueTime" label="Due time" type="time" help="Leave empty if no time was announced (treated as 23:59)" />
+      <TextField control={form.control} name="dueTime" label="Due time" type="time" help={dueTime === "23:59" ? "Leave empty if no time was announced (treated as 23:59)" : `Leave empty to use your default, ${t(dueTime)}`} />
       <TextField control={form.control} name="submitWhere" label="Where to submit" help="For example LMS or the lab office" />
       <CheckboxField control={form.control} name="isGroupWork" label="Group work" />
       <TextAreaField control={form.control} name="description" label="Description" />

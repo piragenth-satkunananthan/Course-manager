@@ -1,5 +1,6 @@
 "use client";
 // The Course page's weekly Class Sessions: add, edit, delete (design-system §7.2).
+import { usePrefs } from "./prefs";
 import { FlaskConical, Plus, Presentation, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -49,18 +50,19 @@ function ClassSessionForm({ courseId, existing, onDone }: { courseId: string; ex
 }
 
 export function WeeklyClasses({ courseId, code, sessions }: { courseId: string; code: string; sessions: ClassSession[] }) {
+  const { t } = usePrefs();
   const router = useRouter();
   const [editing, setEditing] = useState<ClassSession | "new" | null>(null);
   const [deleting, setDeleting] = useState<ClassSession | null>(null);
   const done = () => (setEditing(null), router.refresh());
-  const describe = (s: ClassSession) => `${WEEKDAYS[s.weekday - 1]} ${s.startTime}–${s.endTime} ${SESSION_KIND_LABEL[s.kind]}`;
+  const describe = (s: ClassSession, t: (hhmm: string) => string) => `${WEEKDAYS[s.weekday - 1]} ${t(s.startTime)}–${t(s.endTime)} ${SESSION_KIND_LABEL[s.kind]}`;
 
   async function remove() {
     const s = deleting!;
     const res = await apiFetch(`/class-sessions/${s.id}`, { method: "DELETE" });
     setDeleting(null);
     if (!res.ok) return toastApiError(res.error);
-    toast.success(`Deleted ${describe(s)}`);
+    toast.success(`Deleted ${describe(s, t)}`);
     router.refresh();
   }
 
@@ -83,11 +85,11 @@ export function WeeklyClasses({ courseId, code, sessions }: { courseId: string; 
               <li key={s.id} className="flex min-h-14 items-center gap-3 py-2">
                 <Icon size={20} strokeWidth={1.75} aria-hidden="true" className="text-muted-foreground" />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold tabular-nums">{describe(s)}</span>
+                  <span className="block font-semibold tabular-nums">{describe(s, t)}</span>
                   {s.location && <span className="block text-sm text-muted-foreground">{s.location}</span>}
                 </span>
-                <Button variant="ghost" onClick={() => setEditing(s)} aria-label={`Edit ${describe(s)}`}>Edit</Button>
-                <Button variant="ghost" onClick={() => setDeleting(s)} aria-label={`Delete ${describe(s)}`}>Delete</Button>
+                <Button variant="ghost" onClick={() => setEditing(s)} aria-label={`Edit ${describe(s, t)}`}>Edit</Button>
+                <Button variant="ghost" onClick={() => setDeleting(s)} aria-label={`Delete ${describe(s, t)}`}>Delete</Button>
               </li>
             );
           })}
@@ -99,7 +101,7 @@ export function WeeklyClasses({ courseId, code, sessions }: { courseId: string; 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {deleting && describe(deleting)}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {deleting && describe(deleting, t)}?</AlertDialogTitle>
             <AlertDialogDescription>Every week of it leaves the timetable, with any changes to single classes. This can&apos;t be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

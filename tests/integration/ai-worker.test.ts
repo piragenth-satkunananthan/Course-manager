@@ -8,6 +8,7 @@ import * as classSessions from "@/app/api/v1/courses/[id]/class-sessions/route";
 import * as sessionChangeRoute from "@/app/api/v1/session-changes/[id]/route";
 import * as sessionChanges from "@/app/api/v1/session-changes/route";
 import * as semesters from "@/app/api/v1/semesters/route";
+import * as settings from "@/app/api/v1/settings/route";
 import * as timetable from "@/app/api/v1/timetable/route";
 import type { AiContext } from "@/server/ai/context";
 import { loadKey } from "@/server/crypto";
@@ -99,6 +100,18 @@ describe("an announcement becomes an Auto Change", () => {
     await say("still talking");
     await aiTick(ai, key, later(0));
     expect(ai.calls).toBe(1);
+  });
+});
+
+describe("the Student's default due time (#83)", () => {
+  it("fills an announced Assignment with no time, and one added by hand; an announced time is kept", async () => {
+    expect((await a(settings.PATCH, "PATCH", "/settings", { body: { defaults: { dueTime: "17:00" } } })).json.defaults).toMatchObject({ dueTime: "17:00" });
+    await say("DS lab report due 27th");
+    await aiTick(fakeAi((ctx) => ops(ctx, [create(ctx), create(ctx, { title: "Quiz prep", dueTime: "09:00" })])), key, later());
+    await a(assignments.POST, "POST", "/assignments", { body: { courseId, title: "By hand", dueDate: "2026-11-28" } });
+    const rows = (await a(assignments.GET, "GET", "/assignments")).json as { title: string; dueTime: string | null }[];
+    expect(Object.fromEntries(rows.map((r) => [r.title, r.dueTime]))).toEqual({ "Lab 4 report": "17:00", "Quiz prep": "09:00", "By hand": "17:00" });
+    expect((await a(settings.PATCH, "PATCH", "/settings", { body: { defaults: { dueTime: "25:00" } } })).status).toBe(400);
   });
 });
 

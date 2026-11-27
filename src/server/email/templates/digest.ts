@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format";
+import type { TimeFormat } from "@/shared/schemas/settings";
 import type { Deadline } from "@/shared/schemas/dashboard";
 import { deadlineLine } from "./deadline-line";
 
@@ -9,7 +10,7 @@ import { esc, layout } from "./layout";
  * Due soon (today and the next two days), grouped by day, Added or moved since the last digest, and Check these (#14).
  * Deadlines link to the dashboard until the Deadline list pages exist (M1b); Check these links to the Activity Log.
  */
-export function digestEmail(sections: { dueSoon: Deadline[]; addedOrMoved: Deadline[]; checkThese: string[] }, dateLabel: string, appOrigin: string) {
+export function digestEmail(sections: { dueSoon: Deadline[]; addedOrMoved: Deadline[]; checkThese: string[] }, dateLabel: string, appOrigin: string, tf: TimeFormat = "24h") {
   const subject = `Course-manager · ${dateLabel}: ${sections.dueSoon.length} due soon`;
   const link = `${appOrigin}/`;
   const html = (title: string, groups: [string | null, Deadline[]][]) =>
@@ -18,12 +19,12 @@ export function digestEmail(sections: { dueSoon: Deadline[]; addedOrMoved: Deadl
         groups
           .map(([day, items]) =>
             (day ? `<p style="margin:8px 0 4px;font-weight:600;color:#475569">${esc(day)}</p>` : "") +
-            `<ul style="margin:0;padding-left:20px">${items.map((d) => deadlineLine(d)).map((l) => `<li style="margin:0 0 6px"><a href="${esc(link)}" style="color:#0f172a">${esc(`${l.kind}: ${l.text}`)}</a></li>`).join("")}</ul>`,
+            `<ul style="margin:0;padding-left:20px">${items.map((d) => deadlineLine(d, tf)).map((l) => `<li style="margin:0 0 6px"><a href="${esc(link)}" style="color:#0f172a">${esc(`${l.kind}: ${l.text}`)}</a></li>`).join("")}</ul>`,
           )
           .join("")
       : "";
   const text = (title: string, groups: [string | null, Deadline[]][]) =>
-    groups.length ? `${title}\n${groups.map(([day, items]) => (day ? `${day}\n` : "") + items.map((d) => deadlineLine(d)).map((l) => `- ${l.kind}: ${l.text}`).join("\n")).join("\n")}\n` : "";
+    groups.length ? `${title}\n${groups.map(([day, items]) => (day ? `${day}\n` : "") + items.map((d) => deadlineLine(d, tf)).map((l) => `- ${l.kind}: ${l.text}`).join("\n")).join("\n")}\n` : "";
   const byDay = [...Map.groupBy(sections.dueSoon, dateOf)].map(([date, items]): [string, Deadline[]] => [formatDate(date), items]);
   const moved: [string | null, Deadline[]][] = sections.addedOrMoved.length ? [[null, sections.addedOrMoved]] : [];
   const activity = `${appOrigin}/activity`;
