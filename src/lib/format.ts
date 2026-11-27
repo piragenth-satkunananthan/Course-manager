@@ -1,3 +1,4 @@
+import type { TimeFormat } from "@/shared/schemas/settings";
 // Display formats (design-system §2.2): "Fri 20 Nov", 24-hour times. Local dates are plain YYYY-MM-DD values,
 // so they're formatted in UTC to keep the day unchanged.
 export function formatDate(isoDate: string, { weekday = true, year = false } = {}) {
@@ -31,7 +32,7 @@ export function relativeDay(date: string, today: string) {
 }
 
 /** "Due Thu 19 Nov, 16:30 · in 2 days" or "Due Fri 20 Nov · time not announced" (design-system §6.1). */
-export function dueLine(date: string, time: string | null, today: string, verb = "Due", untimed = "time not announced", tf: "24h" | "12h" = "24h") {
+export function dueLine(date: string, time: string | null, today: string, verb = "Due", untimed = "time not announced", tf: TimeFormat = "24h") {
   return `${verb} ${formatDate(date)}${time ? `, ${formatTime(time, tf)}` : ` · ${untimed}`} · ${relativeDay(date, today)}`;
 }
 
@@ -46,7 +47,7 @@ export const formatMonth = (month: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(`${month}-01T00:00:00Z`));
 
 /** "14:05" or, in 12-hour format, "2:05 pm" (Settings → Defaults, #83). */
-export function formatTime(hhmm: string, format: "24h" | "12h" = "24h") {
+export function formatTime(hhmm: string, format: TimeFormat = "24h") {
   if (format === "24h") return hhmm;
   const h = Number(hhmm.slice(0, 2));
   return `${h % 12 || 12}:${hhmm.slice(3, 5)} ${h < 12 ? "am" : "pm"}`;

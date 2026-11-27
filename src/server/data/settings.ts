@@ -1,9 +1,11 @@
 // The Student's settings (design file 48): the switch that pauses Auto Changes (#15), and the notification settings
 // (U44, #79), whose cross-field rules are checked on the merged result before anything is saved.
 import { eq } from "drizzle-orm";
+import { cache } from "react";
 import { db } from "@/server/db/client";
 import { user } from "@/server/db/schema";
 import { dashboardProblems, fullOrder } from "@/server/domain/dashboard-layout";
+import { DEFAULT_DUE_TIME } from "@/server/domain/defaults";
 import { notifyProblems } from "@/server/domain/reminders";
 import { AppError } from "@/server/http/errors";
 import type { DashboardSettings, NotifySettings, Settings, SettingsUpdate } from "@/shared/schemas/settings";
@@ -56,8 +58,8 @@ export async function updateSettings(studentId: string, input: SettingsUpdate): 
   return getSettings(studentId);
 }
 
-/** The display and default preferences every page needs (#83). */
-export async function getPrefs(studentId: string) {
+/** The display and default preferences (#83). Cached per request, so a page and its layout read them once. */
+export const getPrefs = cache(async (studentId: string) => {
   const [row] = await db.select({ dueTime: user.defaultDueTime, weekStart: user.weekStart, timeFormat: user.timeFormat }).from(user).where(eq(user.id, studentId));
-  return row ?? { dueTime: "23:59", weekStart: "monday" as const, timeFormat: "24h" as const };
-}
+  return row ?? { dueTime: DEFAULT_DUE_TIME, weekStart: "monday" as const, timeFormat: "24h" as const };
+});

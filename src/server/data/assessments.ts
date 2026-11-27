@@ -82,9 +82,9 @@ const student = () => ({ actor: "student" as const, setAt: new Date().toISOStrin
 
 export async function createAssignment(studentId: string, input: AssignmentCreate) {
   await assertCourse(studentId, input.courseId);
+  // A new Assignment with no time gets the Student's default due time (#83).
+  const proposed = withDefaultDueTime(input, (await getPrefs(studentId)).dueTime);
   return db.transaction(async (tx) => {
-    // A new Assignment with no time gets the Student's default due time (#83).
-    const proposed = withDefaultDueTime(input, (await getPrefs(studentId)).dueTime);
     const { row } = await writeEntity(tx, { studentId, entityType: "assignment", op: "create", proposed, ...student() });
     return oneAssignment(tx, studentId, row.id);
   });

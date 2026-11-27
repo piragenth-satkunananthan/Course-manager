@@ -2,10 +2,10 @@
 // The Student's display preferences (Settings → Defaults, #83), set once in the app layout and read by any component.
 import { createContext, useContext } from "react";
 import { formatTime } from "@/lib/format";
-import type { TimeFormat, WeekStart } from "@/server/domain/defaults";
+import type { TimeFormat } from "@/shared/schemas/settings";
 
-type Prefs = { timeFormat: TimeFormat; weekStart: WeekStart };
-const PrefsContext = createContext<Prefs>({ timeFormat: "24h", weekStart: "monday" });
+type Prefs = { timeFormat: TimeFormat; dueTime: string };
+const PrefsContext = createContext<Prefs>({ timeFormat: "24h", dueTime: "23:59" });
 
 export function PrefsProvider({ prefs, children }: { prefs: Prefs; children: React.ReactNode }) {
   return <PrefsContext.Provider value={prefs}>{children}</PrefsContext.Provider>;

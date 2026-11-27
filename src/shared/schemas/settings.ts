@@ -30,6 +30,8 @@ export const DefaultsSettings = z.object({
   timeFormat: z.enum(["24h", "12h"], { error: "Choose 24-hour or 12-hour" }),
 });
 export type DefaultsSettings = z.infer<typeof DefaultsSettings>;
+export type WeekStart = DefaultsSettings["weekStart"];
+export type TimeFormat = DefaultsSettings["timeFormat"];
 
 // Dashboard (U47, #84)
 export const DASHBOARD_SECTION_IDS = ["overdue", "today", "dueSoon", "tbaExams", "checkThese", "recent"] as const;

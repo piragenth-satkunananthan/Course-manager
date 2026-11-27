@@ -14,6 +14,7 @@ import type { CalendarMonth } from "@/shared/schemas/calendar";
 import type { Deadline } from "@/shared/schemas/dashboard";
 
 type Day = CalendarMonth["days"][number];
+const WEEKDAY = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short" });
 const MAX_DOTS = 4;
 const MAX_CHIPS = 2;
 const isSubmitted = (d: Deadline) => d.type === "assignment" && d.item.status === "submitted";
@@ -62,7 +63,7 @@ export function MonthGrid({ data, today, selected }: { data: CalendarMonth; toda
   return (
     <div role="grid" aria-label={formatMonth(data.month)} className="mt-4 overflow-hidden rounded-md border border-border bg-card max-sm:-mx-4 max-sm:rounded-none max-sm:border-x-0">
       <div role="row" className="grid grid-cols-7 border-b border-border">
-        {data.days.slice(0, 7).map((d) => formatDate(d.date).slice(0, 3)).map((w) => ( // the columns follow the week start (#83)
+        {data.days.slice(0, 7).map((d) => WEEKDAY.format(new Date(`${d.date}T00:00:00Z`))).map((w) => ( // the columns follow the week start (#83)
           <span key={w} role="columnheader" className="py-1 text-center text-xs font-semibold text-muted-foreground">{w}</span>
         ))}
       </div>

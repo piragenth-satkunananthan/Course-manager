@@ -45,24 +45,24 @@ export default async function TimetablePage({ searchParams }: { searchParams: Pr
   const valid = (d?: string) => (IsoDate.safeParse(d).success ? d! : null);
   // The week starts on the Student's chosen day (Monday by default; #83).
   const { weekStart } = await getPrefs(studentId);
-  const monday = (d: string) => weekStartOf(d, weekStart);
+  const firstDay = (d: string) => weekStartOf(d, weekStart);
 
   if (view === "day") {
     const date = valid(q.date) ?? today;
     const [occurrences, deadlines, courses] = await Promise.all([getOccurrences(studentId, date, date), listDeadlinesIn(studentId, date, date), listCourseOptions(studentId)]);
     return (
       <>
-        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(monday(date)), month: monthHref(date) }} />
+        <Header courses={courses} date={date} view="day" hrefs={{ day: dayHref(date), week: weekHref(firstDay(date)), month: monthHref(date) }} />
         <DayList date={date} today={today} occurrences={occurrences} deadlines={deadlines} courses={courses} />
       </>
     );
   }
 
-  const week = monday(valid(q.week) ?? today); // any date in the URL means its week
+  const week = firstDay(valid(q.week) ?? today); // any date in the URL means its week
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const focus = days.includes(today) ? today : week; // the day shown below 1024 px
   const [occurrences, deadlines, courses] = await Promise.all([getOccurrences(studentId, week, days[6]!), listDeadlinesIn(studentId, week, days[6]!), listCourseOptions(studentId)]);
-  const thisWeek = monday(today);
+  const thisWeek = firstDay(today);
   return (
     <>
       <Header courses={courses} date={focus} view="week" hrefs={{ day: dayHref(focus), week: weekHref(week), month: monthHref(focus) }} />

@@ -1,5 +1,5 @@
 "use client";
-// The desktop week grid (design-system §6.8, #19): Monday to Sunday, 07:00 to 20:00 at 48 px per hour. A Deadline
+// The desktop week grid (design-system §6.8, #19): the Student's week (from Monday or Sunday, #83), 07:00 to 20:00 at 48 px per hour. A Deadline
 // strip on top of each day, class blocks in the Course colour, and a current-time line on today. It scrolls
 // vertically only. Each class and Deadline is a button that opens the same sheet as the day list.
 import { usePrefs } from "./prefs";
@@ -57,9 +57,10 @@ function ClassBlock({ o, style, cutStart, cutEnd }: { o: Occurrence; style: Reac
 
 function DeadlineChip({ d, today, now, courses }: { d: Deadline; today: string; now: Date | null; courses: CourseOption[] }) {
   const [open, setOpen] = useState(false);
+  const { t } = usePrefs();
   const submitted = d.type === "assignment" && d.item.status === "submitted";
   const overdue = isOverdueDeadline(d, now);
-  const label = `${d.item.courseCode} ${d.type === "assignment" ? "Assignment" : "Exam"}: ${d.item.title}${timeOf(d) ? `, ${timeOf(d)}` : ""}${submitted ? ", submitted" : overdue ? ", overdue" : ""}`;
+  const label = `${d.item.courseCode} ${d.type === "assignment" ? "Assignment" : "Exam"}: ${d.item.title}${timeOf(d) ? `, ${t(timeOf(d)!)}` : ""}${submitted ? ", submitted" : overdue ? ", overdue" : ""}`;
   return (
     <li>
       <button
@@ -80,6 +81,7 @@ function DeadlineChip({ d, today, now, courses }: { d: Deadline; today: string; 
 }
 
 export function WeekGrid({ days, occurrences, deadlines, today, courses }: Props) {
+  const { t } = usePrefs();
   const now = useNow();
   const local = now && instantToLocal(now);
   const line = local?.date === today ? nowOffset(local.time) : null;
@@ -113,7 +115,7 @@ export function WeekGrid({ days, occurrences, deadlines, today, courses }: Props
           <div aria-hidden="true" className="relative">
             {hours.map((h) => (
               <span key={h} className="absolute right-1 -translate-y-1/2 text-xs text-muted-foreground tabular-nums first:translate-y-0 last:-translate-y-full" style={{ top: (h - FIRST_HOUR) * HOUR_PX }}>
-                {String(h).padStart(2, "0")}:00
+                {t(`${String(h).padStart(2, "0")}:00`)}
               </span>
             ))}
           </div>

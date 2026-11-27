@@ -81,7 +81,7 @@ These need the product owner's OK (this document's approval) and become decision
 2. **AI status and "Test AI now".**
 3. **AI key and model in Settings:** ADR-0007; encrypted key; model list; switch-back.
 4. **Email and alerts:** a confirmed email address; alert kinds on/off.
-5. **Defaults:** default due time (prompt change, eval twice), week start, time format.
+5. **Defaults:** default due time (filled in on create; no prompt change), week start, time format.
 6. **Dashboard:** Due soon range; section show/hide and order.
 
 Each ticket: unit tests for the rules, integration tests for the API and scheduler, e2e at phone and desktop sizes.
