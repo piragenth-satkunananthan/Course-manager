@@ -18,7 +18,7 @@ import { PROMPT_VERSION, repairPrompt, SYSTEM_PROMPT, userPrompt } from "./promp
 const QUIET_MS = 2 * 60_000;
 const OLDEST_MS = 5 * 60_000;
 const STALE_MS = 10 * 60_000;
-const MAX_BATCH = 30;
+const MAX_BATCH = 10; // a smaller batch keeps the model's thinking, and its answer, well inside MAX_TOKENS (U48)
 const BACKOFF_MIN = [1, 5, 15, 60]; // then hourly
 const OUTAGE_ALERT_MS = 60 * 60_000;
 const PREVIEW = new Error("preview only: rolled back");
