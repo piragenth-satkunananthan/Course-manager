@@ -1,5 +1,6 @@
 // Maps raw Baileys events to inbox records (design file 63); first written in the M0 spike. Pure, so it is unit-tested.
 // Structural types instead of Baileys' own, so tests can pass plain literals.
+import { getContentType, normalizeMessageContent, type proto } from "baileys";
 
 type Key = { remoteJid?: string | null; id?: string | null; fromMe?: boolean | null; participant?: string | null };
 type Content = { conversation?: string | null; extendedTextMessage?: { text?: string | null } | null; editedMessage?: { message?: Content } | null } | null | undefined;
@@ -13,13 +14,22 @@ export type WaRecord = {
   sentAt: number | null; // unix seconds
   type: "notify" | "append" | "edit" | "revoke" | "other" | "undecryptable";
   text?: string;
+  contentType?: string; // for a message with no text: what it was (reactionMessage, stickerMessage…), to spot gaps
 };
 
 // proto.WebMessageInfo.StubType values (checked against baileys 7.0.0-rc14)
 const STUB_REVOKE = 1;
 const STUB_CIPHERTEXT = 2;
 
-const textOf = (m: Content): string | undefined => m?.conversation ?? m?.extendedTextMessage?.text ?? undefined;
+// WhatsApp wraps many messages (disappearing, view-once, documents with captions); Baileys unwraps them (#92).
+const inner = (m: Content) => normalizeMessageContent(m as proto.IMessage | undefined);
+// Edits come through messages.update, so an edit arriving as a new message is never read as new text.
+const isEdit = (m: Content) => !!(m as proto.IMessage | null | undefined)?.editedMessage || !!(m as proto.IMessage | null | undefined)?.protocolMessage;
+const textOf = (m: Content): string | undefined => {
+  if (isEdit(m)) return undefined;
+  const n = inner(m);
+  return n?.conversation ?? n?.extendedTextMessage?.text ?? n?.imageMessage?.caption ?? n?.videoMessage?.caption ?? n?.documentMessage?.caption ?? undefined;
+};
 const ts = (t: Msg["messageTimestamp"]) => (t == null ? null : typeof t === "number" ? t : t.toNumber());
 
 type Upsert = { type: "notify" | "append"; messages: Msg[] };
@@ -39,7 +49,8 @@ export function classify(event: string, payload: unknown, linked: ReadonlySet<st
     return p.messages.filter((m) => wanted(m.key)).map((m): WaRecord => {
       const text = textOf(m.message);
       const type = !m.message && m.messageStubType === STUB_CIPHERTEXT ? "undecryptable" : text === undefined ? "other" : p.type;
-      return { ...base(m.key, m), sentAt: ts(m.messageTimestamp), type, ...(text === undefined ? {} : { text }) };
+      const contentType = type === "other" ? getContentType(isEdit(m.message) ? (m.message as proto.IMessage) : inner(m.message)) : undefined;
+      return { ...base(m.key, m), sentAt: ts(m.messageTimestamp), type, ...(text === undefined ? {} : { text }), ...(contentType ? { contentType } : {}) };
     });
   }
 

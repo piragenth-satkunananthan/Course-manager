@@ -48,6 +48,42 @@ describe("classify", () => {
     ]);
   });
 
+  it("reads text inside WhatsApp's wrappers and from captions (#92)", () => {
+    const out = classify("messages.upsert", {
+      type: "notify",
+      messages: [
+        { key: key("D1"), messageTimestamp: 8, message: { ephemeralMessage: { message: { extendedTextMessage: { text: "CA on Friday" } } } } },
+        { key: key("D2"), messageTimestamp: 8, message: { viewOnceMessageV2: { message: { conversation: "once" } } } },
+        { key: key("D3"), messageTimestamp: 8, message: { imageMessage: { caption: "Timetable for next week" } } },
+        { key: key("D4"), messageTimestamp: 8, message: { documentWithCaptionMessage: { message: { documentMessage: { caption: "Lab sheet 5, due Monday" } } } } },
+        { key: key("D5"), messageTimestamp: 8, message: { ephemeralMessage: { message: { videoMessage: { caption: "Recording" } } } } },
+      ],
+    }, linked);
+    expect(out.map((r) => [r.id, r.type, r.text])).toEqual([
+      ["D1", "notify", "CA on Friday"],
+      ["D2", "notify", "once"],
+      ["D3", "notify", "Timetable for next week"],
+      ["D4", "notify", "Lab sheet 5, due Monday"],
+      ["D5", "notify", "Recording"],
+    ]);
+  });
+
+  it("records the content type of a message that still has no text (#92)", () => {
+    const out = classify("messages.upsert", {
+      type: "notify",
+      messages: [
+        { key: key("E1"), messageTimestamp: 9, message: { reactionMessage: { text: "👍" } } },
+        { key: key("E2"), messageTimestamp: 9, message: { ephemeralMessage: { message: { stickerMessage: {} } } } },
+        { key: key("E3"), messageTimestamp: 9, message: { editedMessage: { message: { conversation: "an edit arriving as a new message" } } } },
+      ],
+    }, linked);
+    expect(out.map((r) => [r.id, r.type, r.contentType])).toEqual([
+      ["E1", "other", "reactionMessage"],
+      ["E2", "other", "stickerMessage"],
+      ["E3", "other", "editedMessage"], // edits are read from messages.update, so it isn't counted twice
+    ]);
+  });
+
   it("records an edit on the original key with the edit's own timestamp", () => {
     const out = classify("messages.update", [
       { key: key("D1"), update: { message: { editedMessage: { message: { conversation: "due Thursday" } } }, messageTimestamp: 1763709999 } },
