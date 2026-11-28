@@ -559,7 +559,7 @@ That one rule covers pairing, group link changes and account deletion. The web a
 
 - **Batching:**
   - A batch is picked for a group when its newest pending message is 2 minutes old, or its oldest pending message is 5 minutes old.
-  - At most 30 messages per batch, taken only from messages whose `next_attempt_at` has passed.
+  - At most 10 messages per batch (U48), taken only from messages whose `next_attempt_at` has passed.
   - Rows are claimed with `FOR UPDATE SKIP LOCKED` and set to `processing` with `processing_started_at`.
   - Every loop, and at startup, `processing` rows older than 10 minutes go back to `pending`.
   - While `auto_changes_paused` is set, no batch is picked.
@@ -930,6 +930,7 @@ The author decided each of these after the five-stage review. Each one has been 
 | U45 | (2026-11-26, product owner) The NIM API key and model can be changed in Settings. The key is stored encrypted with the data key, never shown back, checked before saving, and the server file's key stays the fallback (ADR-0007, written with ticket 3). |
 | U46 | (2026-11-26, product owner) Emails can go to a confirmed address other than the login; alert kinds can be turned off except the healthchecks.io emails and "a reminder couldn't be sent". |
 | U47 | (2026-11-26, product owner) The default due time, week start, time format, the dashboard's Due soon range and its section order are Settings; Overdue can't be hidden. |
+| U48 | (2026-11-28, product owner) The model keeps thinking on: turned off it scored 72% on the eval (100% on). Its answers get room instead: up to 12,000 output tokens and 240 s per call, and at most 10 messages per batch, because a real batch was cut off at 4,096 tokens. |
 | U43 | (2026-11-25, product owner, #73) The class may use more than one Class Group (for example CA notices and timetable changes in separate common groups). Each is kept for the whole degree, never one per Semester or per year; setting a new Semester as current moves all of them, with no relinking. The app already allowed it; this records it. |
 
 ## Risks and Mitigations
@@ -1713,7 +1714,7 @@ Every file M0 and M1 create or change is listed below with what it holds and why
       - The context it builds is described in §9.
     - **`prompt.ts`:** the §9 prompt rules and `PROMPT_VERSION`.
     - **`nim-client.ts`:**
-      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 180-second timeout (U40), and guided JSON if M0 shows it is supported.
+      - The OpenAI SDK pointed at `NIM_BASE_URL`, with `temperature: 0`, a 240-second timeout and 12,000 output tokens, thinking on (U40, U48), and guided JSON if M0 shows it is supported.
       - Records tokens in `ai_batch`.
       - 401 and 403 raise a fatal error that stops the AI loop; 429, 5xx and timeouts are retried.
     - **`validate.ts`:** schema, then rule 1, then rule 2 from §9. Returns `{valid[], dropped[{op, reason, messageIds}], overflow[]}`.

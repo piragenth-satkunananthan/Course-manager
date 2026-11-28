@@ -1,8 +1,10 @@
-// The AI client (design file 64): NVIDIA NIM's OpenAI-compatible chat API over fetch, temperature 0, 180 s timeout.
+// The AI client (design file 64): NVIDIA NIM's OpenAI-compatible chat API over fetch, temperature 0, 240 s timeout.
 // 401/403 and a missing model (404) are fatal (the AI loop stops and alerts); 429, 5xx and timeouts are retryable.
-export const MAX_TOKENS = 4096;
-/** Long enough for a full MAX_TOKENS answer at 25 tokens/s (NIM writes about 63): a long answer must not time out every retry (U40). */
-export const NIM_TIMEOUT_MS = 180_000;
+// The model thinks before it answers; both count here. Thinking off scored 72% on the eval (2026-11-28), so it stays on
+// and gets room: a real batch used 5,877 tokens and was cut off at 4,096.
+export const MAX_TOKENS = 12_000;
+/** Long enough for a full MAX_TOKENS answer at 50 tokens/s (NIM writes about 63): a long answer must not time out every retry (U40, U48). */
+export const NIM_TIMEOUT_MS = 240_000;
 
 export class AiFatalError extends Error {}
 export class AiRetryableError extends Error {}

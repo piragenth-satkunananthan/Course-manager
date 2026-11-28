@@ -40,12 +40,15 @@ const cases: EvalCase[] = dirs.flatMap((d) =>
 if (!cases.length) throw new Error(`no cases in ${dirs.join(", ")}`);
 const nim = nimClient();
 // NIM's free tier often times out or answers 429/5xx; retry those so one blip doesn't end the run.
+const tokens: number[] = []; // output tokens per call: a long answer risks being cut off at max_tokens
 const ai = {
   ...nim,
   async complete(chat: Parameters<typeof nim.complete>[0]) {
     for (let attempt = 1; ; attempt++) {
       try {
-        return await nim.complete(chat);
+        const r = await nim.complete(chat);
+        tokens.push(r.outputTokens);
+        return r;
       } catch (e) {
         if (!(e instanceof AiRetryableError) || attempt === 4) throw e;
         console.warn(`  retrying after ${(e as Error).message}`);
@@ -95,4 +98,5 @@ for (const c of cases) {
 }
 const s = summarise(grades);
 console.log(JSON.stringify(s, null, 2));
+console.log(`output tokens: ${tokens.reduce((a, b) => a + b, 0)} total, ${Math.max(0, ...tokens)} largest, ${tokens.length} calls`);
 if (!s.go) process.exit(1);
