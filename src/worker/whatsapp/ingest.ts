@@ -46,7 +46,7 @@ export class Ingest {
       if (r.type === "notify" || r.type === "append") {
         await db.insert(inboxMessage).values({ ...base, waMessageId: r.id, kind: "text", sentAt, textEnc: encrypt(r.text ?? "", this.key) }).onConflictDoNothing();
       } else if (r.type === "other" || r.type === "undecryptable") {
-        await db.insert(inboxMessage).values({ ...base, waMessageId: r.id, kind: "other", sentAt, status: "done", decision: "ignored" }).onConflictDoNothing();
+        await db.insert(inboxMessage).values({ ...base, waMessageId: r.id, kind: "other", sentAt, status: "done", decision: "ignored", decisionReason: r.contentType ? `no text: ${r.contentType}` : null }).onConflictDoNothing();
       } else if (r.type === "edit") {
         // An edit is its own row with the edit's time, so its correction wins over the original (§3).
         const original = await this.find(group.groupId, r.id);

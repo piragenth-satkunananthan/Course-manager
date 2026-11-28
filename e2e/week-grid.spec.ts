@@ -1,6 +1,15 @@
 // Seam: the desktop week grid (#19) at 1280 px, and its absence under 1024 px.
+import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
+import { E2E_ENV } from "../playwright.config";
 import { auditLayout, seedCourse, signIn } from "./helpers";
+
+/** A Student of its own: other specs add classes to the shared one, which crowd its week and narrow the blocks. */
+function ownStudent() {
+  const email = `week-grid-${Date.now()}@example.com`; // unique: a retry or rerun creates a fresh one
+  execFileSync("npx", ["tsx", "e2e/support/seed-empty-student.ts", email, "week grid password"], { env: { ...process.env, ...E2E_ENV }, stdio: "inherit" });
+  return email;
+}
 
 const weekday = (date: string) => ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1; // ISO 1–7
 const monday = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) - (weekday(date) - 1) * 86_400_000).toISOString().slice(0, 10);
@@ -8,7 +17,7 @@ const colombo = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo
 
 test("the week grid: classes, Deadlines, the week in the URL, keyboard and labels", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "the week grid is desktop only; the phone case is below");
-  await signIn(page);
+  await signIn(page, "week grid password", ownStudent());
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   const { courseId } = await seedCourse(page, "WG1");
   const [today, nowTime] = colombo().split(", ") as [string, string];

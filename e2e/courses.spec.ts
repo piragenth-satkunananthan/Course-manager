@@ -20,7 +20,7 @@ test("add a Semester, a Course and a Nickname, with inline errors and a focused 
   await semesterForm.getByLabel("Start date (required)").fill("2026-08-03");
   await semesterForm.getByLabel("End date (required)").fill("2026-12-18");
   await semesterForm.getByRole("button", { name: "Add Semester" }).click();
-  await expect(page.getByText("Saved")).toBeVisible();
+  await expect(page.getByText("Saved").first()).toBeVisible(); // an earlier save's toast may still be showing
   await expect(page.getByText(`Semester ${tag}`)).toBeVisible();
 
   // Course, from the Courses page
